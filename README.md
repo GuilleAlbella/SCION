@@ -1,0 +1,1029 @@
+# Project SCION
+
+**Structural Change Intelligence Platform**
+
+SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
+
+**Version:** BETA v1.11.01
+
+---
+
+## Architecture
+
+SCION is built on **7 independent engines** orchestrated through a REST API with a modern web UI, plus a **parser ingest subsystem** that consumes external lineage feeds.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  External sources                                                   │
+│  ┌──────────────────┐    ┌──────────────────┐                        │
+│  │  Live DB         │    │  DataDNA Parser  │                        │
+│  │  (SQLite/Postgres│    │  (lineage JSON)  │                        │
+│  │   /Teradata)     │    │                  │                        │
+│  └────────┬─────────┘    └────────┬─────────┘                        │
+│           │ extract                │ ingest                          │
+└───────────┼────────────────────────┼──────────────────────────────────┘
+            ▼                        ▼
+       ┌────────────┐          ┌──────────────┐
+       │  Metadata  │          │   Parser     │
+       │  Ingestion │          │   Ingest     │
+       │  Adapters  │          │  subsystem   │
+       └─────┬──────┘          └──────┬───────┘
+             └────────┬────────────────┘
+                      ▼
+Snapshot → Diff → Graph & Impact → TAISA Reasoning
+                              ↗
+        Usage & Criticality → Intelligence Metrics
+```
+
+| Engine | Purpose |
+|--------|---------|
+| **Metadata Ingestion** | Multi-engine adapters (SQLite, PostgreSQL, Teradata), template-based extraction |
+| **Parser Ingest** | Consumes DataDNA parser JSON feeds (Tier 1/2/3 lineage), with noise filter + dry-run |
+| **Snapshot Engine** | Full EDW state capture, structural SHA-256 hashing, historical versioning |
+| **Diff Engine** | 10+ change types, severity scoring, breaking-vs-compatibility classification |
+| **Graph & Impact** | SQL-native dependency graph, blast radius, fragility, query-count integration |
+| **Usage & Criticality** | Usage frequency scoring, combined criticality (60% usage + 40% graph) |
+| **Intelligence Metrics** | Governance scorecard, domain risk, volatility, stability timeline |
+| **TAISA AI Layer** | LLM-powered (Groq / Llama 4 Scout), conversational Q&A with full SCION access |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2.0, Alembic |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
+| Database | SQLite (demo), PostgreSQL-ready |
+| Charts | Recharts |
+| Graphs | React Flow (@xyflow/react) + dagre layout |
+| Data fetching | SWR + Axios |
+| AI | Groq LLM (Llama 4 Scout) via TAISA |
+
+---
+
+## Project Structure
+
+```
+backend/
+  app/
+    api/v1/              # REST API endpoints (28+)
+    db/                  # ORM models (SQLAlchemy) — 14 tables
+      models/            #   snapshot, schema_snapshot, table_snapshot,
+                         #   column_snapshot, process, step, attribute_lineage
+    ddl/                 # DDL generator engine
+    diff/                # Diff engine + rules + models
+    graph/               # Graph builder, impact analyzer, blast radius
+    llm/                 # LLM provider abstraction (mock + Groq)
+    metadata/            # Adapters (SQLite/Postgres/Teradata) — extract
+    metrics/             # Intelligence metrics engine
+    parser_ingest/       # NEW in v1.04 — DataDNA parser integration
+      parser_models.py   #   Internal dataclasses (ParsedLineagePayload, ...)
+      teradata_parser.py #   Raw JSON → internal payload
+      noise_filter.py    #   Drop NOT APPLICABLE / UNKNOWN / literals
+      ingestor.py        #   Persist payload into SCION tables
+      dry_run.py         #   Analyze without persisting
+    snapshot/            # Snapshot engine, structural hash, metrics
+    taisa/               # TAISA client, prompts, algorithm knowledge base
+    usage/               # Usage ingestor, criticality engine
+  tests/
+  tools/                 # Bootstrap + rich seed scripts
+
+frontend/
+  src/
+    app/                 # Next.js App Router (18 pages)
+    components/          # Shared UI components (18+)
+    lib/                 # API client, hooks, context, terminology, constants
+
+parser/                  # Sample payloads from the DataDNA parser team
+  README.md              # DBQL / PDCR export spec from Rahul
+  lineage-mvp.json       # Parser v1 output sample
+  lineage-sample.xlsx    # Tabular view of the same
+```
+
+---
+
+## UI Pages (18)
+
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Mission control: animated KPIs, engine status, processing pipeline, breaking changes ticker, recent activity |
+| **Snapshots** | List, capture live snapshot, **import from parser (JSON)**, **protected delete** with typed-ID confirmation |
+| **Changes** | Compare snapshots, filters, expandable before/after, **DDL Generator**, **Visual Diff**, **quick links** to Lineage/Timeline/Impact/Usage, **CSV export** |
+| **Impact Analysis** | Batch blast radius, donut charts, per-change table with **queries/users affected**, **Export Report** (HTML), **CSV export**, confetti on LOW risk |
+| **What-If Simulation** | Preview a hypothetical change's impact without applying it |
+| **Data Lineage** | Interactive ReactFlow graph centered on selected object (accepts `?object=X`) |
+| **System Graph** | Full dependency visualization, 10+ object types each with own color |
+| **Metrics** | Volatility index, trends, **Structure Change Timeline** |
+| **Usage** | Usage heatmap, criticality distribution, **Risk Heatmap**, focused-object highlighting |
+| **Intelligence** | Governance Report: **Structural Stability**, domain risk cards, volatility indicator, **CSV export** |
+| **Timeline** | Object evolution across snapshots (accepts `?object=X`) |
+| **Alerts** | 6 alert types: breaking, high-severity, TAISA risk, broken lineage, orphan objects, hub changes |
+| **Control** | Engine stop/restart |
+
+### Global Features
+
+| Feature | Description |
+|---------|-------------|
+| **TAISA Widget** | Floating AI chatbot on every page. Full SCION data + algorithm knowledge, multilingual |
+| **Global Search** | `Ctrl+K` command palette — searches graph nodes + change events |
+| **Dark Mode** | Toggle in sidebar. Persists in localStorage |
+| **Keyboard Shortcuts** | `?` for panel. `G+D/C/I/W/L/A/T` for navigation |
+| **Toast Notifications** | Animated feedback on diff, DDL, impact, delete |
+| **Info Tooltips** | Hover/click `?` icons for metric explanations |
+
+---
+
+## API Endpoints
+
+### Core
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/health` | System health + engine status |
+| POST | `/api/v1/snapshots` | Capture live snapshot |
+| GET | `/api/v1/snapshots` | List all snapshots |
+| DELETE | `/api/v1/snapshots/{id}?confirm_id=X` | Delete latest snapshot (protected, cascade) |
+
+### Parser Ingest (NEW in v1.04)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/parser-import/lineage?dry_run=true\|false` | Import DataDNA parser JSON. Dry-run returns preview; real run persists snapshot + process + step + attribute_lineage |
+
+### Diff & Changes
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/diff` | Run diff between two snapshots |
+| GET | `/api/v1/diff/{from}/{to}/details` | Full diff details with cumulative changes |
+| GET | `/api/v1/changes` | List recent change events |
+
+### Graph, Impact & Simulation
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/graph/{snapshot_id}` | Graph nodes + edges with metrics |
+| POST | `/api/v1/impact/{change_id}` | Impact analysis for single change |
+| POST | `/api/v1/impact/batch` | Batch impact + queries affected |
+| POST | `/api/v1/simulation` | What-If hypothetical change impact |
+
+### Reasoning, Reports, Export, Timeline, Search, Alerts
+(same as v1.03 — see previous release)
+
+---
+
+## Database Schema (14 tables)
+
+| Table | Purpose |
+|-------|---------|
+| `snapshot` | EDW state versions |
+| `schema_snapshot` | Databases within a snapshot |
+| `table_snapshot` | Tables/views within a database |
+| `column_snapshot` | Columns with types and positions |
+| `change_event` | Detected changes |
+| `graph_node` | Dependency graph nodes |
+| `graph_edge` | FEEDS and DEPENDS_ON relationships |
+| `impact_event` | Impact analysis results |
+| `reasoning_event` | TAISA reasoning results |
+| `usage_event` | Usage statistics |
+| `object_criticality` | Criticality scores |
+| **`process`** | **NEW v1.04 — SQL scripts/jobs from parser** |
+| **`step`** | **NEW v1.04 — statements / query blocks inside processes** |
+| **`attribute_lineage`** | **NEW v1.04 — Tier 1/2 column-to-column lineage with expressions** |
+
+---
+
+## Parser Integration (NEW in v1.04 — Day 1 complete)
+
+SCION consumes the DataDNA parser's lineage JSON output. The parser team (led by Rahul Kulkarni) produces a feed with 7 entity types (platform, containers, datasets, attributes, processGroups, processes, steps) plus 3 tiers of lineage edges (Tier 1 query-block-level, Tier 2 statement-level, Tier 3 dataset-level) and a consolidated `lineageFactAttribute` fact table.
+
+### Pipeline
+
+```
+raw JSON
+    │
+    ▼
+teradata_parser.parse()    → ParsedLineagePayload (validated, structured)
+    │
+    ▼
+noise_filter.apply()       → removes NOT APPLICABLE / UNKNOWN / literals
+    │
+    ▼
+ingestor.ingest()          → persists Snapshot + schema/table/column +
+                             graph_edge + process + step + attribute_lineage
+    │
+    ▼
+(or) dry_run.analyze()     → returns stats without persisting
+```
+
+### Tested end-to-end with `parser/lineage-mvp.json`
+
+With the sample JSON from the parser team, the pipeline processes:
+
+| Stage | Entity | Input | Kept | Dropped |
+|-------|--------|-------|------|---------|
+| Parse | containers | 3 | — | — |
+| | datasets | 3 | — | — |
+| | attributes | 15 | — | — |
+| | processes | 1 | — | — |
+| | steps | 2 | — | — |
+| | dataset_lineage | 2 | — | — |
+| | attribute_lineage | 8 | — | — |
+| Noise filter | containers | 3 | 1 (DBC) | 2 (NOT APPLICABLE, UNKNOWN) |
+| | datasets | 3 | 1 | 2 (placeholder + TEMPTABLE) |
+| | attributes | 15 | 2 | 13 literals |
+| | dataset_lineage | 2 | 0 | 2 (endpoints filtered) |
+| | attribute_lineage | 8 | 1 | 7 (involve literals) |
+| Persisted | databases | | 1 | |
+| | tables | | 1 (object_type=UNKNOWN) | |
+| | columns | | 2 (data_type=UNKNOWN) | |
+| | processes | | 1 | |
+| | steps | | 2 | |
+| | attribute_lineage | | 1 (with expression + transformationType) | |
+
+### Known gaps (awaiting parser v2)
+
+- `datasetType` (TABLE/VIEW/SP/...) not in v1 — stored as `UNKNOWN` until Rahul's team adds it. Schema-change detection blocked on this.
+- `dataType`, `nullable`, `ordinalPosition` not in v1 — same situation for columns.
+- Literals (`'D'`, `NULL`, etc.) modelled as pseudo-attributes — handled by heuristic noise filter. Will switch to direct classifier if parser adds `attributeClass` field.
+- Usage data (query counts, user counts) not yet in parser feed — pending separate feed per Phase 3 of the rollout plan.
+
+---
+
+## TAISA AI Engine
+
+TAISA (Teradata AI System Advisor) — the reasoning layer:
+
+- **Batch Analysis**: classification + risk level + recommendations for a full diff
+- **Single-Change Analysis**: deep dive on individual changes
+- **Conversational Q&A**: multi-turn chat with full SCION DB + algorithm knowledge
+- **Algorithm-aware**: can explain WHY metrics have their value using exact formulas
+- **Floating Widget**: available on every page
+- **Multilingual**: responds in the user's language
+
+Scalable context strategy (token usage stays ~constant regardless of DB size):
+- Always loaded: aggregates, top-N usage, algorithm knowledge (~800 tokens)
+- On-demand: detailed rows only when question requires it
+- Hard caps: 50 changes, 30 impacts, 10 usage rows max
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+ with pip
+- Node.js 18+ with npm
+
+### Setup
+
+```bash
+# Backend
+cd backend
+python -m venv ../.venv
+../.venv/Scripts/activate   # Windows
+pip install -r requirements/dev.txt
+
+# Frontend
+cd frontend
+npm install
+
+# Database
+cd backend
+python tools/bootstrap_sqlite_db.py
+python tools/rich_seed.py
+```
+
+### Run
+
+```powershell
+# From project root (Windows PowerShell)
+.\dev.ps1
+```
+
+Opens at **http://localhost:3000**
+
+### Try the parser ingestion (v1.04)
+
+```python
+# From a Python REPL inside backend/
+import app.db.base  # pre-load models
+import json
+from app.parser_ingest import teradata_parser, noise_filter, ingestor, dry_run
+
+with open('../parser/lineage-mvp.json') as f:
+    payload = json.load(f)
+
+parsed = teradata_parser.parse(payload)
+noise_filter.apply(parsed)
+
+# Option A: dry-run (no DB writes)
+report = dry_run.analyze(parsed)
+print(report.persisted_counts)
+print(report.warnings)
+
+# Option B: real ingestion
+report = ingestor.ingest(parsed, description='Test run')
+print(f"snapshot_id: {report.snapshot_id}")
+```
+
+Or via HTTP:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/parser-import/lineage?dry_run=true \
+     -H "Content-Type: application/json" \
+     -d @parser/lineage-mvp.json
+```
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SCION_TAISA_MODE` | `real` | `mock` or `real` (Groq LLM) |
+| `SCION_BACKEND_HOST` | `127.0.0.1` | |
+| `SCION_BACKEND_PORT` | `8000` | |
+| `API_KEY` | _(not set)_ | Optional endpoint auth |
+| `DATABASE_URL` | SQLite demo | |
+
+TAISA LLM settings in `backend/app/config/taisa_llm.yaml`.
+
+---
+
+## Terminology
+
+SCION uses Teradata-native terminology in the UI while keeping backend field names engine-agnostic:
+
+| Backend field | UI label | Reason |
+|---------------|----------|--------|
+| `schema_name` | **Database** | Teradata uses "database" instead of "schema" |
+| `overall_health` | **Structural Stability** | Avoids implying operational failures |
+| `container` (parser) | **Database** | Aligned with Teradata convention |
+| `dataset` (parser) | **Table / View / ...** | Classified by `datasetType` |
+
+Supported object types: Database, Table, View, Stored Procedure, Macro, Function, UDF, Trigger, Index, Sequence, Column.
+
+---
+
+## What Remains
+
+### Blocked on parser team (open email with Rahul)
+| Item | Status |
+|------|--------|
+| `datasetType` on each dataset | Asked — waiting |
+| `dataType`, `nullable`, `ordinalPosition` on each attribute | Asked — waiting |
+| `attributeClass` classifier to distinguish literals from columns | Asked — waiting |
+| Usage aggregates (per-object queryCount, userCount, lastAccessed) | Asked — waiting |
+| Parse cadence (full vs incremental, daily vs triggered) | Asked — waiting |
+
+### Next on our side (Day 3+)
+- Propagate `UNCLASSIFIED` styling beyond the graph (Metrics, Usage, Criticality still classify by literal `TABLE`/`VIEW`)
+- Fold `datasetType`/`dataType` into ingestor as soon as Rahul ships parser v2 — remove the UNKNOWN fallback path
+- Diff engine coverage for attribute-level lineage changes (new `attribute_lineage` table is persisted but diff rules don't read it yet)
+
+### Other (configuration only)
+| Item | Effort |
+|------|--------|
+| Connect to Teradata directly | Low (TeradataAdapter exists) |
+| PostgreSQL | Low |
+| Docker | Low |
+| Tests | Medium |
+
+---
+
+## Changelog
+
+### v1.11.01 (2026-04-23) — Internal engineering roadmap
+
+Doc-only release. Adds `docs/internal_roadmap.md` — the project did not have
+an engineering-side roadmap (only product / strategic / demo roadmaps). The
+new doc consolidates everything currently on the table:
+
+- **Phase 0 (DONE):** what's already shipped in v1.11.00.
+- **Phase 1 (in flight):** real-JSON benchmark, Pipelines 2 & 3, Helton
+  handover doc.
+- **Phase 2 (planned):** scale & hardening — SQLite→Postgres decision gate,
+  graph engine perf, Docker/systemd packaging.
+- **Phase 3 (blocked on Phase 2 + infosec):** first customer pilot,
+  authentication, release discipline, use-case validation sessions.
+- **Phase 4 (future):** v1.0 GA — flip `APP_STAGE` from `"BETA"`.
+
+Plus a **cross-cutting backlog**, a **decision log** so past calls don't
+get re-litigated, and an **owner cheat-sheet** so anyone joining the team
+(Helton in particular, after 2026-05-07) knows who owns what.
+
+The benchmark gate ("real JSON measurement before SQLite/Postgres
+decision and before sizing the customer VM") is now a formal step,
+not just an informal agreement.
+
+### v1.11.00 (2026-04-23) — Meeting #7 follow-ups: scale, search, docs
+
+Rolled up the gaps raised in Meeting #7 (Rahul / Kindy / Luis) into one
+minor bump. Three code changes plus three new architecture docs:
+
+- **ObjectPicker component** (`frontend/src/components/shared/ObjectPicker.tsx`).
+  A searchable + hierarchical picker: free-text substring match across all
+  fully-qualified names *and* a drill-down tree grouped by database. Both
+  modes are active simultaneously — the user can type to filter *or* expand
+  a database to browse. Hard-capped at 50 results per query to keep
+  thousands-of-objects customers responsive. Designed for the Lloyds-scale
+  (500M relationships) case Kindy called out.
+
+- **Lineage page uses ObjectPicker.** The old flat `<select>` dropdown on
+  `/lineage` is gone; same object list, now searchable + tree-browsable.
+  Addresses Rahul's direct request ("how do you filter or narrow down to
+  specific objects when there are hundreds or thousands?").
+
+- **Graph page focus mode.** `/graph` gained an optional anchor picker +
+  an N-hops slider (1–5). When an anchor is set, an undirected BFS carves
+  out the neighbourhood within N hops and renders only that subgraph. With
+  no anchor, the page behaves exactly as before (full graph). Addresses
+  Kindy's and John's repeated note that enterprise graphs are unreadable
+  without drill-down.
+
+- **`docs/ingestion_pipelines.md`** (new). Canonical architecture doc for
+  the four extraction pipelines (parser / dict / usage / raw code). Locks
+  in the committee decision that SCION never touches customer DBs — all
+  inputs are flat files owned by Rahul's extractors.
+
+- **`docs/use_cases.md`** (new). One-pager for the 6–8-person architect
+  working sessions Kindy suggested (2 per region). Lists 8 use cases the
+  current build supports, plus an honest "not yet" list. Starting point,
+  not final wording — the whole point is the architects will rewrite it.
+
+- **`docs/release_policy.md`** (new draft). Addresses Kindy's warning about
+  needing versioning, rollback plans, and a single bug-fix distribution
+  path before we install at any customer. Defines semver scheme, v1.0 GA
+  criteria, fallback procedure, scope-lock process. Needs Chris sign-off.
+
+### v1.10.06 (2026-04-22) — dev.ps1 PowerShell 5.1 compatibility
+
+The v1.10.05 dev.ps1 rewrite used Unicode box-drawing characters and
+em-dashes in comments, plus `&&` inside a string literal and
+`"$var KB"` interpolation — all of which broke on Windows PowerShell 5.1
+because the file is read with the system codepage (not UTF-8) so the
+non-ASCII bytes garbled into invalid tokens.
+
+Rewrote the script with strict ASCII-only content (`==`, `||`, `--`,
+`*` for the banner / separators / bullets), replaced `&&` in the venv
+error message with two separate lines, and fixed `"${dbSize} KB"`
+interpolation syntax. Validated with `[System.Management.Automation.
+Language.Parser]::ParseFile` -> `PARSE OK`.
+
+No functional change — same UX (banner, pre-flight checks, status icons,
+endpoint URLs, tips, clean shutdown). Just encoding-safe on PS 5.1.
+
+### v1.10.05 (2026-04-22) — Recharts warnings + dev.ps1 facelift
+
+**Recharts `width(-1) height(-1)` warnings fixed.** The volatility
+sparkline in the `/intelligence` domain cards used
+`<ResponsiveContainer width="100%" height="100%">` inside a 96×32 px
+wrapper. On first render the DOM measurement occasionally raced the
+layout engine, producing `-1` dimensions that Recharts shouted about on
+stdout. Replaced with a bare `<LineChart width={96} height={32}>` —
+fixed sizes are known at design time anyway, skip the measurement.
+
+**`dev.ps1` CLI is now user-friendly.** New UX:
+
+- ASCII-art SCION banner + version (auto-read from
+  `frontend/src/lib/constants.ts APP_VERSION`).
+- **Pre-flight checks** before launch:
+  - Python venv exists
+  - `frontend/node_modules` installed (runs `npm install` if missing)
+  - `kalido_lite.db` present (warns if not — points to `rich_seed.py`)
+  - Ports 8000 and 3000 free (exits early with a clear message if not)
+- Bracketed status icons `[OK]` / `[...]` / `[!]` / `[X]` in the style
+  of systemd/k8s.
+- Clear sections: banner → pre-flight → launching → endpoints → tips →
+  live logs.
+- Helpful tips reminding about hot-reload scope and the reseed command.
+- On shutdown: prints *which* child died if one exited unexpectedly,
+  instead of a silent kill.
+
+Everything else (process lifecycle, port cleanup, `--reload-dir app` to
+prevent the tools-folder reload bug from v1.06.03) unchanged.
+
+### v1.10.04 (2026-04-22) — Impact detail table spacing fix
+
+The `Upstream/Downstream Impact Inventory` tables on `/impact/[changeId]`
+had cells with `py-1.5` but no horizontal padding, so text ran together
+visually (`COLUMNcore_banking.transactions.amountCOLUMN_TYPE_CHANGED`).
+Added `pr-3` between columns, `whitespace-nowrap` on Type/Impact,
+`break-all` on Name (for long dotted identifiers), `break-words` on
+Description, and `align-top` on rows so wrapped cells line up with the
+first line of their neighbours.
+
+### v1.10.03 (2026-04-22) — Impact analysis for column-level changes
+
+Same root cause as v1.10.02 (Lineage column redirect), applied in the
+Impact engine. Clicking *"Impact detail"* on a column change from
+`/changes` used to return `direct_count=0, indirect_count=0, total=0`
+because `graph_diff_linker.py` failed to map changes with
+`object_type=COLUMN` to any graph node — the graph only has
+table/view/proc nodes, not column nodes.
+
+**Backend fix** — `graph_diff_linker.py`:
+Added a fallback: when the exact `(type, name)` lookup misses AND the
+change is `object_type=COLUMN`, strip the last dot-segment from
+`object_identifier` and look up the parent by name alone. The
+propagation semantics are correct: a column-type-change ripples to
+every view/proc/table that references that column, and all of those
+show up as consumers of the parent table.
+
+**Frontend fix** — `/impact/[changeId]/page.tsx`:
+New green banner at the top that fires whenever `direct_impact[0]`
+is a column. Explains explicitly that the counts below reflect impact
+traced through the parent table, so the numbers are interpretable
+and not mistaken for inflated column-specific metrics.
+
+**Seed impact** — after re-running `rich_seed.py`, persisted impact
+events jumped from **19 → 696** because column-level changes (COLUMN_TYPE,
+NULLABILITY, POSITION, REMOVED — 17 of the 31 total) now contribute
+propagation events via their parent tables. The demo for
+`core_banking.transactions` is dramatically richer:
+- Change #13 (amount widening): 6 direct + 8 indirect impacts across
+  schemas, triggers, stored procs, views.
+- Change #27 (raw_payload removed): full ripple through reporting.
+
+**Re-seed required after update.** If you pulled this and see old
+zeros in Impact Analysis, run `tools/rich_seed.py` once.
+
+### v1.10.02 (2026-04-22) — Lineage column→parent auto-redirect
+
+Fixed a UX dead-end reported during demo rehearsal.
+
+When the user clicked "Lineage" on a column-level change in `/changes`
+(e.g. `core_banking.transactions.amount`), the lineage page showed
+*"object not present in this snapshot"* on every snapshot they tried.
+The reason was subtle: columns are never lineage-level nodes in SCION —
+only `DATABASE / TABLE / VIEW / STORED_PROCEDURE / …` get graph nodes,
+because column-level lineage is modelled separately as `attribute_lineage`
+(from the parser integration). So a 3-part identifier like `A.B.c` was
+by construction absent from every graph.
+
+Fix: on the lineage page, detect 3+ segment URL params, auto-resolve to
+the parent table (`A.B`), and render a green info banner explaining
+*"original change was on column <c> — columns aren't lineage-level
+nodes, so we're showing lineage for its parent table <A.B>"*.
+
+The existing amber "object not in this snapshot" banner still fires if
+the *parent table* itself isn't in the selected snapshot (e.g. the
+table was added later or dropped earlier).
+
+### v1.10.01 (2026-04-22) — Object-name filter in Changes page
+
+Added a free-text search box at the top of the "Detailed changes"
+section filter bar on `/changes`. Case-insensitive substring match
+against `object_identifier`.
+
+Makes the single-object demo walkthrough much cleaner: typing
+`transactions` narrows the 31-row table to the 5 rows that touch
+`core_banking.transactions`, which is the pivot for the whole demo.
+
+UX details:
+- Placeholder shows a realistic example (`core_banking.transactions`).
+- Clear `✕` button appears inside the input when non-empty.
+- Live match count ("Match: 5 of 31") renders next to the box.
+- Select-all checkbox and Generate DDL both honour the filter — a
+  filtered selection will only generate DDL for the visible rows.
+
+### v1.10.00 (2026-04-22) — Procedural objects on the graph + FK direction fix
+
+Preparing for a full single-object demo walkthrough. Two issues were
+blocking realistic lineage:
+
+**1. Graph only showed tables/views/databases.** Everything else — stored
+procedures, macros, functions, triggers — was absent because
+`BASELINE_SCHEMAS` in `rich_seed.py` only ever declared `"TABLE"` and
+`"VIEW"` object_types. The backend (terminology, colours, type
+formatter, `TableKind` mapper) always supported every Teradata object
+class; the seed just hadn't used them. Added 5 procedural objects
+across 3 schemas, no columns (they don't need any):
+
+- `core_banking.sp_daily_close` (STORED_PROCEDURE)
+- `core_banking.fn_calc_interest` (FUNCTION)
+- `core_banking.trg_audit_transaction` (TRIGGER)
+- `risk_management.m_format_risk_alert` (MACRO)
+- `reporting.sp_generate_regulatory_report` (STORED_PROCEDURE)
+
+`/graph` now renders 7 object classes with the colour palette already
+defined in `terminology.ts`.
+
+**2. FK-heuristic FEEDS edges were inverted.** `graph_builder.py` was
+emitting edges in the wrong direction: a column `customer_id` on
+`accounts` produced `accounts FEEDS customers`. Semantically this said
+"accounts is upstream of customers" — backwards for every dim→fact
+warehouse relationship. Flipped the direction so the edge is now
+`customers → accounts` (producer → consumer). This was a latent bug
+that affected any lineage inference on real FK-style columns.
+
+**3. Explicit `EXPLICIT_FEEDS_EDGES` list** added to `rich_seed.py` for
+edges the FK heuristic can't see:
+
+- `staging → core` feeds,
+- `core → reporting` view composition (views reading from multiple
+  tables without FK columns),
+- `procedural objects ↔ touched tables` (no columns, no heuristic
+  signal at all).
+
+`_persist_explicit_edges()` runs after `build_graph_for_snapshot` for
+each snapshot, resolves names against the snapshot's `graph_node`
+table, skips endpoints that don't exist in that snapshot (so an edge
+referencing `analytics_sandbox` naturally stops rendering after S10
+when the sandbox is decomissioned).
+
+**Seed output after fixes (snapshot #10):**
+```
+Object types: SCHEMA(4), TABLE(11), VIEW(4), STORED_PROCEDURE(2),
+              FUNCTION(1), TRIGGER(1), MACRO(1)
+Edges: 20 DEPENDS_ON, 28 FEEDS (was ~6 FK-only and inverted)
+```
+
+Lineage page now shows rich upstream/downstream chains for the demo
+walkthrough object (`core_banking.transactions`):
+- Upstream: `staging.stg_transaction_feed`, `core_banking.accounts`
+- Downstream: `reporting.daily_pl_summary`, `core_banking.sp_daily_close`,
+  `core_banking.trg_audit_transaction`
+
+### v1.09.03 (2026-04-22) — Quick-link audit + Usage focus-banner polish
+
+Audited all 4 "Explore this object" quick-links from `/changes`:
+| Button | URL | Bug? |
+|---|---|---|
+| Lineage | `?object&snapshot` | fixed in v1.09.02 |
+| Timeline | `?object` | OK — timeline is snapshot-agnostic |
+| Impact detail | `/impact/{change_id}` | OK — path-param driven |
+| Usage | `?object` | Minor polish (below) |
+
+**Usage focus banner** now detects whether the focused object actually
+appears in the usage or criticality tables. If no match (e.g. user
+clicked Usage on a schema-level change, which has no query telemetry),
+the copy switches from a promise ("highlighted below") to an explanation
+("no usage telemetry found — common for schemas and parser-only
+imports"). Prevents the "clicked Usage and nothing lit up" confusion.
+
+### v1.09.02 (2026-04-22) — Lineage deep-link + UX clarifications
+
+Two user-reported bugs on `/lineage`.
+
+**Deep-link from Changes was being ignored.** Clicking "Lineage" on a
+change row in `/changes` passes `?object=X&snapshot=Y` in the URL, but
+the lineage page was checking the `activeDiffPair` SelectionContext
+FIRST and falling back to URL only when no diff pair existed. So when
+a user had (say) diff #1 → #10 selected and clicked Lineage on an
+object from snapshot #2, the page loaded snap #10's graph — where that
+object may not exist at all, producing a misleading "no objects selected"
+state. Flipped the precedence: URL param > `selectedSnap` > diff pair.
+The old inline comment had the rule inverted; rewrote it.
+
+**Snapshot dropdown was hidden when a diff pair existed.** Users who
+came from Changes had no way to switch snapshots without leaving the
+page. Now the Snapshot dropdown is always visible.
+
+**Added an "object not in this snapshot" amber hint.** Fires when the
+selected object name can't be resolved to a node in the current
+snapshot's graph — gives a plain-English explanation ("may have been
+added in a later snapshot or removed in an earlier one") instead of
+silently showing an empty state.
+
+**Clarified the "19 objects" count** in the intro and in the title
+tooltip of the objects counter: lineage operates at object level
+(databases / tables / views / procs) — columns aren't listed because
+they aren't lineage nodes. For column-level detail, Changes page.
+
+### v1.09.01 (2026-04-22) — Guided-narrative rollout to the remaining pages
+
+Completed the pass started in v1.09.00 by applying the `GuidedSection`
+pattern to the five pages we hadn't touched.
+
+**`/changes`** (was 780 lines — the biggest and most overloaded page)
+- Diff-runner block at top gets a compact blue intro explaining the flow.
+- Section 1 — **Summary** (KPIs) with a paragraph clarifying severity vs
+  breaking as independent dimensions (moved the floating blue banner into
+  this section's intro).
+- Section 2 — **Detailed changes** wrapping view-mode toggle, filters,
+  the expandable table, and the conditional DDL generator panel. Intro
+  explains when to use Table vs Visual mode.
+- Section 3 — **What next?** replaces the old "navigation hint" card,
+  same drill-down-to-single-change selector, now in an explanatory shell.
+
+**`/simulation`**
+- Replaced the gradient purple banner with a Section 1 intro that states
+  the key property up front: read-only, no DDL issued, no catalog touched.
+- Section 2 wraps the whole result area (risk card + 4 KPIs + affected-
+  objects table). Intro describes what each of the four numbers means.
+
+**`/lineage`** (visualisation-heavy — lighter touch)
+- Page-level intro paragraph answering the two questions users actually
+  come here for: "what breaks downstream if I break X?" and "where did
+  this bad value come from?"
+- Section 1 around the graph + KPIs + legend; Section 2 around the 3
+  detail panels (upstream list, object info, downstream list).
+
+**`/graph`** (visualisation-dominant)
+- Top intro describing nodes = objects, edges = dependencies, and what
+  each control does. Legend at the bottom stays as-is for formal reference.
+
+**`/snapshots`** (mostly a list page)
+- Top intro explaining what a snapshot is, the two creation paths
+  (Capture Live / Import from Parser), and why older snapshots are
+  immutable.
+
+No data-model or backend changes. Every page still renders the same
+information — it just reads like a document now instead of a dashboard
+of floating charts.
+
+### v1.09.00 (2026-04-21) — Guided-narrative rollout + “Blast radius” renamed
+
+Applied the Impact page redesign pattern (v1.08.01) across the three other
+most confusing report-style pages. Every section now opens with a plain-
+English intro box explaining what the reader is looking at, how to interpret
+it, and when it matters.
+
+**New shared component**
+- `frontend/src/components/shared/GuidedSection.tsx` — extracts the numbered-
+  title + icon + blue intro-box + children pattern that was local to the
+  Impact page into a reusable component. Plus `HeroStat` (tight inline KPI)
+  and `BigStat` (3-up stat card for feature sections).
+
+**Pages refactored**
+- **`/impact`** — migrated from inline helpers to the shared component
+  (no visual change, just less code).
+- **`/metrics`** — hero + 3 numbered sections (Historical trend,
+  Composition & change detection, Snapshot comparison). Every chart now has
+  a paragraph intro; the volatility indicator became the hero left-border
+  accent matching the Impact page visual language.
+- **`/intelligence`** — 3 numbered sections (Governance KPIs, Database
+  risk breakdown, Historical co-change patterns). The old fragmented
+  H2s + floating paragraphs became consistent GuidedSection intros.
+- **`/usage`** — 3 numbered sections (Usage footprint, Criticality overview,
+  Per-object drill-down). Added explanatory intros about what usage telemetry
+  means and how criticality = 0.6 × Usage + 0.4 × Graph.
+
+**Terminology: "Blast radius" → "Impact spread"**
+- Military jargon out, plain English in. Changed on the Impact page
+  (section title, hero text, empty state), on the Home dashboard (engine
+  cards), and on the page subtitle. Backend API field names
+  (`result.blast_radius`) unchanged — it's a UI-only rename.
+
+No backend changes. Build clean, all existing state logic preserved.
+
+### v1.08.01 (2026-04-21) — Impact Analysis page redesign
+
+Users reported the Impact page felt confusing: redundant KPIs at the top
+and no narrative between the 4 donuts. Rewrote the layout into a guided,
+numbered story with plain-English intros on every section.
+
+**Before**: 2 stacked blocks of KPIs (Blast Radius banner + KPI row) with
+overlapping fields, a floating blue "criteria explainer" mid-page, and a
+2×2 donut grid without section headers.
+
+**After** — single hero + 5 numbered sections:
+1. **Hero** with the overall-risk color as left-border accent, 4 de-duplicated
+   top-line KPIs (Changes / Breaking / Impacted / Queries), the Report +
+   CSV export buttons inline, and a 1-sentence narrative.
+2. **Risk classification** — severity vs breaking, with a full intro
+   paragraph explaining they are independent dimensions. The old floating
+   "criteria" blurb is now this section's intro.
+3. **Blast radius** — 3 prominent stat cards (Impacted objects / Max depth
+   / Weighted score) + touched-databases chips, with a paragraph on how
+   SCION walks the dependency graph.
+4. **Distribution** — By database + By type donuts, with a paragraph on
+   what each cross-cut reveals (team ownership vs change-type mix).
+5. **Per-change drill-down** — the original table, now with a section
+   intro describing Direct vs Indirect and the Score column.
+6. **Affected objects, by database** — grouped grid with a paragraph
+   clarifying the "database node only, no children impacted" case.
+
+Reusable local components `Section`, `HeroStat`, `BlastStat` live at the
+bottom of the file. Dropped `KpiCard` / unused lucide imports.
+
+No backend changes. The page renders the same data, just readable.
+
+### v1.08.00 (2026-04-21) — Data-dictionary ingestion foundation (pre-implementation)
+
+After Rahul delivered his data-dictionary extract spec (6 SQL templates:
+DatabasesV, TablesV, ColumnsV, IndicesV, PartitioningConstraintsV,
+TableTextV — with full + incremental variants, and an `export` flat-file
+output using `§`/`ENDREC`), we built the **consumer-side foundation**
+without waiting for a real production extract. Everything here is
+non-destructive scaffolding — no schemas, no migrations, no API changes
+visible to the current UI.
+
+**New backend modules (`backend/app/metadata/`)**
+- `teradata_type_formatter.py` — pure function from Teradata internal
+  `ColumnType` code (`"CV"`, `"I"`, `"DA"`, `"TS"`, etc.) + length/decimal
+  fields → canonical SCION string (`"VARCHAR(255)"`, `"DECIMAL(18,2)"`,
+  `"TIMESTAMP(6) WITH TIME ZONE"`, `"INTERVAL YEAR TO MONTH"`…). Full
+  coverage of integer, decimal, float, char, binary, date/time, interval,
+  period, JSON/XML/ST_GEOMETRY, and UDT families. Unknown codes fall
+  back to `UNKNOWN(<code>)` to avoid ingest failure. Also exposes
+  `object_type_from_tablekind()` (T/V/M/P/F/... → SCION enum).
+- `dict_flat_file_reader.py` — parses the `§`-delimited / `ENDREC`-terminated
+  export flat-files back into typed dataclasses. Handles escaped delimiters
+  (`\§`), multi-line `RequestText` chunks, empty / zero-row files. One
+  reader per view, sharing the column-order contract (validated at parse
+  time — arity mismatch → `DictFlatFileError` with context).
+- `dict_ingestor.py` — orchestrator stub. Reads all 6 files into a
+  `DictionaryBundle`, validates referential integrity (columns must
+  reference known tables, tables must reference known databases, etc.),
+  and returns an `IngestionPreview` with counts + translation samples +
+  categorised warnings. **Does not persist** — that's the v1.09 step once
+  a real production extract is in hand.
+
+**New dev tool**
+- `backend/tools/generate_dict_fixtures.py` — emits 6 realistic flat-files
+  from the most recent seeded snapshot, using the exact format Rahul's
+  `run_metadata_extracts.py` produces. Reverse-translates SCION canonical
+  types back to Teradata internal codes so the round-trip
+  (seed → flat-file → reader → formatter) is stable. Output lands in
+  `backend/tests/fixtures/dict_extracts/`. Useful for demos and for CI.
+
+**Criticality engine — usage-out-of-scope fallback**
+- `compute_criticality(..., usage_available: bool = True)`. When `False`,
+  skips the usage aggregation step and uses `combined_score = graph_score`
+  directly. Same HIGH/MEDIUM/LOW thresholds, no UI changes needed.
+  Runtime flag only — protects us from the open Chris-level decision on
+  whether usage ships in Phase 1 or Phase 2.
+
+**Design documentation**
+- `docs/dictionary_integration.md` — full merge-strategy doc:
+  dictionary-first, parser-lineage-attached, conflict resolution table,
+  API sketch for v1.09, open questions tracked. Recorded rationale for
+  "dictionary-first" over "lineage-first".
+
+**Validation on the seed**
+Round-trip test: 4 databases, 15 tables, 122 columns, 11 indices,
+4 view DDLs — all read and type-translated cleanly back from the
+fixtures. Zero warnings on referential integrity.
+
+**Not yet wired**
+- `dict_persister.py` (writes to DB): blocked on seeing a real Rahul
+  extract, then a few hours of work.
+- `/api/v1/dict-import/*` endpoints: same blocker.
+- Frontend `/snapshots` flow to accept dict + parser together: same blocker.
+
+### v1.07.00 (2026-04-21) — Data-science pack (Statistical Process Control + Association Mining + Rolling Trend)
+
+Three analytical layers over the existing `change_event` history, surfacing
+signals the point-in-time metrics couldn't. All three are classical,
+explainable techniques — no ML, no training, no black boxes.
+
+**Backend (`backend/app/metrics/`)**
+- `anomaly_detection.py` — per-`(schema, snapshot)` z-score over leave-one-out
+  mean/stdev of change volumes. Flags snapshots where a schema deviated
+  from its own historical cadence (`HIGH` at ≥3σ, `MEDIUM` at ≥2σ).
+  Classical Shewhart SPC, not ML.
+- `cochange.py` — Apriori-style pairwise association mining over snapshot
+  deltas. Computes support / confidence / lift for each object pair,
+  surfacing historical couplings invisible to the lineage graph.
+- `volatility_trend.py` — rolling volatility per schema across all
+  snapshots with a current-vs-prior delta + trend label
+  (`worsening` / `stable` / `improving`).
+
+**API**
+- `GET /api/v1/alerts/anomalies` (z-score ≥ threshold)
+- `GET /api/v1/intelligence/cochange` (top-N rules by lift)
+- `GET /api/v1/intelligence/volatility-trend` (series per schema)
+
+**Frontend**
+- `/alerts` — new purple "Statistical Anomalies" card above the rule-based
+  alerts. Each entry shows schema, snapshot, observed vs expected, σ,
+  and baseline size.
+- `/intelligence` domain cards — each now renders a 24×8 px sparkline of
+  its rolling volatility series + a delta badge (e.g. `34% ↗ +42% vs prior`)
+  coloured by trend.
+- `/intelligence` — new "Historical Co-change Patterns" table at the bottom,
+  sorted by lift, with confidence + co-occurrence columns. Lift ≥ 3
+  highlighted as strong coupling.
+
+**Validation on the demo seed (10 snapshots)**
+- Anomalies: snapshot #10 flagged as z=8.2σ for `core_banking` (GDPR drop)
+  and z=6.4σ for `risk_management`, matching the seed storyline.
+- Cochange: strongest rule is `exposure_summary → stg_customer_feed`
+  (lift=7.0) and `analytics_sandbox` internal triplet (lift=3.5, confidence=1.0).
+- Volatility trend: `core_banking` and `risk_management` marked as
+  `worsening` (+100% delta), `reporting` / `staging` stable.
+
+### v1.06.03 (2026-04-20) — `dev.ps1` silent-shutdown fix
+
+- Backend + frontend were dying silently whenever a file outside `backend/app/`
+  was edited (e.g. `tools/rich_seed.py`, `alembic/versions/*`, tests).
+- Root cause: `uvicorn --reload` default-watches the whole `backend/`
+  directory. On Windows, WatchFiles' reload propagates a signal that
+  PowerShell interprets as Ctrl+C on the parent `dev.ps1`, which runs the
+  `finally` block and `taskkill`s both child processes — the engines then
+  shut down without any error, just the Spanish prompt
+  `¿Desea terminar el trabajo por lotes (S/N)?`.
+- Fix: pass `--reload-dir app` so only the served FastAPI app triggers
+  reloads. Editing seed scripts / migrations / tests no longer kills the demo.
+
+### v1.06.02 (2026-04-20) — Teradata terminology fix (round 2)
+
+- **Impact donut chart** was bypassing `changeTypeLabel()` and building its
+  own labels via raw `replace(/_/g, " ")` → showed `SCHEMA ADDED`,
+  `SCHEMA REMOVED`. Now uses the terminology helper.
+- **SchemaVisualDiff** (table + column change badges) same fix.
+- **Lineage sidebar** "Changed in this diff" detail.
+- **Changes → Select a change** dropdown.
+- **Snapshots page** copy: "Schema-change detection" → "Structural change
+  detection"; "All schemas, tables, and columns" → "All databases, tables,
+  and columns" in the delete confirmation modal.
+
+### v1.06.01 (2026-04-20) — Teradata terminology fix
+
+- `terminology.ts` (`changeTypeLabel()`) was defined in v1.03 but never
+  actually imported. Raw change_type strings (`SCHEMA_ADDED`, etc.) were
+  leaking into Timeline, Changes, Impact and the Home dashboard.
+- Wired `changeTypeLabel()` into all five display sites so users see
+  **"Database added / removed"** instead of `SCHEMA_ADDED / SCHEMA_REMOVED`,
+  matching Teradata convention.
+- Raw token preserved as a `title` tooltip for power-users / debugging.
+
+### v1.06.00 (2026-04-20) — Rich demo seed ("sabroso" edition)
+
+**`backend/tools/rich_seed.py` — full rewrite**
+- **10 snapshots** spread across a 30-day window (was 3)
+- **Full Teradata data type catalog** exercised in the baseline: numeric
+  (`BYTEINT`/`SMALLINT`/`INTEGER`/`BIGINT`/`DECIMAL`/`NUMBER`/`FLOAT`/`DOUBLE PRECISION`),
+  character (`CHAR`/`VARCHAR`/`CLOB`/`LONG VARCHAR`), binary (`BYTE`/`VARBYTE`/`BLOB`),
+  date/time (`DATE`/`TIME`/`TIME WITH TIME ZONE`/`TIMESTAMP`/`TIMESTAMP WITH TIME ZONE`),
+  intervals (13 variants from `YEAR` to `SECOND`), periods (`PERIOD(DATE)`,
+  `PERIOD(TIMESTAMP(6))`), complex (`JSON`, `XML`, `ST_GEOMETRY`, `ARRAY`, `BOOLEAN`)
+- **All 10 change types** produced at least once across the timeline:
+  `SCHEMA_ADDED`, `SCHEMA_REMOVED`, `TABLE_ADDED`, `TABLE_REMOVED`,
+  `TABLE_TYPE_CHANGED`, `COLUMN_ADDED`, `COLUMN_REMOVED`, `COLUMN_TYPE_CHANGED`,
+  `COLUMN_NULLABILITY_CHANGED`, `COLUMN_POSITION_CHANGED`
+- Each snapshot tells a short business story (sandbox spin-up, GDPR cleanup,
+  capital-adequacy widening, staging retirement, …) so diff/impact pages
+  feel narrative, not synthetic
+- Mutation engine is pure and deterministic (`apply_mutation()` returns a
+  new dict; originals never touched)
+- Self-wiping: script DELETEs demo + parser tables FK-safely, no need to
+  stop the backend or rerun `bootstrap_sqlite_db.py`
+- Pairwise diffs computed between every consecutive pair, not only the
+  latest, so the Changes/Impact pages have data across the whole timeline
+- Output: **31 changes, 6 impacts, 15 usage rows, criticality computed
+  on snapshot #10**
+
+### v1.05.00 (2026-04-20) — Parser UI Integration (Day 2)
+
+**Frontend — Snapshots page**
+- `Import from Parser` button now calls the real `/parser-import/lineage` endpoint (previously only validated JSON locally)
+- Two-phase flow: file select triggers a **dry-run preview**, user reviews counts + warnings, then clicks **Confirm Import** to persist
+- Preview panel renders three count cards (input → filtered → would-persist) driven dynamically by the backend `IngestionReport` dicts
+- Amber **"Structural snapshot incomplete — waiting for parser v2"** callout whenever the backend report contains `UNKNOWN`-related warnings
+- Success toast with the new `snapshot_id` and auto-selects the imported snapshot
+
+**Frontend — System Graph page**
+- New `UNKNOWN` object_type style (amber, dashed border) with hover tooltip *"Waiting for parser datasetType field"*
+- Header stats now include `N unclassified` badge so parser-v1 imports don't look deceptively empty (previous "0 tables" was technically true but hid real data)
+- Legend auto-includes the Unclassified entry only when such nodes are present
+
+**New frontend modules**
+- `src/lib/api/parser_import.ts` — `previewParserImport()` / `confirmParserImport()` wrappers
+- `ParserImportResponse` type in `src/lib/api/types.ts` mirrors the backend pydantic model
+
+**Validation**
+- Bootstrap → parser import (real `lineage-mvp.json`) → snapshot #1 visible in UI with 1 database, 1 unclassified table, 2 unclassified columns, 1 process, 2 steps, 1 attribute_lineage (expression + `transformation_type=Filter` preserved)
+
+### v1.04.00 (2026-04-20) — Parser Integration Scaffolding (Day 1)
+
+**Database**
+- 3 new tables: `process`, `step`, `attribute_lineage`
+- Alembic migration `f1a8b3c5d207`
+
+**Backend — new `parser_ingest` module**
+- `parser_models.py` — internal dataclasses (`ParsedLineagePayload`, `IngestionReport`, ...)
+- `teradata_parser.py` — tolerant JSON → dataclasses (future-proofs parser v2 fields)
+- `noise_filter.py` — heuristic filter for `NOT APPLICABLE`, `UNKNOWN`, SQL literals, temp tables
+- `ingestor.py` — persists full payload in one transaction, produces `IngestionReport`
+- `dry_run.py` — analyzes without persisting
+
+**API**
+- New endpoint `POST /api/v1/parser-import/lineage?dry_run=true|false`
+
+**Validation**
+- End-to-end tested with `parser/lineage-mvp.json` (real sample from DataDNA team)
+- 15 noisy entities correctly filtered; 1 real database + 1 table + 2 columns + 1 process + 2 steps + 1 attribute_lineage edge persisted with the actual SQL expression and `transformationType="Filter"`
+
+### v1.03.00 (2026-04-16) — Clarity, Context & What-If
+- Release A: terminology unification, Graph legend fix, Breaking vs Severity separation, schema → database rename, 10+ object types supported, Reasoning page removed (replaced by TAISA widget)
+- Release B: quick links Lineage/Timeline/Impact/Usage from Changes, queries/users affected in Impact, InfoTooltip component, bigger Heatmap labels
+- Release C: What-If Simulation page + endpoint, proactive Alerts (broken lineage, orphans, hub changes), TAISA Algorithm Knowledge Base
+- Release D: hash hidden in Metrics, protected snapshot delete with typed confirmation, 23 docstrings added
+- Release E: README + version bump
+- **Plus**: ~260 inline code comments added across 74 files for onboarding
+
+### v1.02.00 (2026-04-16) — UX polish
+- Dark Mode, animated counters, TAISA floating widget, Mission Control dashboard, Visual Diff, Risk Heatmap, skeleton loaders, toasts, page transitions, confetti, keyboard shortcuts
+
+### v1.01.00 (2026-04-16) — Wow features
+- DDL Generator, Comparison Report, Timeline, Global Search, Alerts Panel, CSV Export, TAISA on Groq (Llama 4 Scout)
+
+### v1.00.00 (2026-04-15) — Initial release
+- 7 engines, 13 pages, full diff/impact/reasoning pipeline
+
+---
+
+## License
+
+Proprietary — Teradata Corporation. All rights reserved.

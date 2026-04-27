@@ -1,0 +1,322 @@
+"""Intelligence Metrics Layer — executive structural intelligence.
+
+Transforms raw metadata, change events, impact data, and usage into
+high-level governance indicators.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, asdict
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.db.engine import engine
+from app.db.models.snapshot import Snapshot
+from app.db.models.schema_snapshot import SchemaSnapshot
+from app.diff.diff_models import ChangeEvent
+from app.graph.impact_models import ImpactEvent
+from app.usage.usage_models import ObjectCriticality
+from app.snapshot.snapshot_metrics import compute_snapshot_metrics, compute_volatility_index
+
+
+@dataclass
+class DomainRisk:
+    """Risk aggregate for a single schema/domain within a snapshot.
+
+    Attributes:
+        schema_name: Name of the schema/domain.
+        change_count: Total changes touching this schema.
+        breaking_count: Number of breaking changes in this schema.
+        impact_count: Sum of downstream impacts tied to this schema.
+        high_criticality_count: Objects rated ``HIGH`` criticality.
+        risk_score: Weighted composite score in ``[0.0, 1.0]``.
+        risk_level: Discrete level (``LOW``/``MEDIUM``/``HIGH``).
+    """
+
+    schema_name: str
+    change_count: int = 0
+    breaking_count: int = 0
+    impact_count: int = 0
+    high_criticality_count: int = 0
+    risk_score: float = 0.0
+    risk_level: str = "LOW"
+
+
+@dataclass
+class StabilityRecord:
+    """Stability history for a single object across consecutive snapshots.
+
+    Attributes:
+        object_name: Qualified or partial name of the tracked object.
+        snapshots_checked: Number of snapshot pairs evaluated.
+        times_changed: Pairs in which the object was detected changing.
+        stability_ratio: ``1 - (times_changed / snapshots_checked)``.
+        is_stable: True when ``stability_ratio >= 0.7``.
+    """
+
+    object_name: str
+    snapshots_checked: int = 0
+    times_changed: int = 0
+    stability_ratio: float = 1.0
+    is_stable: bool = True
+
+
+@dataclass
+class GovernanceScorecard:
+    """Executive scorecard summarizing structural health of a snapshot.
+
+    Combines snapshot metrics, volatility, change counts, impact counts,
+    criticality, and per-domain risks into a single health indicator.
+    """
+
+    snapshot_id: int
+    total_objects: int = 0
+    schema_count: int = 0
+    table_count: int = 0
+    column_count: int = 0
+    volatility_index: float = 0.0
+    total_changes: int = 0
+    breaking_changes: int = 0
+    total_impacts: int = 0
+    high_criticality_objects: int = 0
+    domain_risks: List[DomainRisk] = field(default_factory=list)
+    overall_health: str = "HEALTHY"
+    health_score: float = 1.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a plain-dict representation suitable for JSON serialization."""
+        d = asdict(self)
+        return d
+
+
+def structural_volatility_index(snapshot_ids: Optional[List[int]] = None) -> float:
+    """Volatility index (0.0 - 1.0) across snapshots."""
+    return compute_volatility_index(snapshot_ids)
+
+
+def domain_risk_index(snapshot_id: int) -> List[DomainRisk]:
+    """Compute risk score per schema/domain for a given snapshot.
+
+    Factors: change count, breaking changes, impact count, high criticality objects.
+    """
+
+    with Session(engine) as session:
+        # Get all schemas for this snapshot
+        schemas = session.scalars(
+            select(SchemaSnapshot.schema_name)
+            .where(SchemaSnapshot.snapshot_id == snapshot_id)
+        ).all()
+
+        # Changes where this snapshot is the target (snapshot_to)
+        changes = session.query(ChangeEvent).filter(
+            ChangeEvent.snapshot_to == snapshot_id
+        ).all()
+
+        # Impact events for this snapshot
+        impact_count_by_change = {}
+        impacts = session.query(ImpactEvent).filter(
+            ImpactEvent.snapshot_id == snapshot_id
+        ).all()
+        for imp in impacts:
+            impact_count_by_change[imp.change_id] = impact_count_by_change.get(imp.change_id, 0) + 1
+
+        # Criticality for this snapshot
+        crits = session.query(ObjectCriticality).filter(
+            ObjectCriticality.snapshot_id == snapshot_id
+        ).all()
+
+    # ──── Bucket changes under their owning schema ────
+    # object_identifier is always schema-qualified (e.g. "sales.orders" or
+    # "sales.orders.amount") so the first path segment IS the schema name.
+    # Changes whose schema isn't present in this snapshot are silently
+    # ignored — typically those are SCHEMA_REMOVED events we don't want
+    # to attribute to a schema that no longer exists.
+    # Group changes by schema
+    schema_changes: Dict[str, List] = {s: [] for s in schemas}
+    for change in changes:
+        schema = change.object_identifier.split(".")[0] if "." in change.object_identifier else ""
+        if schema in schema_changes:
+            schema_changes[schema].append(change)
+
+    # Group criticality by schema
+    schema_crits: Dict[str, int] = {}
+    for c in crits:
+        schema = c.object_name.split(".")[0] if "." in c.object_name else c.object_name
+        if c.criticality_level == "HIGH":
+            schema_crits[schema] = schema_crits.get(schema, 0) + 1
+
+    results: List[DomainRisk] = []
+    for schema_name in sorted(schemas):
+        ch_list = schema_changes.get(schema_name, [])
+        change_count = len(ch_list)
+        breaking = sum(1 for c in ch_list if c.is_breaking)
+        imp_count = sum(
+            impact_count_by_change.get(c.change_id, 0) for c in ch_list
+        )
+        high_crit = schema_crits.get(schema_name, 0)
+
+        # Risk score: weighted combination of four factors, each normalized
+        # into [0.0, 1.0] before weighting. Weights and caps are tuned
+        # empirically:
+        #   30% — share of total changes landing in this schema
+        #   30% — breaking-change rate WITHIN this schema
+        #   20% — downstream impact count (capped at 10 hits = saturated)
+        #   20% — number of high-criticality objects (capped at 3 = saturated)
+        # The caps prevent a single runaway factor from dominating the score.
+        score = (
+            0.3 * min(change_count / max(len(changes), 1), 1.0) +
+            0.3 * min(breaking / max(change_count, 1), 1.0) +
+            0.2 * min(imp_count / 10.0, 1.0) +
+            0.2 * min(high_crit / 3.0, 1.0)
+        )
+        score = round(score, 4)
+
+        # Thresholds match the SCION UI risk-band colors (green/amber/red).
+        level = "HIGH" if score >= 0.5 else "MEDIUM" if score >= 0.2 else "LOW"
+
+        results.append(DomainRisk(
+            schema_name=schema_name,
+            change_count=change_count,
+            breaking_count=breaking,
+            impact_count=imp_count,
+            high_criticality_count=high_crit,
+            risk_score=score,
+            risk_level=level,
+        ))
+
+    results.sort(key=lambda r: r.risk_score, reverse=True)
+    return results
+
+
+def change_density(snapshot_from: int, snapshot_to: int) -> float:
+    """changes / total_objects — how much of the EDW changed."""
+
+    metrics = compute_snapshot_metrics(snapshot_to)
+    total = max(metrics.total_objects, 1)
+
+    with Session(engine) as session:
+        count = session.scalar(
+            select(func.count()).select_from(ChangeEvent).where(
+                ChangeEvent.snapshot_from == snapshot_from,
+                ChangeEvent.snapshot_to == snapshot_to,
+            )
+        ) or 0
+
+    return round(count / total, 4)
+
+
+def stability_trend(object_name: str, snapshot_ids: Optional[List[int]] = None) -> StabilityRecord:
+    """Check how often an object changed across snapshot pairs."""
+
+    with Session(engine) as session:
+        if snapshot_ids is None:
+            snapshot_ids = list(session.scalars(
+                select(Snapshot.snapshot_id).order_by(Snapshot.snapshot_time)
+            ).all())
+
+    if len(snapshot_ids) < 2:
+        return StabilityRecord(object_name=object_name)
+
+    # Walk consecutive snapshot pairs and count how many times the target
+    # object shows up in any ChangeEvent. We use .contains() so partial
+    # matches (e.g. table name without schema prefix) still count — the
+    # caller is expected to pass a discriminating-enough substring.
+    times_changed = 0
+    pairs_checked = 0
+
+    with Session(engine) as session:
+        for i in range(len(snapshot_ids) - 1):
+            pairs_checked += 1
+            count = session.scalar(
+                select(func.count()).select_from(ChangeEvent).where(
+                    ChangeEvent.snapshot_from == snapshot_ids[i],
+                    ChangeEvent.snapshot_to == snapshot_ids[i + 1],
+                    ChangeEvent.object_identifier.contains(object_name),
+                )
+            ) or 0
+            if count > 0:
+                times_changed += 1
+
+    ratio = round(1.0 - (times_changed / max(pairs_checked, 1)), 4)
+
+    return StabilityRecord(
+        object_name=object_name,
+        snapshots_checked=pairs_checked,
+        times_changed=times_changed,
+        stability_ratio=ratio,
+        is_stable=ratio >= 0.7,
+    )
+
+
+def governance_scorecard(snapshot_id: int) -> GovernanceScorecard:
+    """Executive governance scorecard for a snapshot."""
+
+    metrics = compute_snapshot_metrics(snapshot_id)
+    vol = structural_volatility_index()
+    domains = domain_risk_index(snapshot_id)
+
+    with Session(engine) as session:
+        total_changes = session.scalar(
+            select(func.count()).select_from(ChangeEvent).where(
+                ChangeEvent.snapshot_to == snapshot_id
+            )
+        ) or 0
+
+        breaking_changes = session.scalar(
+            select(func.count()).select_from(ChangeEvent).where(
+                ChangeEvent.snapshot_to == snapshot_id,
+                ChangeEvent.is_breaking == True,
+            )
+        ) or 0
+
+        total_impacts = session.scalar(
+            select(func.count()).select_from(ImpactEvent).where(
+                ImpactEvent.snapshot_id == snapshot_id
+            )
+        ) or 0
+
+        high_crit = session.scalar(
+            select(func.count()).select_from(ObjectCriticality).where(
+                ObjectCriticality.snapshot_id == snapshot_id,
+                ObjectCriticality.criticality_level == "HIGH",
+            )
+        ) or 0
+
+    # Health score starts at 1.0 (perfect) and is eroded by three penalties,
+    # each capped so no single factor can drive the score to zero on its own:
+    #   - volatility    up to -0.30 (multiplier 2x because vol is already 0-1)
+    #   - breaking chg  up to -0.30 (-0.10 per breaking change, saturates at 3)
+    #   - high-crit obj up to -0.20 (-0.05 per HIGH object, saturates at 4)
+    # The final max(…, 0.0) clamps to avoid negative scores on worst-case data.
+    health = 1.0
+    health -= min(vol * 2, 0.3)  # volatility penalty
+    health -= min(breaking_changes * 0.1, 0.3)  # breaking penalty
+    health -= min(high_crit * 0.05, 0.2)  # criticality penalty
+    health = round(max(health, 0.0), 4)
+
+    # Three-tier label mapping — thresholds mirror the color bands shown
+    # on the SCION executive dashboard (green / amber / red).
+    if health >= 0.7:
+        overall = "HEALTHY"
+    elif health >= 0.4:
+        overall = "AT_RISK"
+    else:
+        overall = "CRITICAL"
+
+    return GovernanceScorecard(
+        snapshot_id=snapshot_id,
+        total_objects=metrics.total_objects,
+        schema_count=metrics.schema_count,
+        table_count=metrics.table_count,
+        column_count=metrics.column_count,
+        volatility_index=vol,
+        total_changes=total_changes,
+        breaking_changes=breaking_changes,
+        total_impacts=total_impacts,
+        high_criticality_objects=high_crit,
+        domain_risks=domains,
+        overall_health=overall,
+        health_score=health,
+    )

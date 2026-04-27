@@ -1,0 +1,348 @@
+🧬 HOJA DE RUTA DE DESARROLLO
+Kalido-Lite + TAISA
+
+(Metadata Intelligence Platform – Internal Replacement for Kalido/DataDNA)
+
+🧩 Visión General
+
+Objetivo del sistema
+Construir una plataforma interna que replique y mejore el flujo de DataDNA + Kalido, reduciendo drásticamente complejidad, costos y dependencia de terceros, e incorporando razonamiento explicable mediante TAISA.
+
+Principios de diseño
+
+PostgreSQL como motor interno único
+
+Grafos embebidos en SQL (sin Neo4j)
+
+Plantillas genéricas de metadata (engine-agnostic)
+
+Adaptadores livianos por motor
+
+IA desacoplada vía API (TAISA)
+
+Docker-first
+
+MVP demostrable en laptop
+
+🔧 FASE 0 – Preparación y Cierre de Diseño (FOUNDATION)
+
+📌 Objetivo
+Dejar el diseño completamente cerrado antes de escribir código productivo.
+
+Alcance
+
+Confirmar arquitectura final
+
+Cerrar modelo de datos
+
+Definir alcance exacto del MVP
+
+Entregables
+
+Arquitectura validada
+
+Modelo SQL + Grafo definido
+
+Alcance de demo y MVP cerrado
+
+📦 Estado
+✅ Completada (según lo trabajado)
+
+🔌 FASE 1 – Metadata Acquisition (equivalente a DataDNA pasos 1–3)
+
+📌 Objetivo
+Implementar la captura de metadata sin dependencias externas, usando plantillas genéricas.
+
+Componentes
+1.1 Metadata Query Templates
+
+Definir un catálogo canónico de queries lógicas:
+
+list_databases
+
+list_schemas
+
+list_tables
+
+list_columns
+
+list_views
+
+list_dependencies
+
+list_query_usage (opcional MVP+)
+
+Formato:
+
+template_name:
+  description:
+  inputs:
+  output_schema:
+
+1.2 SQL Adapters
+
+Implementar adaptadores livianos:
+
+TeradataAdapter
+
+PostgresAdapter (para demo)
+
+Responsabilidad:
+
+Traducir template → SQL nativo
+
+Ejecutar
+
+Devolver resultado normalizado
+
+📂 Archivos sugeridos
+
+connectors/
+├── templates/
+│   ├── list_tables.yaml
+│   ├── list_columns.yaml
+├── adapters/
+│   ├── base_adapter.py
+│   ├── teradata_adapter.py
+│   └── postgres_adapter.py
+
+
+📦 Estado esperado
+Metadata capturada y normalizada, lista para persistir.
+
+🗄️ FASE 2 – Metadata Landing & Snapshots
+
+(DataDNA pasos 2, 3, 6)
+
+📌 Objetivo
+Persistir estados completos del EDW en PostgreSQL.
+
+Componentes
+2.1 Snapshot Engine
+
+Crear snapshot lógico por ejecución
+
+Asociar metadata a snapshot_id
+
+Tablas clave:
+
+snapshot
+
+schema_snapshot
+
+table_snapshot
+
+column_snapshot
+
+2.2 Snapshot Loader
+
+Inserción transaccional
+
+Versionado temporal
+
+Baseline vs incremental
+
+📦 Resultado
+
+Historia completa del EDW
+
+Estados comparables en el tiempo
+
+🔍 FASE 3 – Parsing & Diff Engine
+
+(DataDNA pasos 5, 7)
+
+📌 Objetivo
+Detectar cambios estructurales entre snapshots.
+
+Componentes
+3.1 Diff Engine
+
+Comparación entre:
+
+Snapshot N
+
+Snapshot N-1
+
+Tipos de cambios:
+
+ADD
+
+DROP
+
+MODIFY (tipo, nullability, etc.)
+
+Salida:
+
+change_event
+
+3.2 Normalización semántica
+
+Cambios expresados en forma independiente del motor
+
+📦 Resultado
+
+Cambios claros, auditables y explicables
+
+🧠 FASE 4 – Lineage & Graph Engine
+
+(DataDNA pasos 7–9)
+
+📌 Objetivo
+Construir lineage e impacto sin motor de grafos externo.
+
+Componentes
+4.1 Graph Model (SQL)
+
+graph_node
+
+graph_edge
+
+Tipos de nodos:
+
+TABLE
+
+VIEW
+
+PROCESS
+
+Tipos de relaciones:
+
+DEPENDS_ON
+
+FEEDS
+
+4.2 Impact Analysis
+
+Consultas recursivas (WITH RECURSIVE)
+
+Impacto directo e indirecto
+
+📦 Resultado
+
+Lineage técnico completo
+
+Impact analysis reproducible
+
+🤖 FASE 5 – TAISA Integration (Analytics & Reasoning)
+
+(DataDNA pasos 9–11, pero mejor)
+
+📌 Objetivo
+Sustituir heurísticas rígidas por razonamiento explicable.
+
+Componentes
+5.1 TAISA Contract
+
+Definir payload estándar:
+
+{
+  "before_state": {},
+  "after_state": {},
+  "changes": [],
+  "impact_graph": []
+}
+
+5.2 Reasoning Capabilities
+
+Evaluación de riesgo
+
+Clasificación de cambio
+
+Sugerencia de DDL
+
+Explicación en lenguaje natural
+
+📦 Resultado
+
+“ML engines” reemplazados por IA razonada
+
+Decisiones explicables
+
+🖥️ FASE 6 – UI / Insight Layer
+
+(DataDNA pasos 12–13)
+
+📌 Objetivo
+Visualizar valor, no complejidad.
+
+Vistas mínimas (MVP Demo)
+
+Snapshots
+
+Changes detected
+
+Impacted objects
+
+TAISA explanation
+
+Tecnologías sugeridas:
+
+Streamlit / FastAPI + HTML
+
+Sin BI tools externos
+
+📦 Resultado
+
+Demo clara y convincente
+
+Corre en laptop
+
+🐳 FASE 7 – Dockerization & Demo Packaging
+
+📌 Objetivo
+Despliegue inmediato y reproducible.
+
+Componentes
+
+PostgreSQL container
+
+Backend API
+
+UI
+
+Configuración TAISA (mock o real)
+
+📦 Resultado
+
+docker compose up
+
+
+Demo lista en minutos.
+
+🧪 FASE 8 – Demo Funcional (MVP)
+
+📌 Objetivo
+Demostrar que no se necesita Kalido para cubrir el flujo crítico.
+
+Demo recorre:
+
+Metadata extract
+
+Snapshot
+
+Diff
+
+Lineage
+
+Impact
+
+TAISA reasoning
+
+📦 Resultado
+
+Validación conceptual
+
+Aprobación de enfoque
+
+📈 FASE 9 – Evolución (Post-MVP)
+
+Más motores
+
+Más parsing
+
+Seguridad avanzada
+
+Integración con BI
+
+Automatización completa

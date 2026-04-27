@@ -1,0 +1,191 @@
+Albella, Guillermo inició la transcripción
+
+Kulkarni, Rahul
+0 minutos 5 segundos0:05
+Kulkarni, Rahul 0 minutos 5 segundos
+Pilar, do you know if Luis is joining? I thought he had conflict in the 1st 10 minutes or so.
+
+Infantas, Pilar
+0 minutos 13 segundos0:13
+Infantas, Pilar 0 minutos 13 segundos
+Yes, he told me he would be joining as far as he can, but we should not wait for him. We just can't start.
+
+Kulkarni, Rahul
+0 minutos 20 segundos0:20
+Kulkarni, Rahul 0 minutos 20 segundos
+Okay, okay, then I think we can start. Chris, is that okay? Should I start?
+
+Infantas, Pilar
+0 minutos 27 segundos0:27
+Infantas, Pilar 0 minutos 27 segundos
+You are on mute, Chris.
+
+Pilon, Chris
+0 minutos 29 segundos0:29
+Pilon, Chris 0 minutos 29 segundos
+I'm on mute. Yeah, I'll have to, I do have a, I've got a call that just dropped in at the bottom of the hour. So we'll get a quick update and then Sandeep, if you can keep oversight on where we're at and if there are any other issues or decisions that need to be made, you know, between you and Luis, you guys make the call.
+
+Kumar, Sandeep
+0 minutos 49 segundos0:49
+Kumar, Sandeep 0 minutos 49 segundos
+Chlup.
+
+Pilon, Chris
+0 minutos 50 segundos0:50
+Pilon, Chris 0 minutos 50 segundos
+Alright, so let's get the overview of where we are on the project, and, and you know, how well are we tracking?
+
+Kulkarni, Rahul
+0 minutos 51 segundos0:51
+Kulkarni, Rahul 0 minutos 51 segundos
+Okay, I start.
+Kulkarni, Rahul 1 minuto
+Okay, so quickly, we will first look at where we are with code parser development. Then the other item from last time was the definition of good enough. So we'll talk about it. And then lastly, the psion estimate, which is ready for you
+Kulkarni, Rahul 1 minuto 18 segundos
+to walk through in terms of the code parser.
+Kumar, Sandeep 39 minutos 8 segundos
+I.
+
+Kulkarni, Rahul
+39 minutos 17 segundos39:17
+Kulkarni, Rahul 39 minutos 17 segundos
+That one, as well as John, regarding the definition of good enough, right? I mean, if we, for example, if we leave the analytics, the click analytics for phase two, is phase one good enough, right? I mean, something like that, that will have to address.
+Kulkarni, Rahul 39 minutos 38 segundos
+Vidhi.
+
+Brightling, Jon
+39 minutos 38 segundos39:38
+Brightling, Jon 39 minutos 38 segundos
+Sure, as I said, have a have a look at the decoded use cases, yeah?
+Brightling, Jon 39 minutos 44 segundos
+And you can just play off those in terms of what you, what additional insight you're going to provide.
+Brightling, Jon 39 minutos 50 segundos
+And as was mentioned, if they've already, if they're already doing usage and have some analytics around that, then maybe you don't need to build that. I don't know. So you should definitely have a look at that first.
+
+Kumar, Sandeep
+40 minutos 2 segundos40:02
+Kumar, Sandeep 40 minutos 2 segundos
+OK, let let me let me capture the action or something. So, first one was trying to follow up with the legal team. OK, that's number one. OK, the second one was basically on the usage stuff or something. OK, and and Rahul, probably you can you can get help in Rahul Shiyekar, right? You can help him in getting, you know, connected quickly with.
+Kumar, Sandeep 40 minutos 22 segundos
+With the ecosystem decoded team, or even even with Rajesh's team, right, or or Sunil's team and saying that what is what is expected, what is done in as in relation to the usage, and can we use ecosystem decoded, can we use the telemetry data, et cetera, so then then once that determination is done and John signs it off, then we can think about saying that usage is kept out of this, right?
+Kumar, Sandeep 40 minutos 42 segundos
+So, so that could be one action or something. OK, then, then the next one is, you know, for Pilar and to look at things that if you use cloud code, you know, how can we actually speed up the sign and and and Rahul again, to this point, if there's anything we can...
+
+Shiyekar, Rahul
+40 minutos 42 segundos40:42
+Shiyekar, Rahul 40 minutos 42 segundos
+Okay.
+Shiyekar, Rahul 40 minutos 44 segundos
+Okay.
+
+Kumar, Sandeep
+41 minutos 1 segundo41:01
+Kumar, Sandeep 41 minutos 1 segundo
+Help it from a GSIH perspective to to pair up with with Pilar, then happy to listen how get that feedback as well. Sorry, Pilar.
+
+Infantas, Pilar
+41 minutos 11 segundos41:11
+Infantas, Pilar 41 minutos 11 segundos
+Yes, I was wondering, we just estimate our resource considering one of our vendors, but I don't know if you have some availability among the GSIH of some resource that can help on the development. I can share with you.
+Infantas, Pilar 41 minutos 31 segundos
+The...
+Infantas, Pilar 41 minutos 33 segundos
+The knowledge that is needed.
+
+Kumar, Sandeep
+41 minutos 36 segundos41:36
+Kumar, Sandeep 41 minutos 36 segundos
+Yep, absolutely. OK, you can share it with Rahul. Rahul, you can check with with the RM team to see if somebody is available to support that part time or or full time right from perspective. OK.
+
+Infantas, Pilar
+41 minutos 48 segundos41:48
+Infantas, Pilar 41 minutos 48 segundos
+Perfect.
+
+Kumar, Sandeep
+41 minutos 49 segundos41:49
+Kumar, Sandeep 41 minutos 49 segundos
+OK.
+Kumar, Sandeep 41 minutos 51 segundos
+Okay.
+Kumar, Sandeep 41 minutos 55 segundos
+So, these four items, okay, and then Rahul, the last one was building up the actions and dependencies week by week from now till mid May, right? Okay, so if you could build that up or something, okay, do you have a sense or something of what we need needs to happen?
+Kumar, Sandeep 42 minutos 13 segundos
+In each week.
+
+Kulkarni, Rahul
+42 minutos 18 segundos42:18
+Kulkarni, Rahul 42 minutos 18 segundos
+I think I have a reasonable idea, so yep.
+Kulkarni, Rahul 42 minutos 23 segundos
+I'll check with Rahul if needed.
+
+Kumar, Sandeep
+42 minutos 23 segundos42:23
+Kumar, Sandeep 42 minutos 23 segundos
+Yeah.
+Kumar, Sandeep 42 minutos 27 segundos
+Okay, so today is Tuesday, right? Should we do another checkpoint amongst this group? You know, without necessarily having Chris on the call with all with this group on Monday, and then we can probably get an update to Chris later in the week. Does that sound okay? Does that?
+Kumar, Sandeep 42 minutos 45 segundos
+Give enough time for people to work on these items.
+
+Shiyekar, Rahul
+42 minutos 49 segundos42:49
+Shiyekar, Rahul 42 minutos 49 segundos
+Yep, I'm fine.
+
+Infantas, Pilar
+42 minutos 51 segundos42:51
+Infantas, Pilar 42 minutos 51 segundos
+Yes.
+
+Kulkarni, Rahul
+42 minutos 51 segundos42:51
+Kulkarni, Rahul 42 minutos 51 segundos
+Yeah, I'm OK.
+
+Kumar, Sandeep
+42 minutos 52 segundos42:52
+Kumar, Sandeep 42 minutos 52 segundos
+OK, so, so again, as we get updates, that circulate is among this group, so that we can see if there are any roadblocks to meet that meet that deadline for Monday, OK?
+
+Shiyekar, Rahul
+43 minutos 5 segundos43:05
+Shiyekar, Rahul 43 minutos 5 segundos
+Okay.
+
+Kumar, Sandeep
+43 minutos 7 segundos43:07
+Kumar, Sandeep 43 minutos 7 segundos
+Okay.
+Kumar, Sandeep 43 minutos 8 segundos
+Anything else?
+Kumar, Sandeep 43 minutos 10 segundos
+You want to discuss?
+
+Shiyekar, Rahul
+43 minutos 14 segundos43:14
+Shiyekar, Rahul 43 minutos 14 segundos
+I'm fine.
+
+Kumar, Sandeep
+43 minutos 16 segundos43:16
+Kumar, Sandeep 43 minutos 16 segundos
+OK, OK. Thank you, everyone. Thank you.
+
+Kulkarni, Rahul
+43 minutos 18 segundos43:18
+Kulkarni, Rahul 43 minutos 18 segundos
+Good. Thank you. Thank you very much. Bye-bye.
+
+Shiyekar, Rahul
+43 minutos 20 segundos43:20
+Shiyekar, Rahul 43 minutos 20 segundos
+Bye-bye.
+
+Infantas, Pilar
+43 minutos 21 segundos43:21
+Infantas, Pilar 43 minutos 21 segundos
+Take care. Thank you.
+
+Infantas, Pilar detuvo la transcripción

@@ -1,0 +1,63 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Database
+*.db
+
+# Environment
+.env
+.env.local
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+# .pptx excluded globally — same content lives in docs/*.pdf and PPTX
+# files routinely exceed GitHub's 100 MB hard limit.
+*.pptx
+# Keep .pdf and .docx tracked under docs/ — exclude only at root.
+/*.pdf
+/*.docx
+
+# Claude
+.claude/
+
+# Images
+img/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Coverage
+htmlcov/
+.coverage
+coverage/
+
+# Next.js
+frontend/.swc/
+frontend/next-env.d.ts
+
+# Alembic — keep migrations, ignore local SQLite override
+backend/alembic/versions/__pycache__/
+
+# Local secrets backup
+*.bak
+*.swp

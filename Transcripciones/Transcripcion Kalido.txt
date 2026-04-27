@@ -1,0 +1,231 @@
+
+Brightling, Jon
+0 minutos 4 segundos0:04
+Brightling, Jon 0 minutos 4 segundos
+OK, so half an hour to look at Kaleido. It's not a lot of time because it has an immense amount of capability, but I'll do my best and the rest of the data DNA team will really laugh because they know that whilst I used to spend a lot of time.
+Brightling, Jon 0 minutos 24 segundos
+I'm using Kaleido. I've handed a lot of this over to the team and they use it regularly and I haven't been in here for a while, so let's see how we get on.
+Brightling, Jon 0 minutos 36 segundos
+I'm going to move quite fast because there's a lot of capability to show, but it's been recorded. You can watch and we can also of course have another session to answer a lot of your questions. So Kleido is.
+Brightling, Jon 0 minutos 54 segundos
+Enterprise software that's designed to design or automate the process of designing, building and operating a data warehouse. Any data warehouse.
+Brightling, Jon 1 minuto 9 segundos
+And it starts with designing your warehouse from a business model, a conceptual model of the data that you require. Now for data DNA, our warehouse is all about metadata, so.
+Brightling, Jon 1 minuto 27 segundos
+You can start off with thinking about technical metadata, information about tables and views and things like that. So I'm going to show you just first of all the business information modeller, which is our start point. This is where.
+Brightling, Jon 1 minuto 43 segundos
+Everything, every piece of information that we hold in data DNA is defined now. So this picture shows a little bit of the model, and I'll just walk you through what you're looking at.
+Brightling, Jon 1 minuto 59 segundos
+Essentially, the model is very much a dimensional model. So those of you who are familiar with modelling dimensional models think about major facts.
+Brightling, Jon 2 minutos 14 segundos
+Typically around measures, numbers that are measured or captured somewhere and then need to be described using different dimensions. So in our world.
+Brightling, Jon 2 minutos 31 segundos
+For instance, we are interested in monitoring the usage on a database platform, so we capture information about the queries, everything from what queries have been run.
+
+Kulkarni, Rahul
+1 hora 12 minutos 32 segundos1:12:32
+Kulkarni, Rahul 1 hora 12 minutos 32 segundos
+Is what we are trying to do.
+
+Albella, Guillermo
+1 hora 12 minutos 35 segundos1:12:35
+Albella, Guillermo 1 hora 12 minutos 35 segundos
+You you have right now a cloud license or you are using OK, OK, OK.
+
+Kulkarni, Rahul
+1 hora 12 minutos 39 segundos1:12:39
+Kulkarni, Rahul 1 hora 12 minutos 39 segundos
+We don't and that's where we are stuck. We don't have cloud license for the last one week. We are stuck because of that.
+
+Albella, Guillermo
+1 hora 12 minutos 45 segundos1:12:45
+Albella, Guillermo 1 hora 12 minutos 45 segundos
+But what how do I if you don't have a clouds lessons, how would you are using cloud in free mode?
+
+Kulkarni, Rahul
+1 hora 12 minutos 56 segundos1:12:56
+Kulkarni, Rahul 1 hora 12 minutos 56 segundos
+So far we haven't started the build. So all we did was the the spec which was in free mode because there's nothing, nothing proprietary there, right? So up to the spec level we have done that, but for build we are.
+
+Albella, Guillermo
+1 hora 12 minutos 59 segundos1:12:59
+Albella, Guillermo 1 hora 12 minutos 59 segundos
+Uh, OK, OK, OK.
+Albella, Guillermo 1 hora 13 minutos 6 segundos
+Mhm.
+
+Kulkarni, Rahul
+1 hora 13 minutos 11 segundos1:13:11
+Kulkarni, Rahul 1 hora 13 minutos 11 segundos
+Waiting for the cloud license.
+
+Albella, Guillermo
+1 hora 13 minutos 13 segundos1:13:13
+Albella, Guillermo 1 hora 13 minutos 13 segundos
+But we can, we can start with another LLM and then when we have a cloud license we can connect to cloud. So you know that's cover right now.
+
+Kulkarni, Rahul
+1 hora 13 minutos 21 segundos1:13:21
+Kulkarni, Rahul 1 hora 13 minutos 21 segundos
+We can do that, yes, yes. So yeah, so we have requested for GitHub Copilot license. We are waiting for that. Hopefully we will get it. Oh no, we have requested, I meant.
+
+Albella, Guillermo
+1 hora 13 minutos 30 segundos1:13:30
+Albella, Guillermo 1 hora 13 minutos 30 segundos
+No, I don't have.
+Albella, Guillermo 1 hora 13 minutos 35 segundos
+OK, OK.
+
+Kulkarni, Rahul
+1 hora 13 minutos 37 segundos1:13:37
+Kulkarni, Rahul 1 hora 13 minutos 37 segundos
+So we we were told that Claude may not be. We may not get it quickly because there is some issue with the vendor. So we requested the GitHub copilot license.
+
+Albella, Guillermo
+1 hora 13 minutos 47 segundos1:13:47
+Albella, Guillermo 1 hora 13 minutos 47 segundos
+But.
+Albella, Guillermo 1 hora 13 minutos 49 segundos
+But I have a copilot in code. You notice the better one. OK is where the second better LLM in code is.
+Albella, Guillermo 1 hora 14 minutos 5 segundos
+JGBT codecs. OK, so Copilot is not a better way to to to make code, but it will, but the company will give to us the Copilot's.
+Albella, Guillermo 1 hora 14 minutos 24 segundos
+License. We can start with that.
+
+Kulkarni, Rahul
+1 hora 14 minutos 27 segundos1:14:27
+Kulkarni, Rahul 1 hora 14 minutos 27 segundos
+Yeah, I mean something is better than nothing. So for now we will start with copilot and whenever we get code, we will use that Cat GPT codecs. Do you know if we can request that license somehow?
+
+Albella, Guillermo
+1 hora 14 minutos 31 segundos1:14:31
+Albella, Guillermo 1 hora 14 minutos 31 segundos
+Yes, right.
+Albella, Guillermo 1 hora 14 minutos 46 segundos
+I don't know. I have a bad that's a PTI have license but but but my my own OK not for the company. It's very it's very powerful. It worked very fine. I I I I use.
+
+Kulkarni, Rahul
+1 hora 14 minutos 46 segundos1:14:46
+Kulkarni, Rahul 1 hora 14 minutos 46 segundos
+Would you recommend to use that?
+Kulkarni, Rahul 1 hora 14 minutos 54 segundos
+OK.
+Kulkarni, Rahul 1 hora 15 minutos
+Yeah.
+
+Albella, Guillermo
+1 hora 15 minutos 5 segundos1:15:05
+Albella, Guillermo 1 hora 15 minutos 5 segundos
+I use it. I don't know how to to say it. They have at. Let me make a quick introduction.
+
+Kulkarni, Rahul
+1 hora 15 minutos 20 segundos1:15:20
+Kulkarni, Rahul 1 hora 15 minutos 20 segundos
+Hello.
+
+Albella, Guillermo
+1 hora 15 minutos 20 segundos1:15:20
+Albella, Guillermo 1 hora 15 minutos 20 segundos
+See, eh, competent director, movie director, codex. I love those standing state-of-the-art.
+
+Infantas, Pilar
+1 hora 15 minutos 43 segundos1:15:43
+Infantas, Pilar 1 hora 15 minutos 43 segundos
+OK, OK. Guillet was mentioning that that ChatGPT is competing with Glock, but Copilot is out of that scope is not even similar, so using for coding.
+Infantas, Pilar 1 hora 16 minutos 3 segundos
+Would be better to consider any of any of those, uh, claw our that are more strong.
+
+Kulkarni, Rahul
+1 hora 16 minutos 10 segundos1:16:10
+Kulkarni, Rahul 1 hora 16 minutos 10 segundos
+I see, I see. Yeah. If you know any way to because see this is we are building a corporate asset here, right? A company's asset. So I I'm not sure whether we can use our personal.
+
+Albella, Guillermo
+1 hora 16 minutos 24 segundos1:16:24
+Albella, Guillermo 1 hora 16 minutos 24 segundos
+Hmm.
+
+Kulkarni, Rahul
+1 hora 16 minutos 28 segundos1:16:28
+Kulkarni, Rahul 1 hora 16 minutos 28 segundos
+ChatGPT license here. I don't think we can as per policy, so we really need to, yeah, so we'll really need the official license even if it is, you know, ChatGPT or.
+
+Albella, Guillermo
+1 hora 16 minutos 32 segundos1:16:32
+Albella, Guillermo 1 hora 16 minutos 32 segundos
+No, we'll get with them.
+
+Kulkarni, Rahul
+1 hora 16 minutos 43 segundos1:16:43
+Kulkarni, Rahul 1 hora 16 minutos 43 segundos
+Cloud code. Do you know any way to request ChatGPT license via Teradata?
+Kulkarni, Rahul 1 hora 16 minutos 54 segundos
+Official channels.
+
+Albella, Guillermo
+1 hora 16 minutos 55 segundos1:16:55
+Albella, Guillermo 1 hora 16 minutos 55 segundos
+I don't know how to do to to to I I only I I think the only official I I to use in in the company's copilot when you try to.
+
+Kulkarni, Rahul
+1 hora 17 minutos 8 segundos1:17:08
+Kulkarni, Rahul 1 hora 17 minutos 8 segundos
+Yeah, right.
+
+Albella, Guillermo
+1 hora 17 minutos 10 segundos1:17:10
+Albella, Guillermo 1 hora 17 minutos 10 segundos
+To ask to another AI design always we have no answer. So it's very complicated. I can I can search with to you find to do anything.
+
+Kulkarni, Rahul
+1 hora 17 minutos 21 segundos1:17:21
+Kulkarni, Rahul 1 hora 17 minutos 21 segundos
+Hmm.
+
+Albella, Guillermo
+1 hora 17 minutos 30 segundos1:17:30
+Albella, Guillermo 1 hora 17 minutos 30 segundos
+Official way to to ask this license, but I think the the the answer would be not no, but we can try.
+
+Kulkarni, Rahul
+1 hora 17 minutos 38 segundos1:17:38
+Kulkarni, Rahul 1 hora 17 minutos 38 segundos
+OK, yeah, yeah, we can try. So if you know, I mean if in your community anywhere anybody has ChatGPT codecs through Teradata, we can try that. We can ask try asking.
+
+Albella, Guillermo
+1 hora 17 minutos 52 segundos1:17:52
+Albella, Guillermo 1 hora 17 minutos 52 segundos
+Officially notes, but we can ask him. We can ask him to the we are. I will search the the the official way to ask this for this tool and I I share with you. OK.
+
+Kulkarni, Rahul
+1 hora 17 minutos 54 segundos1:17:54
+Kulkarni, Rahul 1 hora 17 minutos 54 segundos
+Official.
+Kulkarni, Rahul 1 hora 17 minutos 57 segundos
+Sure, sure.
+Kulkarni, Rahul 1 hora 18 minutos 9 segundos
+That would be great if you can find something, yes.
+Kulkarni, Rahul 1 hora 18 minutos 13 segundos
+So I will, excuse me, I'll add you to the weekly invite with Daniel where we discuss the the technicals of the code parsing initiative and I will set up a meeting, a brainstorming meeting sometime next week.
+
+Albella, Guillermo
+1 hora 18 minutos 31 segundos1:18:31
+Albella, Guillermo 1 hora 18 minutos 31 segundos
+Perfect. That's all right for me.
+
+Kulkarni, Rahul
+1 hora 18 minutos 33 segundos1:18:33
+Kulkarni, Rahul 1 hora 18 minutos 33 segundos
+OK, sounds good. Thank you very much.
+
+Albella, Guillermo
+1 hora 18 minutos 36 segundos1:18:36
+Albella, Guillermo 1 hora 18 minutos 36 segundos
+Say thank you very much for your.
+
+Infantas, Pilar
+1 hora 18 minutos 38 segundos1:18:38
+Infantas, Pilar 1 hora 18 minutos 38 segundos
+Take care. Thanks.
+
+Kulkarni, Rahul detuvo la transcripción

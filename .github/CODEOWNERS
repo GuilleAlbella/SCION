@@ -1,0 +1,29 @@
+# SCION code ownership
+#
+# GitHub auto-requests reviews from these owners on PRs touching the matched
+# paths. Order matters — last match wins. Add Helton's GitHub handle once
+# we have it; placeholder is `@helton-tbd`.
+
+# Default — both maintainers review everything
+*                                @GuilleAlbella @helton-tbd
+
+# Backend engines: Guillermo is the primary author; Helton reviews
+backend/app/graph/                @GuilleAlbella
+backend/app/metrics/              @GuilleAlbella
+backend/app/parser/               @GuilleAlbella
+backend/app/metadata/             @GuilleAlbella
+
+# Frontend: shared
+frontend/src/                     @GuilleAlbella @helton-tbd
+
+# Docs and roadmap: shared so neither of us merges policy changes alone
+docs/                             @GuilleAlbella @helton-tbd
+README.md                         @GuilleAlbella @helton-tbd
+
+# Release-sensitive files — both must approve
+frontend/src/lib/constants.ts     @GuilleAlbella @helton-tbd
+docs/release_policy.md            @GuilleAlbella @helton-tbd
+docs/internal_roadmap.md          @GuilleAlbella @helton-tbd
+
+# CI / infra (will populate as we add it)
+.github/                          @GuilleAlbella @helton-tbd

@@ -1,0 +1,147 @@
+
+Kulkarni, Rahul inició la transcripción
+
+Kulkarni, Rahul
+0 minutos 5 segundos0:05
+Kulkarni, Rahul 0 minutos 5 segundos
+Yeah. OK. So I started recording and John, to give you a recap after you left, I think you were there in the first meeting. In fact, thanks for presenting the Kaleido overview to Guillermo and team in that meeting and then we had a follow-up meeting where.
+Kulkarni, Rahul 0 minutos 24 segundos
+First of all, Guillermo and team presented some initial solution and then we discussed how the overall Kaleido component fits in in the in the entire solution, what does it do, etcetera.
+
+Albella, Guillermo
+0 minutos 28 segundos0:28
+Albella, Guillermo 0 minutos 28 segundos
+Mhm.
+Albella, Guillermo 0 minutos 36 segundos
+Yes.
+Albella, Guillermo 0 minutos 38 segundos
+So.
+
+Kulkarni, Rahul
+0 minutos 44 segundos0:44
+Kulkarni, Rahul 0 minutos 44 segundos
+And then we shared some more information offline as well I believe. And then Guillermo, you went back and you have been revising the solution thought process architecture and I believe you have.
+Kulkarni, Rahul 1 minuto 1 segundo
+Developed some kind of a demo now that you would like to present in this call.
+
+Albella, Guillermo
+1 minuto 6 segundos1:06
+Albella, Guillermo 1 minuto 6 segundos
+Yes, I I just not finished the demo yet, but I share with you with the group via e-mail. I sent 2 documents yesterday. I don't know if you received it.
+
+Kulkarni, Rahul
+1 minuto 21 segundos1:21
+Kulkarni, Rahul 1 minuto 21 segundos
+Was it by e-mail or because I'm not sure if I.
+
+Albella, Guillermo
+1 minuto 24 segundos1:24
+Albella, Guillermo 1 minuto 24 segundos
+I I said to the to the group to the you know the group to maid to maid one maid with two documents. What is the sorry my English not very well so sorry what is the.
+
+Kulkarni, Rahul
+1 minuto 40 segundos1:40
+Kulkarni, Rahul 1 minuto 40 segundos
+No problem.
+
+Albella, Guillermo
+1 minuto 44 segundos1:44
+Albella, Guillermo 1 minuto 44 segundos
+Product roadmap the the the complete roadmap and the 2nd is the demo development roadmap. I don't know if you if you receive it. If not I can share it with you in the in the chat.
+
+Kulkarni, Rahul
+1 minuto 53 segundos1:53
+Kulkarni, Rahul 1 minuto 53 segundos
+OK.
+
+Brightling, Jon
+1 minuto 56 segundos1:56
+Brightling, Jon 1 minuto 56 segundos
+No.
+
+Albella, Guillermo
+1 minuto 59 segundos1:59
+Albella, Guillermo 1 minuto 59 segundos
+If you want.
+
+Kulkarni, Rahul
+2 minutos 1 segundo2:01
+Kulkarni, Rahul 2 minutos 1 segundo
+Yes, I am not able to find it in my e-mail, so if you could share in chat that would be great.
+
+Albella, Guillermo
+2 minutos 4 segundos2:04
+Albella, Guillermo 2 minutos 4 segundos
+OK, OK.
+Albella, Guillermo 2 minutos 6 segundos
+Yes, let me one moment.
+
+Kulkarni, Rahul
+2 minutos 13 segundos2:13
+Kulkarni, Rahul 2 minutos 13 segundos
+So John, I think it's primarily around, you know, making sure that Gearbo and team are aligned with how the overall solution and Kaleido fits in and where the replacement piece would come into picture.
+
+Brightling, Jon
+2 minutos 19 segundos2:19
+Brightling, Jon 2 minutos 19 segundos
+Mm-hmm.
+
+Albella, Guillermo
+2 minutos 22 segundos2:22
+Albella, Guillermo 2 minutos 22 segundos
+So.
+
+Brightling, Jon
+2 minutos 24 segundos2:24
+Brightling, Jon 2 minutos 24 segundos
+You.
+
+Kulkarni, Rahul
+2 minutos 30 segundos2:30
+Kulkarni, Rahul 2 minutos 30 segundos
+And now here we are to to understand, you know what what Guillermo has developed or what your thought process is, yeah.
+
+Albella, Guillermo
+2 minutos 39 segundos2:39
+Albella, Guillermo 2 minutos 39 segundos
+I I will, I will let me one moment. I just try to say to sell here let's in calendar like right now the the product call call it.
+Albella, Guillermo 2 minutos 56 segundos
+Kaleo like, but we can't. Uh, no, we can't. No, we I will. Uh um.
+Albella, Guillermo 3 minutos 3 segundos
+Change his name. OK, this name is not the the final. OK in in this I will share my friend. I will share a little a quickly view of of the two documents, OK.
+
+Brightling, Jon
+3 minutos 5 segundos3:05
+Brightling, Jon 3 minutos 5 segundos
+OK.
+
+Kulkarni, Rahul
+3 minutos 19 segundos3:19
+Kulkarni, Rahul 3 minutos 19 segundos
+Yeah, sure. Yeah.
+
+Albella, Guillermo
+3 minutos 20 segundos3:20
+Albella, Guillermo 3 minutos 20 segundos
+And.
+Albella, Guillermo 3 minutos 23 segundos
+Because for me the best, I think the first uh easy to is best, it's easier to understanding.
+Albella, Guillermo 3 minutos 32 segundos
+No, that is the the the document in Spanish. The document in English is there.
+
+Kulkarni, Rahul
+3 minutos 33 segundos3:33
+Kulkarni, Rahul 3 minutos 33 segundos
+Yeah, sure.
+
+Albella, Guillermo
+1 hora 5 minutos 32 segundos1:05:32
+Albella, Guillermo 1 hora 5 minutos 32 segundos
+Thank you everyone. Have a good week. Bye, bye.
+
+Brightling, Jon
+1 hora 5 minutos 33 segundos1:05:33
+Brightling, Jon 1 hora 5 minutos 33 segundos
+Bye, bye.
+
+Kulkarni, Rahul detuvo la transcripción

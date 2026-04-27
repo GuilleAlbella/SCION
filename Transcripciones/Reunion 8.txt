@@ -1,0 +1,219 @@
+
+El contenido generado por IA puede ser incorrecto
+
+Albella, Guillermo inició la transcripción
+
+Kulkarni, Rahul
+0 minutos 3 segundos0:03
+Kulkarni, Rahul 0 minutos 3 segundos
+have some open defects, right? But in general, the format should not change. I don't believe that it will change. And I think we can still start testing with those files.
+
+Infantas, Pilar
+0 minutos 5 segundos0:05
+Infantas, Pilar 0 minutos 5 segundos
+Okay.
+
+Kulkarni, Rahul
+0 minutos 19 segundos0:19
+Kulkarni, Rahul 0 minutos 19 segundos
+This week.
+
+Infantas, Pilar
+0 minutos 20 segundos0:20
+Infantas, Pilar 0 minutos 20 segundos
+Okay.
+
+Albella, Guillermo
+0 minutos 20 segundos0:20
+Albella, Guillermo 0 minutos 20 segundos
+OKOK.
+
+Kulkarni, Rahul
+0 minutos 21 segundos0:21
+Kulkarni, Rahul 0 minutos 21 segundos
+Will that be okay?
+
+Infantas, Pilar
+0 minutos 23 segundos0:23
+Infantas, Pilar 0 minutos 23 segundos
+Yes, it's perfect for us.
+
+Albella, Guillermo
+0 minutos 24 segundos0:24
+Albella, Guillermo 0 minutos 24 segundos
+Yes.
+
+Infantas, Pilar
+0 minutos 27 segundos0:27
+Infantas, Pilar 0 minutos 27 segundos
+And do you have, Raju, any sequence of testing, for example, that you will provide us a certain use case at the beginning of the week and next week other? Because since we have more like the visualization and
+Infantas, Pilar 0 minutos 46 segundos
+and a more functional part in order to organize our testing. And I don't know if it would be the functional psyche in your Jon involved in the testing also.
+
+Infantas, Pilar
+19 minutos 10 segundos19:10
+Infantas, Pilar 19 minutos 10 segundos
+So, sorry, I, I wasn't clear who should we ask for this, so we can start maybe not this week, but testing next week on that, although it's a small place, we're gonna start there because now we just have deployed it on on Guedes laptop.
+
+Kulkarni, Rahul
+19 minutos 30 segundos19:30
+Kulkarni, Rahul 19 minutos 30 segundos
+Mhm.
+Kulkarni, Rahul 19 minutos 31 segundos
+Let me check with Rahul Shiyekar. Are you okay with the cloud front option for smaller machines for the functional testing? I mean.
+
+Infantas, Pilar
+19 minutos 44 segundos19:44
+Infantas, Pilar 19 minutos 44 segundos
+Exactly.
+
+Albella, Guillermo
+19 minutos 45 segundos19:45
+Albella, Guillermo 19 minutos 45 segundos
+Yes, yes.
+
+Kulkarni, Rahul
+19 minutos 47 segundos19:47
+Kulkarni, Rahul 19 minutos 47 segundos
+OK, and then...
+
+Infantas, Pilar
+19 minutos 47 segundos19:47
+Infantas, Pilar 19 minutos 47 segundos
+Yeah, and we can, sorry, we can see how it works on a small space and because we have now infrastructure in our estimated, right? But it would be a good place to test how it will scale.
+
+Kulkarni, Rahul
+20 minutos 7 segundos20:07
+Kulkarni, Rahul 20 minutos 7 segundos
+MMM.
+Kulkarni, Rahul 20 minutos 9 segundos
+Okay, I don't know. Let me check with Rahul how this has to be done.
+
+Infantas, Pilar
+20 minutos 14 segundos20:14
+Infantas, Pilar 20 minutos 14 segundos
+Okay.
+
+Albella, Guillermo
+20 minutos 14 segundos20:14
+Albella, Guillermo 20 minutos 14 segundos
+OK, no problem.
+
+Kulkarni, Rahul
+20 minutos 20 segundos20:20
+Kulkarni, Rahul 20 minutos 20 segundos
+Okay, sounds good.
+
+Infantas, Pilar
+20 minutos 22 segundos20:22
+Infantas, Pilar 20 minutos 22 segundos
+Okay, I have two things that I would like to discuss quickly. First, I believe I told you by chat, Guillermo is leaving on vacation by Thursday, May 7th.
+
+Kulkarni, Rahul
+20 minutos 27 segundos20:27
+Kulkarni, Rahul 20 minutos 27 segundos
+Sure.
+
+Albella, Guillermo
+20 minutos 37 segundos20:37
+Albella, Guillermo 20 minutos 37 segundos
+Seven.
+
+Infantas, Pilar
+20 minutos 40 segundos20:40
+Infantas, Pilar 20 minutos 40 segundos
+and Helton that is here with us will be replacing him. He's already involved in all our meetings and so on. And the second thing is we need a project to enter time. Who should we talk?
+Infantas, Pilar 21 minutos 1 segundo
+About that.
+
+Kulkarni, Rahul
+21 minutos 4 segundos21:04
+Kulkarni, Rahul 21 minutos 4 segundos
+Okay, um...
+Kulkarni, Rahul 21 minutos 7 segundos
+We have a project where we are entering time, but I'm not sure.
+Kulkarni, Rahul 21 minutos 14 segundos
+Um...
+Kulkarni, Rahul 21 minutos 15 segundos
+Whether, I mean, is it OK to extend that to, because I remember Chris mentioning that?
+Kulkarni, Rahul 21 minutos 24 segundos
+He has some separate arrangements, something like that, I vaguely remember. So again, let me check with Rahul about that as well.
+
+Infantas, Pilar
+21 minutos 31 segundos21:31
+Infantas, Pilar 21 minutos 31 segundos
+Okay, perfect.
+
+Albella, Guillermo
+21 minutos 33 segundos21:33
+Albella, Guillermo 21 minutos 33 segundos
+Okay, perfect.
+
+Infantas, Pilar
+21 minutos 33 segundos21:33
+Infantas, Pilar 21 minutos 33 segundos
+Perfect. Okay.
+
+Kulkarni, Rahul
+21 minutos 34 segundos21:34
+Kulkarni, Rahul 21 minutos 34 segundos
+Can you check with Luis at your end as well? How you should book time maybe?
+
+Infantas, Pilar
+21 minutos 38 segundos21:38
+Infantas, Pilar 21 minutos 38 segundos
+We.
+Infantas, Pilar 21 minutos 40 segundos
+Yes, we already checked with Luis and I know that Luis have told Chris and Chris say, okay, but for practical terms, we don't know where. But he already told Chris, I'm sure about that, like last week.
+Infantas, Pilar 21 minutos 59 segundos
+Maybe.
+Infantas, Pilar 22 minutos 1 segundo
+We won't enter full-time also. We will enter just some hours per week.
+
+Kulkarni, Rahul
+22 minutos 1 segundo22:01
+Kulkarni, Rahul 22 minutos 1 segundo
+Because I remember.
+Kulkarni, Rahul 22 minutos 7 segundos
+Mm.
+Kulkarni, Rahul 22 minutos 11 segundos
+Okay, so I'll have to check on those, both those things, time entry and infrastructure with Rahul. I don't have to. Okay.
+
+Infantas, Pilar
+22 minutos 17 segundos22:17
+Infantas, Pilar 22 minutos 17 segundos
+Perfect. Thank you very much.
+Infantas, Pilar 22 minutos 22 segundos
+OK, that would be it.
+
+Kulkarni, Rahul
+22 minutos 23 segundos22:23
+Kulkarni, Rahul 22 minutos 23 segundos
+Okay, sounds good. Thank you very much.
+
+Infantas, Pilar
+22 minutos 26 segundos22:26
+Infantas, Pilar 22 minutos 26 segundos
+Thank you.
+
+Orador 1
+22 minutos 26 segundos22:26
+@1 22 minutos 26 segundos
+Thank you. Bye-bye.
+
+Kulkarni, Rahul
+22 minutos 27 segundos22:27
+Kulkarni, Rahul 22 minutos 27 segundos
+Thank you. Bye-bye. Thanks. Bye.
+
+Albella, Guillermo
+22 minutos 28 segundos22:28
+Albella, Guillermo 22 minutos 28 segundos
+Thank you. Bye-bye.
+
+Infantas, Pilar
+22 minutos 28 segundos22:28
+Infantas, Pilar 22 minutos 28 segundos
+Take care. Bye.
+
+Guedes, Helton detuvo la transcripción

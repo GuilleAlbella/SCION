@@ -1,0 +1,35 @@
+# Normalize line endings across Windows / Linux contributors.
+# Avoids the CRLF/LF whiplash on every commit.
+
+# Auto-detect text files and normalize line endings to LF in the repo;
+# checkout uses native line endings (CRLF on Windows, LF elsewhere).
+* text=auto eol=lf
+
+# Force LF for files that Linux tools choke on with CRLF.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.css       text eol=lf
+
+# Keep CRLF for Windows-only scripts.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Treat as binary so git doesn't try to diff or normalize.
+*.pdf       binary
+*.pptx      binary
+*.docx      binary
+*.xlsx      binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.db        binary

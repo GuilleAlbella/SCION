@@ -1,0 +1,15 @@
+provider: groq
+public_name: TAISA
+
+connection:
+  base_url: "https://api.groq.com/openai/v1"
+  api_key: "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"
+  timeout_seconds: 30
+
+model:
+  name: "meta-llama/llama-4-scout-17b-16e-instruct"
+  temperature: 0.3
+  max_tokens: 600
+
+behavior:
+  deterministic: false

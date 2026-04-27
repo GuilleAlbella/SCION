@@ -1,0 +1,3373 @@
+
+Transcripción. Usa las teclas de dirección para desplazarte por las entradas de transcripción.
+
+
+Buscar
+
+El contenido generado por IA puede ser incorrecto
+
+Albella, Guillermo inició la transcripción
+
+Ramadori, Luis
+0 minutos 10 segundos0:10
+Ramadori, Luis 0 minutos 10 segundos
+No él.
+Ramadori, Luis 0 minutos 12 segundos
+Y le dice, sí, perfectamente podré, puede haberlo hecho. Ese nivel de mejora, dice. Yo tuve que hacer un desarrollo, dice Cris, que le contó Ragés y lo hice entre los comerciales cuando estaba mirando algo.
+Ramadori, Luis 0 minutos 27 segundos
+No, y gané no sé cuánto tiempo.
+
+Albella, Guillermo
+0 minutos 28 segundos0:28
+Albella, Guillermo 0 minutos 28 segundos
+Sí.
+
+Ramadori, Luis
+0 minutos 31 segundos0:31
+Ramadori, Luis 0 minutos 31 segundos
+Entonces, Chris se plantea si el otro equipo de Data DN A, el que está haciendo el parser.
+Ramadori, Luis 0 minutos 38 segundos
+Está usando correctamente Cloud porque dice tienen 2 licencias de Cloud Code.
+Ramadori, Luis 0 minutos 45 segundos
+Entonces, lo que él se pregunta es si lo están usando correctamente o están ellos procesando secuencialmente. Cuando definen un problema, tratan de resolverlo con Claude en lugar de a lo mejor hacer un abordaje más integral. Digo, mira, no tengo idea, a la tarde tengo un call con Guillermo que justamente nos va a contar cómo es que llegó.
+
+Albella, Guillermo
+0 minutos 59 segundos0:59
+Albella, Guillermo 0 minutos 59 segundos
+Two.
+
+Ramadori, Luis
+1 minuto 6 segundos1:06
+Ramadori, Luis 1 minuto 6 segundos
+A ese desarrollo, lo que a Chris le gustaría es que vos.
+Ramadori, Luis 1 minuto 12 segundos
+Pudieras tener una conversación, vos y Rayesh pudieran tener una conversación con el equipo de la parte de adelante de Data N A.
+Ramadori, Luis 1 minuto 22 segundos
+Del parser.
+
+Albella, Guillermo
+1 minuto 24 segundos1:24
+Albella, Guillermo 1 minuto 24 segundos
+Mhm.
+
+Ramadori, Luis
+1 minuto 24 segundos1:24
+Ramadori, Luis 1 minuto 24 segundos
+Para contar cómo lo usaste o a lo mejor entender cómo lo usan y ver si hay algún área de oportunidad para que ellos produzcan más rápido.
+
+Albella, Guillermo
+1 minuto 34 segundos1:34
+Albella, Guillermo 1 minuto 34 segundos
+Sí, está bien, sí, porque si ellos ya tienen Cloud Cloud, esto debería haber salido ya el parcel.
+Albella, Guillermo 1 minuto 41 segundos
+Porque te lo te ahora lo verán, te lo hace prácticamente todo solo, o sea.
+
+Ramadori, Luis
+1 minuto 46 segundos1:46
+Ramadori, Luis 1 minuto 46 segundos
+Y Chris, Chris y yo pensamos exactamente igual. Ellos deben estar descomponiendo el problema a ellos en pedacitos y interactuando con Claude por pedacitos a medida, o sea, deben estar siguiendo un desarrollo más bien secuencial, donde en claro, en cada parte entran e interactúan con Claude.
+
+Infantas, Pilar
+1 minuto 53 segundos1:53
+Infantas, Pilar 1 minuto 53 segundos
+Sí.
+Infantas, Pilar 2 minutos 1 segundo
+Tradicional.
+Infantas, Pilar 2 minutos 6 segundos
+Sí.
+
+Ramadori, Luis
+2 minutos 6 segundos2:06
+Ramadori, Luis 2 minutos 6 segundos
+Coincidimos en eso, así que no sé, yo le dije, mira, Chris, yo desde el punto de vista del desarrollo no puedo aportar en nada, o sea, yo estoy entiendo conceptualmente, pero estoy muy lejos todavía, no todavía no, y no voy a estar tampoco cerca. y.
+
+Infantas, Pilar
+2 minutos 23 segundos2:23
+Infantas, Pilar 2 minutos 23 segundos
+Quién sabe ahora con esto Luis ya te pones.
+
+Ramadori, Luis
+2 minutos 24 segundos2:24
+Ramadori, Luis 2 minutos 24 segundos
+Me dice bueno, a lo mejor Pilar, así que Pilar.
+
+Infantas, Pilar
+2 minutos 28 segundos2:28
+Infantas, Pilar 2 minutos 28 segundos
+sí.
+Infantas, Pilar 2 minutos 30 segundos
+Algo me explicó, ya algo entendí.
+
+Albella, Guillermo
+2 minutos 32 segundos2:32
+Albella, Guillermo 2 minutos 32 segundos
+Algo le hice una preview antes, así que.
+
+Infantas, Pilar
+2 minutos 35 segundos2:35
+Infantas, Pilar 2 minutos 35 segundos
+sí.
+
+Ramadori, Luis
+2 minutos 36 segundos2:36
+Ramadori, Luis 2 minutos 36 segundos
+Bueno, vamos, dale.
+
+Albella, Guillermo
+2 minutos 37 segundos2:37
+Albella, Guillermo 2 minutos 37 segundos
+Voy a compartir.
+
+Bueno.
+Infantas, Pilar 2 minutos 39 segundos
+Empecemos.
+
+Albella, Guillermo
+2 minutos 39 segundos2:39
+Albella, Guillermo 2 minutos 39 segundos
+Vamos a compartir.
+Albella, Guillermo 2 minutos 43 segundos
+¿Dónde estás, Clau? Aquí estás, avisen.
+
+Infantas, Pilar
+2 minutos 44 segundos2:44
+Infantas, Pilar 2 minutos 44 segundos
+Un pequeño comercial, Luis, te mandé la.
+
+Albella, Guillermo
+2 minutos 47 segundos2:47
+Albella, Guillermo 2 minutos 47 segundos
+Sí.
+
+Infantas, Pilar
+2 minutos 49 segundos2:49
+Infantas, Pilar 2 minutos 49 segundos
+Para la licencia del Clo, mía.
+
+Ramadori, Luis
+2 minutos 54 segundos2:54
+Ramadori, Luis 2 minutos 54 segundos
+Bueno.
+
+Albella, Guillermo
+2 minutos 55 segundos2:55
+Albella, Guillermo 2 minutos 55 segundos
+¿Y tú para qué lo necesitas?
+
+Infantas, Pilar
+2 minutos 55 segundos2:55
+Infantas, Pilar 2 minutos 55 segundos
+¿No la has aprobado, esa no, esa no, la otra, pues esa para qué la voy a necesitar yo, no?
+
+Albella, Guillermo
+3 minutos 1 segundo3:01
+Albella, Guillermo 3 minutos 1 segundo
+Good, good, good.
+
+Infantas, Pilar
+3 minutos 3 segundos3:03
+Infantas, Pilar 3 minutos 3 segundos
+Claro.
+
+Ramadori, Luis
+3 minutos 4 segundos3:04
+Ramadori, Luis 3 minutos 4 segundos
+No, pero es a ver, yo ya sé que mi uso es un 10%, es como con el cerebro, ¿viste? Usamos una porción muy pequeña de él. Estamos con Banco República.
+Ramadori, Luis 3 minutos 17 segundos
+La licitación Banco República por los servicios por los próximos 3 años.
+Ramadori, Luis 3 minutos 23 segundos
+Y vayan a competir Tata, Indra y una empresa que nadie tenía registrada, se llama Visión Consulting Visión con B larga, Visión Consulting.
+Ramadori, Luis 3 minutos 33 segundos
+Y estaba hablando con Carlos, le digo, bueno, Carlos, República es una organización pública, o sea, que cualquier servicio que tanto Tata, Visión como Indra hayan prestado en una organización pública debería estar accesible para los ciudadanos de los diferentes países.
+
+Es.
+
+Ramadori, Luis
+3 minutos 50 segundos3:50
+Ramadori, Luis 3 minutos 50 segundos
+Así que lo que hice fue mandar una búsqueda a Claude.
+Ramadori, Luis 3 minutos 54 segundos
+¿A los sitios públicos de los gobiernos de Latinoamérica, viendo dónde Tata, Inda, Visión Consulting, participaron en una RFP y si ganaron y qué servicio prestan y qué tarifas tienen, no? Y ahí tengo ahí un por las dudas, lo mandé en Claude, en Copilot y en ChatGPT, que es el mío.
+Ramadori, Luis 4 minutos 14 segundos
+Privado de aún.
+Ramadori, Luis 4 minutos 16 segundos
+Pero y trajeron una tonelada de información.
+Ramadori, Luis 4 minutos 21 segundos
+O sea, es cuestión de.
+
+Albella, Guillermo
+4 minutos 21 segundos4:21
+Albella, Guillermo 4 minutos 21 segundos
+Bien.
+Albella, Guillermo 4 minutos 23 segundos
+Hiciste el dip.
+Albella, Guillermo 4 minutos 25 segundos
+Hiciste deep sells, okay.
+
+Ramadori, Luis
+4 minutos 25 segundos4:25
+Ramadori, Luis 4 minutos 25 segundos
+Claro, deep, sí, deep search es cuestión de desafiarse a uno mismo y de considerar que esa herramienta está ahí disponible todo el tiempo, ¿no?
+Ramadori, Luis 4 minutos 37 segundos
+Yes.
+Ramadori, Luis 4 minutos 38 segundos
+Asombroso.
+
+Albella, Guillermo
+4 minutos 40 segundos4:40
+Albella, Guillermo 4 minutos 40 segundos
+Bueno, es igual que lo que fui haciendo yo con Glot, que ahora lo vamos a ver, que primero le pedí una cosa básica, después una más complicada y a ver si te animas a hacer esto y al final terminó haciéndome la aplicación entera, ¿no? Pero bueno, ves la ves mi pantalla, ¿cierto?
+
+Ramadori, Luis
+4 minutos 58 segundos4:58
+Ramadori, Luis 4 minutos 58 segundos
+Sí, la voy a pasar a la grande para verla mejor.
+
+Infantas, Pilar
+4 minutos 59 segundos4:59
+Infantas, Pilar 4 minutos 59 segundos
+Really?
+
+Albella, Guillermo
+4 minutos 59 segundos4:59
+Albella, Guillermo 4 minutos 59 segundos
+Yeah.
+Albella, Guillermo 5 minutos 2 segundos
+Bien, yo lo primero que hice con Cloud, con Cloud Code es bueno, ahora no me aparece la opción, pero tú le puedes agregar a la carpeta donde va a trabajar o donde quieres que donde tienes tú tus archivos para que él pueda leer, ¿no? Entonces le pasé la carpeta donde yo tenía el MVP, que tengo toda la documentación y demás y le digo, léete el código del proyecto.
+
+Ramadori, Luis
+5 minutos 12 segundos5:12
+Ramadori, Luis 5 minutos 12 segundos
+Okay.
+
+
+Albella, Guillermo 5 minutos 41 segundos
+El MVP que hice la vez pasada, así porque eso es la base, ¿no? O sea, ahí es era una versión muy demo, muy minimalista de lo que iba a hacer. Sí, Zion, entonces por eso le dije que se lo leyera. Aparte, si yo iba a usar eso como código base.
+
+Ramadori, Luis
+5 minutos 41 segundos5:41
+Ramadori, Luis 5 minutos 41 segundos
+Claro.
+
+Infantas, Pilar
+5 minutos 42 segundos5:42
+Infantas, Pilar 5 minutos 42 segundos
+O K, ya listo.
+
+Albella, Guillermo
+6 minutos 1 segundo6:01
+Albella, Guillermo 6 minutos 1 segundo
+Para que entendiera lo dónde estaban los archivos y todo lo demás, cuando se puso a leer los redmi y los redmi, hizo modificaciones en los PDFs. En fin, una vez que lo leyó, me da resumen. Sí, me dice, mira, esto qué es y qué hace y lo está actual y todo lo demás.
+Albella, Guillermo 6 minutos 21 segundos
+Sí, y lo que me pidan replicar en data en DNA, no, porque había presentado.
+
+Ramadori, Luis
+6 minutos 26 segundos6:26
+Ramadori, Luis 6 minutos 26 segundos
+Uy, sonaste, sonaste. Uy.
+
+Albella, Guillermo
+6 minutos 30 segundos6:30
+Albella, Guillermo 6 minutos 30 segundos
+¿Por qué?
+
+Ramadori, Luis
+6 minutos 31 segundos6:31
+Ramadori, Luis 6 minutos 31 segundos
+Uy.
+
+Albella, Guillermo
+6 minutos 34 segundos6:34
+Albella, Guillermo 6 minutos 34 segundos
+¿Qué pasó?
+
+Ramadori, Luis
+6 minutos 37 segundos6:37
+Ramadori, Luis 6 minutos 37 segundos
+Hay que entrenarlo con toda la documentación de la tarea.
+
+Albella, Guillermo
+6 minutos 41 segundos6:41
+Albella, Guillermo 6 minutos 41 segundos
+Claro, y se puede hacer perfectamente.
+
+Infantas, Pilar
+6 minutos 43 segundos6:43
+Infantas, Pilar 6 minutos 43 segundos
+Pero eso ha hecho arriba están las presentaciones de data DNA, ¿no es cierto?
+
+Albella, Guillermo
+6 minutos 46 segundos6:46
+Albella, Guillermo 6 minutos 46 segundos
+Claro, solo, pero solo le puse una o 2, yo le puse todas porque.
+
+Infantas, Pilar
+6 minutos 48 segundos6:48
+Infantas, Pilar 6 minutos 48 segundos
+Una la grandota, digamos, la que vi.
+
+Ramadori, Luis
+6 minutos 51 segundos6:51
+Ramadori, Luis 6 minutos 51 segundos
+No, pero tenemos el PDF que generé con los cursos y todo, o sea, cualquier cosa que sea leíble legible.
+
+Albella, Guillermo
+6 minutos 51 segundos6:51
+Albella, Guillermo 6 minutos 51 segundos
+Sí.
+
+Infantas, Pilar
+6 minutos 56 segundos6:56
+Infantas, Pilar 6 minutos 56 segundos
+Claro.
+
+Albella, Guillermo
+6 minutos 58 segundos6:58
+Albella, Guillermo 6 minutos 58 segundos
+Sí, lo puedo hacer.
+
+Infantas, Pilar
+6 minutos 58 segundos6:58
+Infantas, Pilar 6 minutos 58 segundos
+Ajá.
+
+Ramadori, Luis
+6 minutos 59 segundos6:59
+Ramadori, Luis 6 minutos 59 segundos
+Lo podés alimentar y a partir de ahí le podés pedir en función de funcionalidad que tenga data DN A que extienda el código para eso hoy.
+
+Albella, Guillermo
+7 minutos 1 segundo7:01
+Albella, Guillermo 7 minutos 1 segundo
+Yeah.
+Albella, Guillermo 7 minutos 12 segundos
+Claro, sí, lo puedo hacer, claro que sí.
+
+Infantas, Pilar
+7 minutos 15 segundos7:15
+Infantas, Pilar 7 minutos 15 segundos
+Ese es sobre el grandote que vimos, no Guille, sobre el ese que ya.
+
+Albella, Guillermo
+7 minutos 17 segundos7:17
+Albella, Guillermo 7 minutos 17 segundos
+Sí, sobre el que preparo nos lo mandó Luis preparado. Sí, lo puedo hacer.
+
+Infantas, Pilar
+7 minutos 21 segundos7:21
+Infantas, Pilar 7 minutos 21 segundos
+Claro, el primero que tenía como todo ya listo. O sea, ese es el base más los documentos que tenías y ese redmi que dice ahí son tus notas. Te entendí bien.
+
+Albella, Guillermo
+7 minutos 24 segundos7:24
+Albella, Guillermo 7 minutos 24 segundos
+Claro.
+Albella, Guillermo 7 minutos 31 segundos
+¿Cómo?
+
+Ramadori, Luis
+7 minutos 32 segundos7:32
+Ramadori, Luis 7 minutos 32 segundos
+El son las notas del proyecto de desarrollo.
+
+Infantas, Pilar
+7 minutos 32 segundos7:32
+Infantas, Pilar 7 minutos 32 segundos
+Hay un ritmo por ahí.
+
+Albella, Guillermo
+7 minutos 35 segundos7:35
+Albella, Guillermo 7 minutos 35 segundos
+Claro, los redmi son.
+
+Infantas, Pilar
+7 minutos 36 segundos7:36
+Infantas, Pilar 7 minutos 36 segundos
+Tus notas ya.
+
+Albella, Guillermo
+7 minutos 37 segundos7:37
+Albella, Guillermo 7 minutos 37 segundos
+Claro, esto, esto no la hoja de ruta, hoja de ruta de producto, estimación. Todo esto que yo hice mío internamente para mí, que lo leyera también, sí.
+
+Infantas, Pilar
+7 minutos 38 segundos7:38
+Infantas, Pilar 7 minutos 38 segundos
+ya.
+Infantas, Pilar 7 minutos 45 segundos
+2 ya mhm.
+
+Albella, Guillermo
+7 minutos 50 segundos7:50
+Albella, Guillermo 7 minutos 50 segundos
+Bueno, una vez que le dio todo, me dio todo el la arquitectura, el estado actual, el estado actual de la interfaz y lo que nos pedían replicar de DN A, no la porque originalmente sí.
+
+Infantas, Pilar
+7 minutos 50 segundos7:50
+Infantas, Pilar 7 minutos 50 segundos
+Okay.
+
+Ramadori, Luis
+8 minutos8:00
+Ramadori, Luis 8 minutos
+¿Estamos grabando, no?
+
+Infantas, Pilar
+8 minutos8:00
+Infantas, Pilar 8 minutos
+Mhm.
+Infantas, Pilar 8 minutos 1 segundo
+Rakibson.
+
+Ramadori, Luis
+8 minutos 3 segundos8:03
+Ramadori, Luis 8 minutos 3 segundos
+Okay, okay, perfect.
+
+Albella, Guillermo
+8 minutos 3 segundos8:03
+Albella, Guillermo 8 minutos 3 segundos
+Estoy grabando la transcripción porque la anterior vez me olvidé de hacerlo porque es tan fácil como agarrar la transcripción pasarse en la calle y decirme despegarme lo que me están pidiendo. Bueno, una claro, los cambios una vez que me da la información.
+
+Infantas, Pilar
+8 minutos 4 segundos8:04
+Infantas, Pilar 8 minutos 4 segundos
+Solo transcripción ahí.
+Infantas, Pilar 8 minutos 12 segundos
+Mhm.
+
+Ramadori, Luis
+8 minutos 14 segundos8:14
+Ramadori, Luis 8 minutos 14 segundos
+Si, si, si, si.
+
+Infantas, Pilar
+8 minutos 18 segundos8:18
+Infantas, Pilar 8 minutos 18 segundos
+Los cambios, los cambios.
+
+Albella, Guillermo
+8 minutos 22 segundos8:22
+Albella, Guillermo 8 minutos 22 segundos
+Le digo, bueno, porque como la interfaz y la y el la tecnología que estaba usando en la que usé la MVP es medio complicada, le dije, por favor, mígrame, bueno, el por favor me lo olvidé, mígrame el proyecto a que sea más fácil la ejecución como la visualización, ¿no?
+Albella, Guillermo 8 minutos 42 segundos
+Y crear la UI que necesitan de DN A. Entonces me hace de un par de preguntas, no que qué frontend quiero usar, qué quiero hacer con la UI la mejor posible y si quiero mantener la UI actual o reemplazarla y le digo reemplazala completamente. Ahí se se pone a laburar, no se me puede modificar archivos.
+Albella, Guillermo 9 minutos 1 segundo
+A crear otros nuevos.
+Albella, Guillermo 9 minutos 5 segundos
+En un momento le tiré un error porque me faltaba esto en la máquina, instalar esto. Bueno, lo instalo y le digo, ya lo tengo instalado, que lo podía haberse haber se lo he pedido a él, pero instalarlo yo. Bueno, una vez que lo verifica y ve que está instalado, sigue trabajando, sigue trabajando, sigue trabajando y ahí.
+Albella, Guillermo 9 minutos 24 segundos
+Terminó de trabajar y me dice resumen de cambios, boom boom boom me hice todo esto.
+Albella, Guillermo 9 minutos 29 segundos
+Sí, y lo puedo ejecutar así como a mí me molestaba usarlo así con 2.2 diferentes llamadas. Le digo, ¿hay alguna manera de ejecutar todo en un solo comando? Sí, y me dio este comando. Bueno, le tiro un par de errores que me que me surgían.
+Albella, Guillermo 9 minutos 48 segundos
+Más errores.
+Albella, Guillermo 9 minutos 51 segundos
+Más errores.
+Albella, Guillermo 9 minutos 54 segundos
+Hasta que al final al final me dio la el comando.
+Albella, Guillermo 10 minutos 1 segundo
+Más errores.
+Albella, Guillermo 10 minutos 5 segundos
+Bien, una vez que terminado de depurar errores porque hasta el momento yo no sabía que le podía decir a él que lo ejecutara y que si hubiera un error que lo arreglara, no lo sabían. Como no estaba acostumbrado a usar esta herramienta, yo lo probaba yo por mi lado, no como he hecho siempre.
+
+Ramadori, Luis
+10 minutos 20 segundos10:20
+Ramadori, Luis 10 minutos 20 segundos
+¿En serio, o sea, vos le decís ejecutarlo y arreglar cualquier error que aparezca hijo de ****?
+
+Albella, Guillermo
+10 minutos 22 segundos10:22
+Albella, Guillermo 10 minutos 22 segundos
+Sí.
+Albella, Guillermo 10 minutos 25 segundos
+Sí, y sí.
+Albella, Guillermo 10 minutos 28 segundos
+Entonces, ahora que ahora que me que.
+
+Ramadori, Luis
+10 minutos 30 segundos10:30
+Ramadori, Luis 10 minutos 30 segundos
+Lo lamento mucho por los programadores que no sea Jornen a usar esto.
+
+Infantas, Pilar
+10 minutos 36 segundos10:36
+Infantas, Pilar 10 minutos 36 segundos
+Y olvídate, cantidad de horas, hay acá Luis, pero.
+
+Albella, Guillermo
+10 minutos 42 segundos10:42
+Albella, Guillermo 10 minutos 42 segundos
+Y ahora, bueno, dime.
+
+Ramadori, Luis
+10 minutos 42 segundos10:42
+Ramadori, Luis 10 minutos 42 segundos
+No, pero imagínate que es barata, 2400 USD al año.
+
+Infantas, Pilar
+10 minutos 47 segundos10:47
+Infantas, Pilar 10 minutos 47 segundos
+Por supuesto, no es ni siquiera el salario de un mes.
+Infantas, Pilar 10 minutos 51 segundos
+O sea, será de un mes de un practicante y lo tienes el año.
+
+Albella, Guillermo
+10 minutos 53 segundos10:53
+Albella, Guillermo 10 minutos 53 segundos
+Sí, por eso.
+
+Ramadori, Luis
+10 minutos 53 segundos10:53
+Ramadori, Luis 10 minutos 53 segundos
+O sea, la conclusión para Chris sería Chris poner esto a toda disposición de todo el mundo.
+Ramadori, Luis 10 minutos 59 segundos
+Lo que pasa es que él iba a decir cuál es el retorno, o sea, acá claramente hay un retorno porque había una inversión planeada de un mes y terminó en nada, pero.
+Ramadori, Luis 11 minutos 10 segundos
+Bueno, no importa. Otra conversación, listo, seguí Guillermo.
+
+Albella, Guillermo
+11 minutos 14 segundos11:14
+Albella, Guillermo 11 minutos 14 segundos
+No te preocupes, una vez que me que me corregimos los errores, yo le digo, bueno, o k, necesito que hagas un script para alimentar la base de información útil para que la UVI se vea bien llena de datos y así.
+
+Infantas, Pilar
+11 minutos 25 segundos11:25
+Infantas, Pilar 11 minutos 25 segundos
+Ahí generas los datos ya.
+
+Albella, Guillermo
+11 minutos 27 segundos11:27
+Albella, Guillermo 11 minutos 27 segundos
+Y aquí ahora me genera un readseed punto PI, que es un Python que me genera un nada para alimentarlo, ¿no? Y ves que acá.
+Albella, Guillermo 11 minutos 38 segundos
+Ya lo ejecuta.
+
+Ramadori, Luis
+11 minutos 38 segundos11:38
+Ramadori, Luis 11 minutos 38 segundos
+Voy a tener que aprender Python.
+
+Albella, Guillermo
+11 minutos 43 segundos11:43
+Albella, Guillermo 11 minutos 43 segundos
+Lo ejecuta, él mismo ejecuta su propio script y me dice todo lo que añadió, sí.
+Albella, Guillermo 11 minutos 49 segundos
+Yo verifico que todo funciona y le digo bien, todo funciona. Ahora deberíamos hacer qué deberíamos hacer para que Zion funcione completamente, como dijimos en los documentos y en las presentaciones. Se pone a realizar de vuelta y me dice.
+
+Ramadori, Luis
+12 minutos 1 segundo12:01
+Ramadori, Luis 12 minutos 1 segundo
+Una pregunta.
+
+Albella, Guillermo
+12 minutos 2 segundos12:02
+Albella, Guillermo 12 minutos 2 segundos
+Claro, se me da un cuadro con está actual versus lo prometido, no me da lo que está actual y lo que falta, y me da varias fases, no fase A, fase, fase C para ir haciendo.
+Albella, Guillermo 12 minutos 17 segundos
+Y me dice quién empezamos con la fase A.
+
+Ramadori, Luis
+12 minutos 19 segundos12:19
+Ramadori, Luis 12 minutos 19 segundos
+¿Te hago una pregunta, discúlpame por qué no lo hizo de entrada? ¿Por qué si es capaz de entender que tiene diferencias con lo que se había pedido originalmente no lo hizo de entrada?
+
+Albella, Guillermo
+12 minutos 21 segundos12:21
+Albella, Guillermo 12 minutos 21 segundos
+Sí.
+Albella, Guillermo 12 minutos 28 segundos
+Porque a lo mejor no sé, no le he pedido que lo hiciera, no lo sé.
+
+Ramadori, Luis
+12 minutos 32 segundos12:32
+Ramadori, Luis 12 minutos 32 segundos
+Porque a mí me pasó haciendo el research este que digo, bueno, el me interesan los raids de Colombia.
+Ramadori, Luis 12 minutos 41 segundos
+Pero quiero entender toda Latinoamérica y las 3 inteligencias buscaron Colombia. Una dijo, no encuentro ningún website donde preguntar por toda Latinoamérica, o sea, que no dedujo que tenía que ir país por país.
+Ramadori, Luis 12 minutos 56 segundos
+Está bien, la otra.
+
+Albella, Guillermo
+12 minutos 57 segundos12:57
+Albella, Guillermo 12 minutos 57 segundos
+Mhm.
+
+Ramadori, Luis
+13 minutos 1 segundo13:01
+Ramadori, Luis 13 minutos 1 segundo
+No sé por qué buscó solo en Perú.
+Ramadori, Luis 13 minutos 6 segundos
+Me dijo, pero hay otros países, si querés puedo ir a otros países. Sí, obviamente, pero yo le había pedido a Latinoamérica, o sea, no y como lo mismo, como que quedó, no fue por todo, sino que quedó en y después abajo te da como opciones, no puedo ir a buscar otros países, o sea, te da el incremental, pero es como que lo va haciendo en incremental, no se tira por todo junto.
+
+Albella, Guillermo
+13 minutos 9 segundos13:09
+Albella, Guillermo 13 minutos 9 segundos
+Pro.
+Albella, Guillermo 13 minutos 22 segundos
+Sí.
+Albella, Guillermo 13 minutos 32 segundos
+Claro, no, en este caso no me lo no me lo no. Si yo a lo mejor le hubiera puesto en el prompt y empieza, ¿qué hubiera hecho? Pero nada, me dio el resumen. Entonces yo le digo, le digo por acá donde la que me hablaba de acá.
+
+Ramadori, Luis
+13 minutos 42 segundos13:42
+Ramadori, Luis 13 minutos 42 segundos
+Okay.
+
+Albella, Guillermo
+13 minutos 48 segundos13:48
+Albella, Guillermo 13 minutos 48 segundos
+Fase de Enterprise post MVP. Cuando yo le digo MVP, digo, estás pensando que todavía estamos subiendo MVP. Entonces digo, en realidad no estamos mostrando el MVP, ya estamos montando la versión completa del producto. Entiendo, entonces se pone a modificar la los planes, ¿no?
+Albella, Guillermo 14 minutos 8 segundos
+¿Y me pregunta acá, para el Usas Critical Engine, tienes acceso a la log de queries, etc. alta? Lo dejamos por preparado por si lo implementar la agita real. Y digo, la información nos va a llegar desde un Jason que nos va a llegar del parser, así que déjalo listo para hacer esto, la verdad. ¿Quieres que Taiser tal? Sí.
+Albella, Guillermo 14 minutos 27 segundos
+Back, sí.
+
+Ramadori, Luis
+14 minutos 27 segundos14:27
+Ramadori, Luis 14 minutos 27 segundos
+¿Momento, qué significa que usa Grok?
+
+Infantas, Pilar
+14 minutos 28 segundos14:28
+Infantas, Pilar 14 minutos 28 segundos
+O sea, lo hace todo.
+
+Albella, Guillermo
+14 minutos 31 segundos14:31
+Albella, Guillermo 14 minutos 31 segundos
+Es un una librería.
+
+Ramadori, Luis
+14 minutos 34 segundos14:34
+Ramadori, Luis 14 minutos 34 segundos
+Es una librería, no es el.
+
+Albella, Guillermo
+14 minutos 34 segundos14:34
+Albella, Guillermo 14 minutos 34 segundos
+No es Grok, sí, no es Grok de no es no. De hecho, el Grok de sí, se quiere con K. ¿Quiere que actualice la UI next? Sí, le digo que sí.
+
+Infantas, Pilar
+14 minutos 37 segundos14:37
+Infantas, Pilar 14 minutos 37 segundos
+No es el de K.
+Infantas, Pilar 14 minutos 39 segundos
+No.
+
+Ramadori, Luis
+14 minutos 42 segundos14:42
+Ramadori, Luis 14 minutos 42 segundos
+¿Si se cree distinto con Carter, no?
+
+Infantas, Pilar
+14 minutos 44 segundos14:44
+Infantas, Pilar 14 minutos 44 segundos
+Sí, con cap.
+
+Ramadori, Luis
+14 minutos 46 segundos14:46
+Ramadori, Luis 14 minutos 46 segundos
+Okay.
+
+Albella, Guillermo
+14 minutos 54 segundos14:54
+Albella, Guillermo 14 minutos 54 segundos
+Plan propuesto me vuelve a hacer un plan que acá se ve. Sí, normalmente cuando te muestro un plan te lo muestra acá en una pantalla acá a la derecha, no te lo muestra acá abajo.
+Albella, Guillermo 15 minutos 6 segundos
+Y ahí le doy otra recomendación. Asegúrate que el this is yain realmente muestra la diferencia entre 2 o más snapshot. Además, el análisis de riesgo debería poder analizar uno o varios lapsos completos, bla, bla, bla, bla, bla. Totalmente de acuerdo. Me da modifica su tal y le digo, ahora ahí me dice, quieres que.
+Albella, Guillermo 15 minutos 25 segundos
+¿Que utiliza el plan? Sí.
+Albella, Guillermo 15 minutos 30 segundos
+Me muestra el plan de nuevo y le digo.
+Albella, Guillermo 15 minutos 33 segundos
+¿Quieres que actualice el plan en cambio y empecemos? Sí, entonces ahí empieza a trabajar, bla, bla, bla, bla, bla, con todo, ejecuta los test, venga acá, ejecutó, acá le dio.
+
+Ramadori, Luis
+15 minutos 43 segundos15:43
+Ramadori, Luis 15 minutos 43 segundos
+¿Alguna idea de horarios desde que empezaste con esto hasta que terminaste control?
+
+Albella, Guillermo
+15 minutos 47 segundos15:47
+Albella, Guillermo 15 minutos 47 segundos
+Fueron 4 horas, fueron 4 horas.
+Albella, Guillermo 15 minutos 50 segundos
+Exactamente, porque lo luego, lo con el tres.
+
+Ramadori, Luis
+15 minutos 52 segundos15:52
+Ramadori, Luis 15 minutos 52 segundos
+Chris, se va a volver loco, se le va a volar la cabeza.
+
+Albella, Guillermo
+15 minutos 57 segundos15:57
+Albella, Guillermo 15 minutos 57 segundos
+Y una vez que terminé con el bloque uno, listo, me dice, hice todo esto.
+Albella, Guillermo 16 minutos 2 segundos
+Sigo con el bloque 2.
+Albella, Guillermo 16 minutos 5 segundos
+Yo conseguía con el modo de pruebo primero y de pues sigo, probé un par de cosas, un par de cosas. Le dije, le le dije que me corrigiera lo que vi, los problemas que di.
+Albella, Guillermo 16 minutos 19 segundos
+Y.
+Albella, Guillermo 16 minutos 20 segundos
+Así es.
+Albella, Guillermo 16 minutos 22 segundos
+Me modificó lo que le pedí. Cuando vi, cuando me lo modificó, me fui a verificar que estaba arreglado. Entonces le dije, bueno, ok, sigue con el bloque 2 y siguió con el bloque 2, no todo lo que me había dicho, todo lo que hizo.
+Albella, Guillermo 16 minutos 37 segundos
+¿Y acabo en el resumen de lo que hizo, no?
+Albella, Guillermo 16 minutos 42 segundos
+¿Yo con mi terquedad de probar las cosas, le pasé los errores que vi, no?
+Albella, Guillermo 16 minutos 50 segundos
+Le pasé los errores, me los corrigió, le pongo otros errores más.
+
+nfantas, Pilar
+16 minutos 54 segundos16:54
+Infantas, Pilar 16 minutos 54 segundos
+Pero tú le has no le has dicho que lo corrija, no podría igual.
+
+Albella, Guillermo
+16 minutos 56 segundos16:56
+Albella, Guillermo 16 minutos 56 segundos
+Claro, porque yo estaba con la cabeza metida en claro, en yo pruebo, te doy errores y tú no me los arreglas. Yo no tenía en la cabeza que él podía hacerlo por sí mismo. Entonces yo seguía con esa metodología de trabajo que estaba mal.
+
+Ramadori, Luis
+16 minutos 58 segundos16:58
+Ramadori, Luis 16 minutos 58 segundos
+Claro, él no sabía, claro.
+
+Infantas, Pilar
+17 minutos17:00
+Infantas, Pilar 17 minutos
+claro, qué loco.
+Infantas, Pilar 17 minutos 4 segundos
+Mhm.
+
+Albella, Guillermo
+17 minutos 12 segundos17:12
+Albella, Guillermo 17 minutos 12 segundos
+Bueno, una vez que.
+
+Ramadori, Luis
+17 minutos 13 segundos17:13
+Ramadori, Luis 17 minutos 13 segundos
+A.
+
+Albella, Guillermo
+17 minutos 14 segundos17:14
+Albella, Guillermo 17 minutos 14 segundos
+Colección.
+Albella, Guillermo 17 minutos 21 segundos
+También me lo arreglo.
+Albella, Guillermo 17 minutos 24 segundos
+Me arregló otra cosa de acá que nos estaba viendo bien.
+Albella, Guillermo 17 minutos 30 segundos
+Ay, qué hice, me lo cerré, soy tonto.
+
+Infantas, Pilar
+17 minutos 32 segundos17:32
+Infantas, Pilar 17 minutos 32 segundos
+Y le pasaste lo que conversamos ayer, las dudas, las los puntos que vimos ahí en una de las pantallas, no me acuerdo cuál era que había.
+
+Albella, Guillermo
+17 minutos 38 segundos17:38
+Albella, Guillermo 17 minutos 38 segundos
+Bueno, bla, bla, bla, bla. Vuelvo, sigo, sigo con errores y ahora, cuando ya terminó y lo corre, vio todo, le digo, bueno, ahora sí, después modificamos más cosas. Si quieres, creo que ibas por el bloque de Tresierto, sí, pues sigue.
+
+Infantas, Pilar
+17 minutos 50 segundos17:50
+Infantas, Pilar 17 minutos 50 segundos
+Ahí está.
+
+Albella, Guillermo
+17 minutos 53 segundos17:53
+Albella, Guillermo 17 minutos 53 segundos
+Porque ya me cansé de esas cosas, entonces bueno.
+
+Ramadori, Luis
+17 minutos 56 segundos17:56
+Ramadori, Luis 17 minutos 56 segundos
+Bueno, ya está Guille, dale vamos.
+Ramadori, Luis 18 minutos
+Pasó, pasó, pasó. ¿Cuál es el próximo evento así significativo?
+
+Albella, Guillermo
+18 minutos 1 segundo18:01
+Albella, Guillermo 18 minutos 1 segundo
+Pasó, pasó, pasó.
+Albella, Guillermo 18 minutos 5 segundos
+A ver, bloque cuatro.
+Albella, Guillermo 18 minutos 7 segundos
+Lo que 5, bloque 6, sí.
+
+Infantas, Pilar
+18 minutos 8 segundos18:08
+Infantas, Pilar 18 minutos 8 segundos
+¿Guille, y una pregunta, el hacer cada uno de esos bloques es rápido o se tarda sus minutillos?
+
+Albella, Guillermo
+18 minutos 15 segundos18:15
+Albella, Guillermo 18 minutos 15 segundos
+Tardas unos minutillos, no te sabré decir cuánto.
+
+Infantas, Pilar
+18 minutos 16 segundos18:16
+Infantas, Pilar 18 minutos 16 segundos
+O sea, que okey, bien, pero.
+
+Albella, Guillermo
+18 minutos 19 segundos18:19
+Albella, Guillermo 18 minutos 19 segundos
+Depende lo que tenga que modificar y lo que tenga que leer.
+
+Infantas, Pilar
+18 minutos 21 segundos18:21
+Infantas, Pilar 18 minutos 21 segundos
+No es 1 hora, digamos.
+
+Ramadori, Luis
+18 minutos 24 segundos18:24
+Ramadori, Luis 18 minutos 24 segundos
+Pregunta.
+
+Albella, Guillermo
+18 minutos 25 segundos18:25
+Albella, Guillermo 18 minutos 25 segundos
+En total fueron, en total no es 1 hora ni ni ni casualidad, 5 minutos como muchísimo, depende de 5 o 7 minutos, no mucho más que eso. Bueno, le paso, le paso errores, es inconsistente la información, bla, bla, bla.
+
+Infantas, Pilar
+18 minutos 28 segundos18:28
+Infantas, Pilar 18 minutos 28 segundos
+O K o K.
+Infantas, Pilar 18 minutos 32 segundos
+No.
+
+Ramadori, Luis
+18 minutos 36 segundos18:36
+Ramadori, Luis 18 minutos 36 segundos
+Me han ****** los programadores.
+
+Infantas, Pilar
+18 minutos 36 segundos18:36
+Infantas, Pilar 18 minutos 36 segundos
+Sí.
+
+Ramadori, Luis
+18 minutos 44 segundos18:44
+Ramadori, Luis 18 minutos 44 segundos
+Vas a tener que cambiar la materia que estás enseñando, Pilar va a tener que dejar de enseñar, va a tener que enseñar blood code.
+
+
+Ramadori, Luis
+19 minutos 21 segundos19:21
+Ramadori, Luis 19 minutos 21 segundos
+Creo que hicimos mucho, yo estoy cansado, vos no puede ser.
+
+Infantas, Pilar
+19 minutos 24 segundos19:24
+Infantas, Pilar 19 minutos 24 segundos
+De escribir.
+
+Albella, Guillermo
+19 minutos 26 segundos19:26
+Albella, Guillermo 19 minutos 26 segundos
+Y entonces me analiza toda la aplicación y me dice Books, UX, missing, bla, bla y polish. Me lo divide en varios planes. Le digo, haz todo, venga, polish dice electricidad.
+Albella, Guillermo 19 minutos 41 segundos
+Se pone a trabajar, como hemos dicho, y acá me da el resultado, ya corregí todo.
+Albella, Guillermo 19 minutos 47 segundos
+Le pido 2 modificaciones más porque ahí me puse ya en plan, bueno, ya que estamos, vamos a hacerlo bien.
+Albella, Guillermo 19 minutos 55 segundos
+Le pido más modificaciones.
+Albella, Guillermo 19 minutos 59 segundos
+Ahí digo perfecto y ahora lo último, una pregunta, ya cumplimos con todo lo prometido en la presentación del producto del producto, ¿cierto? Y ahí me hace un checklist de Zion versus presentación.
+Albella, Guillermo 20 minutos 12 segundos
+Y me da que está todo que menos estas cosas.
+
+Ramadori, Luis
+20 minutos 16 segundos20:16
+Ramadori, Luis 20 minutos 16 segundos
+Ja, ja.
+
+Albella, Guillermo
+20 minutos 17 segundos20:17
+Albella, Guillermo 20 minutos 17 segundos
+Que es que acá me lo dice acá abajo, parciales, tenemos las radios y Francility, que no es un algoritmo que es mejorable, pero es un gap visible en la demo.
+Albella, Guillermo 20 minutos 31 segundos
+Si, respuesta corta, si que con los 2 parciales son mejores incrementales, no funcionales, todo lo que se mostra la presentación está implementado y funcionando.
+Albella, Guillermo 20 minutos 40 segundos
+Le vuelve a pasar la por si acaso no leyó bien, le vuelve a pasar la 6 y el Atlético de Ovenes y estima la presentación que le mostramos para ver si cumple.
+Albella, Guillermo 20 minutos 52 segundos
+Bueno, y me da todo el resultado.
+Albella, Guillermo 20 minutos 56 segundos
+Um.
+
+Ramadori, Luis
+20 minutos 59 segundos20:59
+Ramadori, Luis 20 minutos 59 segundos
+Bueno, Guille.
+
+Albella, Guillermo
+20 minutos 59 segundos20:59
+Albella, Guillermo 20 minutos 59 segundos
+Nada más.
+Albella, Guillermo 21 minutos 1 segundo
+Tiene.
+
+Ramadori, Luis
+21 minutos 2 segundos21:02
+Ramadori, Luis 21 minutos 2 segundos
+Me vas a leer todo y ya está, digamos. El concepto está claro, saltamos, ya me forward, me fui para adelante.
+
+Infantas, Pilar
+21 minutos 2 segundos21:02
+Infantas, Pilar 21 minutos 2 segundos
+Mira esa.
+
+Albella, Guillermo
+21 minutos 6 segundos21:06
+Albella, Guillermo 21 minutos 6 segundos
+Sí, lo hace todo solo.
+
+Ramadori, Luis
+21 minutos 11 segundos21:11
+Ramadori, Luis 21 minutos 11 segundos
+El código es un código legible, mantenible, viene comentado. No me lo muestre porque no entiendo nada de Java, así que no te preocupes.
+
+Albella, Guillermo
+21 minutos 16 segundos21:16
+Albella, Guillermo 21 minutos 16 segundos
+Sí.
+Albella, Guillermo 21 minutos 19 segundos
+Bueno, no es Java, pero bueno.
+
+Infantas, Pilar
+21 minutos 21 segundos21:21
+Infantas, Pilar 21 minutos 21 segundos
+Es Python, ajá.
+
+Ramadori, Luis
+21 minutos 22 segundos21:22
+Ramadori, Luis 21 minutos 22 segundos
+Bueno, porque habías dicho que habías usado, habías usado algo de Java en algún col, en algún lado hablaste de Java.
+
+Albella, Guillermo
+21 minutos 29 segundos21:29
+Albella, Guillermo 21 minutos 29 segundos
+Tiene algunas partes de Java, sí, pero es 100% más Python que Java.
+
+Ramadori, Luis
+21 minutos 31 segundos21:31
+Ramadori, Luis 21 minutos 31 segundos
+Okey.
+Ramadori, Luis 21 minutos 33 segundos
+Bueno, listo, es entendible, es mantenible. es.
+
+Albella, Guillermo
+21 minutos 38 segundos21:38
+Albella, Guillermo 21 minutos 38 segundos
+Sí.
+
+Ramadori, Luis
+21 minutos 40 segundos21:40
+Ramadori, Luis 21 minutos 40 segundos
+Sí.
+
+Albella, Guillermo
+21 minutos 40 segundos21:40
+Albella, Guillermo 21 minutos 40 segundos
+Sí, porque está todo dividido, está modularizado. Sí, cada parte, cada engine tiene su propio código. Entonces es mucho más fácil de modificar algo en el caso que uno lo tenga que hacer.
+
+Ramadori, Luis
+21 minutos 53 segundos21:53
+Ramadori, Luis 21 minutos 53 segundos
+Está comentado.
+
+Albella, Guillermo
+21 minutos 55 segundos21:55
+Albella, Guillermo 21 minutos 55 segundos
+no, pero lo puedo comentar.
+
+Bueno, te dejo tarea para el hogar, ahí que después cuando veas anotar.
+
+Infantas, Pilar
+22 minutos 3 segundos22:03
+Infantas, Pilar 22 minutos 3 segundos
+Decide que lo comente.
+
+Ramadori, Luis
+22 minutos 3 segundos22:03
+Ramadori, Luis 22 minutos 3 segundos
+Tarea para el hogar, para Guille, hacer el ejercicio de pedirle a Cloud Code que documente a nivel de función, objetivo de la función, resultado, imputado proceso, no llámalo como quiera.
+
+Albella, Guillermo
+22 minutos 5 segundos22:05
+Albella, Guillermo 22 minutos 5 segundos
+No hace falta, esto quedó grabado.
+Albella, Guillermo 22 minutos 16 segundos
+No, eso es sí, documentado. O sea, lo que hace cada cosa sí tiene un documentación interna, pero lo que es el código no está comentado, o sea, no está explicado en código.
+
+Ramadori, Luis
+22 minutos 27 segundos22:27
+Ramadori, Luis 22 minutos 27 segundos
+No está bien, pero si vos pensás en mantenibilidad, está bien, la mantenibilidad la puede hacer Claude, está clarísimo, pero si pensásemos en que a lo mejor algún humano pudiera tener algo que ver con todo esto que está sucediendo, quizás alguien querría ir a mirar algo, interpretar algo, entender algo.
+
+Albella, Guillermo
+22 minutos 40 segundos22:40
+Albella, Guillermo 22 minutos 40 segundos
+¿Para qué?
+Albella, Guillermo 22 minutos 45 segundos
+Espera.
+
+Ramadori, Luis
+22 minutos 46 segundos22:46
+Ramadori, Luis 22 minutos 46 segundos
+Por los motivos que fueren. Estaría bueno que pedirle, hacer un ejercicio, no sin complicarte mucho la vida, que comente el código, ¿no?
+
+Albella, Guillermo
+22 minutos 58 segundos22:58
+Albella, Guillermo 22 minutos 58 segundos
+Claro, acá sí se lo puedo hacer, pero acá hay una documentación interna de todo el programa, de todo lo que hace, de todas las funciones, de todo esto.
+
+Ramadori, Luis
+23 minutos 7 segundos23:07
+Ramadori, Luis 23 minutos 7 segundos
+Eso está dentro del programa, yo abro el programa que voy a modificar para cambiarle algo y todo eso está dentro.
+
+Albella, Guillermo
+23 minutos 12 segundos23:12
+Albella, Guillermo 23 minutos 12 segundos
+Esto está adentro, sí.
+
+Infantas, Pilar
+23 minutos 15 segundos23:15
+Infantas, Pilar 23 minutos 15 segundos
+¿Y eso manero también o eso es tuyo? Guille, ahí me perdí, o k o k.
+
+Ramadori, Luis
+23 minutos 15 segundos23:15
+Ramadori, Luis 23 minutos 15 segundos
+ya.
+
+Albella, Guillermo
+23 minutos 17 segundos23:17
+Albella, Guillermo 23 minutos 17 segundos
+Sí, eso lo se lo pedí yo, se lo pedí. Yo tenía uno de mi de mi MVP y le dije, basado en todo lo que hicimos nuevo, créame otro que sea tal cual como está ahora. Y esto me lo hizo él. Sí, todo esto me lo hizo él.
+
+Infantas, Pilar
+23 minutos 29 segundos23:29
+Infantas, Pilar 23 minutos 29 segundos
+¿Y una pregunta ahí meate aquí, cómo conectó? Porque claro, ya yo entiendo, ha creado el código para todo lo nuevo, maravilloso. ¿Cómo lo conecta con lo que ya existe, que es Taiza?
+Infantas, Pilar 23 minutos 43 segundos
+Porque yo he visto que tú nos mostraste.
+
+Albella, Guillermo
+23 minutos 44 segundos23:44
+Albella, Guillermo 23 minutos 44 segundos
+You're happy.
+
+Infantas, Pilar
+23 minutos 46 segundos23:46
+Infantas, Pilar 23 minutos 46 segundos
+ya había generado una ti, okey.
+
+Albella, Guillermo
+23 minutos 48 segundos23:48
+Albella, Guillermo 23 minutos 48 segundos
+Hola API, sí, hay un hay un archivo que es que tienen los datos de conexión y ya con eso usa eso para conectarse.
+
+Infantas, Pilar
+23 minutos 56 segundos23:56
+Infantas, Pilar 23 minutos 56 segundos
+Sí.
+
+Albella, Guillermo
+23 minutos 58 segundos23:58
+Albella, Guillermo 23 minutos 58 segundos
+Que ahí ya está cómo se tiene que comportar el, digamos, el contexto limitado, porque no le puedo pedir como se hace una paella. Sí, no es para eso la aplicación. Entonces tiene un contexto muy limitado para atender solamente al programa. No veo otra cosa, sí.
+
+Infantas, Pilar
+24 minutos 20 segundos24:20
+Infantas, Pilar 24 minutos 20 segundos
+No.
+
+Albella, Guillermo
+24 minutos 20 segundos24:20
+Albella, Guillermo 24 minutos 20 segundos
+Es un contexto muy limitado. Ven que está todo acá. O sea, sí puedo comentar el código, las diferencias de los checklock de la de las diferentes versiones que había. En fin, tiene todo. Sí, bueno, y la licencia de Teradata Corporation, por supuesto, no podía ser menos.
+
+Infantas, Pilar
+24 minutos 21 segundos24:21
+Infantas, Pilar 24 minutos 21 segundos
+Brutal.
+
+Albella, Guillermo
+24 minutos 38 segundos24:38
+Albella, Guillermo 24 minutos 38 segundos
+Es.
+Albella, Guillermo 24 minutos 40 segundos
+Em.
+
+Ramadori, Luis
+24 minutos 41 segundos24:41
+Ramadori, Luis 24 minutos 41 segundos
+Okay, excelente, muy bien.
+
+Infantas, Pilar
+24 minutos 41 segundos24:41
+Infantas, Pilar 24 minutos 41 segundos
+Impresionante.
+
+Ramadori, Luis
+24 minutos 44 segundos24:44
+Ramadori, Luis 24 minutos 44 segundos
+Impresionante.
+
+Albella, Guillermo
+24 minutos 44 segundos24:44
+Albella, Guillermo 24 minutos 44 segundos
+Pero si quieres podemos, podemos hacerlo de pedirle que comenten el código lo que va haciendo, no hay problema.
+
+Ramadori, Luis
+24 minutos 55 segundos24:55
+Ramadori, Luis 24 minutos 55 segundos
+Qué lástima que no está grabado.
+
+Albella, Guillermo
+24 minutos 58 segundos24:58
+Albella, Guillermo 24 minutos 58 segundos
+El transillo, sí.
+
+Infantas, Pilar
+25 minutos25:00
+Infantas, Pilar 25 minutos
+La transcripción sí, para que lo mires, dices tú.
+
+Ramadori, Luis
+25 minutos 4 segundos25:04
+Ramadori, Luis 25 minutos 4 segundos
+Necesito que Vinicius, Francisco y Lucia vean esto.
+
+Albella, Guillermo
+25 minutos 10 segundos25:10
+Albella, Guillermo 25 minutos 10 segundos
+Se les hago una nueva, nos hacemos.
+
+Infantas, Pilar
+25 minutos 13 segundos25:13
+Infantas, Pilar 25 minutos 13 segundos
+Hacemos otra reunión, Luis, claro, sí.
+
+Ramadori, Luis
+25 minutos 14 segundos25:14
+Ramadori, Luis 25 minutos 14 segundos
+No hace falta, no hace falta, dice, no hace falta, lo vamos a comentar nosotros. Quizás te pedimos una mini recorrida de esto o hacemos un extracto de la transcripción, pero igual no es lo mismo.
+Ramadori, Luis 25 minutos 31 segundos
+Leerlo en una transcripción.
+
+Lo invitamos 15 minutos, este Luis, la próxima el jueves aquí en la reunión y ahí que nos lo muestre.
+
+Ramadori, Luis
+25 minutos 39 segundos25:39
+Ramadori, Luis 25 minutos 39 segundos
+¿Porque entendés, viste la discusión que tuvimos el otro día, el jueves, ayer?
+
+Infantas, Pilar
+25 minutos 45 segundos25:45
+Infantas, Pilar 25 minutos 45 segundos
+Es.
+
+Albella, Guillermo
+25 minutos 50 segundos25:50
+Albella, Guillermo 25 minutos 50 segundos
+Me siento aislado, no sé por qué.
+
+Ramadori, Luis
+25 minutos 52 segundos25:52
+Ramadori, Luis 25 minutos 52 segundos
+Nos va, nos va, nos van a comer los piojos.
+
+Infantas, Pilar
+25 minutos 53 segundos25:53
+Infantas, Pilar 25 minutos 53 segundos
+Créeme que no quieres saberlo, créeme.
+
+Ramadori, Luis
+25 minutos 56 segundos25:56
+Ramadori, Luis 25 minutos 56 segundos
+La gran discusión es la lentitud con la que estamos incorporando aceleradores en nuestro trabajo.
+
+Albella, Guillermo
+26 minutos 3 segundos26:03
+Albella, Guillermo 26 minutos 3 segundos
+Mhm.
+
+Ramadori, Luis
+26 minutos 5 segundos26:05
+Ramadori, Luis 26 minutos 5 segundos
+Yo quiero incorporarlos y cobrarlos.
+
+Albella, Guillermo
+26 minutos 5 segundos26:05
+Albella, Guillermo 26 minutos 5 segundos
+Sí, muy lentos, trata o lento.
+
+Ramadori, Luis
+26 minutos 9 segundos26:09
+Ramadori, Luis 26 minutos 9 segundos
+Hoy hablé con hoy tuve con Lidia y le hice ese comentario.
+
+Albella, Guillermo
+26 minutos 10 segundos26:10
+Albella, Guillermo 26 minutos 10 segundos
+Y.
+
+Ramadori, Luis
+26 minutos 16 segundos26:16
+Ramadori, Luis 26 minutos 16 segundos
+Yo hace ya como vamos, vamos cerca de 1 año porque creo que empecé en junio del año pasado a hablar de esto, no antes todavía ya debe hacer más de 1 año.
+Ramadori, Luis 26 minutos 26 segundos
+Y yo le decía si no hacemos algo rápido, nos van a enterrar junto a los dinosaurios.
+Ramadori, Luis 26 minutos 32 segundos
+Hoy le volví a decir lo mismo y le dije, Lidia, ya somos dinosaurios, todavía no estamos muertos, pero ya estamos siendo dinosaurios. Al ritmo que generamos las cosas vamos muy lento.
+
+Albella, Guillermo
+26 minutos 39 segundos26:39
+Albella, Guillermo 26 minutos 39 segundos
+It's.
+
+Ramadori, Luis
+26 minutos 44 segundos26:44
+Ramadori, Luis 26 minutos 44 segundos
+Y dice, sí, vamos muy lento.
+Ramadori, Luis 26 minutos 48 segundos
+Ya esa es mi preocupación, mi preocupación es.
+Ramadori, Luis 26 minutos 52 segundos
+José Garcés le tenía una frase que a mí me parece buenísima. Yo adopto muchas cosas de los jefes que he tenido, de las personas con el que actúo, cosas que son significativas para mí. José Garcés decía, sabemos lo que tenemos que hacer.
+Ramadori, Luis 27 minutos 8 segundos
+Si no lo hacemos nosotros, alguien más lo va a hacer.
+Ramadori, Luis 27 minutos 13 segundos
+O sea, nos van a correr y alguien más lo va a hacer. Y eso pasa con nuestros clientes. Si nosotros no nos modernizamos, alguien más va a modernizar el trabajo con Teradata, pero no vamos a hacer nosotros.
+
+Albella, Guillermo
+27 minutos 17 segundos27:17
+Albella, Guillermo 27 minutos 17 segundos
+So.
+Albella, Guillermo 27 minutos 26 segundos
+Y ahí cuando te la vas a decir, uy, me se me va el cliente por esto, vamos a ponernos las pilas para hacerlo nosotros y ya es tarde y ya es tarde.
+
+Ramadori, Luis
+27 minutos 32 segundos27:32
+Ramadori, Luis 27 minutos 32 segundos
+Tarde.
+
+Infantas, Pilar
+27 minutos 33 segundos27:33
+Infantas, Pilar 27 minutos 33 segundos
+Ya es muy tarde.
+
+Albella, Guillermo
+27 minutos 37 segundos27:37
+Albella, Guillermo 27 minutos 37 segundos
+O sea, pero con una herramienta como esta es increíble cómo podemos acelerar cualquier cosa. o sea.
+
+Ramadori, Luis
+27 minutos 37 segundos27:37
+Ramadori, Luis 27 minutos 37 segundos
+Bien, listo, buenísimo.
+Ramadori, Luis 27 minutos 45 segundos
+Okay.
+
+Albella, Guillermo
+27 minutos 45 segundos27:45
+Albella, Guillermo 27 minutos 45 segundos
+Yes.
+
+Infantas, Pilar
+27 minutos 47 segundos27:47
+Infantas, Pilar 27 minutos 47 segundos
+O súper potente.
+
+Ramadori, Luis
+27 minutos 47 segundos27:47
+Ramadori, Luis 27 minutos 47 segundos
+Lo que pasa es que si quisiéramos hacerlo para el trabajo de un cliente, tendríamos que pedirle permiso a Dios y María Santísima, que se va a tomar una peregrinación alrededor del mundo de rodillas para tomar una decisión y después va a llegar 2 años y medio tarde. Okay, buenísimo, excelente, dice, me encantó, me encantó, me encanta.
+
+Albella, Guillermo
+27 minutos 52 segundos27:52
+Albella, Guillermo 27 minutos 52 segundos
+Sí.
+
+Ramadori, Luis
+28 minutos 7 segundos28:07
+Ramadori, Luis 28 minutos 7 segundos
+Nada, o sea, tenés que darle la instrucción de todo lo que sabemos de Data DN A que está en los cursos. ¿Qué hace? Le puedes dar información de lo que hace Kalaido. le.
+
+Infantas, Pilar
+28 minutos 18 segundos28:18
+Infantas, Pilar 28 minutos 18 segundos
+Uf, se puede construir cualquier cosa, sí.
+
+Albella, Guillermo
+28 minutos 18 segundos28:18
+Albella, Guillermo 28 minutos 18 segundos
+¿Puedo hacerlo? Ahora sí, hoy en día sí, con esto puedo hacer replicación de cada ido al 100 * 100%. Básicamente, replícate esto.
+
+Infantas, Pilar
+28 minutos 23 segundos28:23
+Infantas, Pilar 28 minutos 23 segundos
+Sí.
+
+Ramadori, Luis
+28 minutos 27 segundos28:27
+Ramadori, Luis 28 minutos 27 segundos
+Excellent.
+Ramadori, Luis 28 minutos 29 segundos
+No, ojo con esa palabra.
+Ramadori, Luis 28 minutos 32 segundos
+Porque hay un problema legal. El otro día estuvimos en un call donde se discutió eso. Ojo con eso, porque no podemos.
+
+Infantas, Pilar
+28 minutos 32 segundos28:32
+Infantas, Pilar 28 minutos 32 segundos
+Derechos.
+
+Ramadori, Luis
+28 minutos 41 segundos28:41
+Ramadori, Luis 28 minutos 41 segundos
+Buscar replicar calado.
+
+Albella, Guillermo
+28 minutos 43 segundos28:43
+Albella, Guillermo 28 minutos 43 segundos
+Okay.
+
+Ramadori, Luis
+28 minutos 44 segundos28:44
+Ramadori, Luis 28 minutos 44 segundos
+Si queremos funcionalidad que tenga el mismo producto final hacia el cliente de todo el servicio que brindamos.
+
+Albella, Guillermo
+28 minutos 53 segundos28:53
+Albella, Guillermo 28 minutos 53 segundos
+Yes.
+Albella, Guillermo 28 minutos 56 segundos
+Okay.
+
+Ramadori, Luis
+28 minutos 57 segundos28:57
+Ramadori, Luis 28 minutos 57 segundos
+Pero no queremos replicar caraido.
+Ramadori, Luis 29 minutos
+¿Está bien por una cuestión de copyright y todo eso?
+
+Albella, Guillermo
+29 minutos 1 segundo29:01
+Albella, Guillermo 29 minutos 1 segundo
+Okay, una.
+Albella, Guillermo 29 minutos 3 segundos
+Una pregunta, ahora mismo esta herramienta se llama Project Scion. Sí, porque los proyectos tienen un nombre. ¿Quién va a decidir la el nombre final que va a tener?
+
+Ramadori, Luis
+29 minutos 17 segundos29:17
+Ramadori, Luis 29 minutos 17 segundos
+No sé, el dueño del proyecto no sabemos. Hoy hablando con Chris, surgió de vuelta el tema. ¿Quién es el dueño del proyecto?
+
+Infantas, Pilar
+29 minutos 23 segundos29:23
+Infantas, Pilar 29 minutos 23 segundos
+¿Y qué te dijo?
+
+Albella, Guillermo
+29 minutos 24 segundos29:24
+Albella, Guillermo 29 minutos 24 segundos
+YouTube.
+
+Ramadori, Luis
+29 minutos 26 segundos29:26
+Ramadori, Luis 29 minutos 26 segundos
+Está ahí nada. Bueno, hablamos de esto, no de ver cómo podíamos potenciar a una parte del proyecto. ¿Ahora sabes qué habría que hacer? Habría que pedirle.
+Ramadori, Luis 29 minutos 38 segundos
+¿A Kindy, a John, a Rahul o a alguien, qué es lo que necesitan para que la analítica siga funcionando?
+
+Infantas, Pilar
+29 minutos 47 segundos29:47
+Infantas, Pilar 29 minutos 47 segundos
+Sí, nosotros tenemos un par de preguntas acá para justamente la una era esa y otra un formato de archivo de Json para empezar a probar. No lo mandamos todavía porque queríamos esperar esta reunión para ver si por ahí salía algo más y ya poder dispararlo.
+
+Ramadori, Luis
+30 minutos30:00
+Ramadori, Luis 30 minutos
+bueno mostrame los 2 o 3 módulos que faltaban Dale para levantar la tenés ahí la interface
+
+Albella, Guillermo
+30 minutos 4 segundos30:04
+Albella, Guillermo 30 minutos 4 segundos
+Lo tengo acá levantada.
+Albella, Guillermo 30 minutos 10 segundos
+¿Dónde te habías quedado?
+
+Ramadori, Luis
+30 minutos 10 segundos30:10
+Ramadori, Luis 30 minutos 10 segundos
+Qué bárbaro, yo mi cabeza sigue sigue pensando en todo lo que se puede hacer. Qué bárbaro, qué lindo momento para estar sentado ahí y saber lo que sabe Guillermo. Qué divertido.
+
+Infantas, Pilar
+30 minutos 24 segundos30:24
+Infantas, Pilar 30 minutos 24 segundos
+Sí.
+
+Albella, Guillermo
+30 minutos 25 segundos30:25
+Albella, Guillermo 30 minutos 25 segundos
+¿Qué es lo que? Pero es que yo no necesita saber lo que sé yo, con saber escribir y saber español o inglés o algún idioma, ya está.
+
+Infantas, Pilar
+30 minutos 25 segundos30:25
+Infantas, Pilar 30 minutos 25 segundos
+Pero.
+Infantas, Pilar 30 minutos 30 segundos
+Sí.
+
+Ramadori, Luis
+30 minutos 34 segundos30:34
+Ramadori, Luis 30 minutos 34 segundos
+JS, no tengo idea de lo que está hablando, no sé nada hace muchos, yo te cuento, yo fui.
+
+Albella, Guillermo
+30 minutos 37 segundos30:37
+Albella, Guillermo 30 minutos 37 segundos
+Mhm.
+
+Ramadori, Luis
+30 minutos 41 segundos30:41
+Ramadori, Luis 30 minutos 41 segundos
+Prácticamente uno de los primeros de la mano de NSR en trabajar Unix comercial.
+
+Albella, Guillermo
+30 minutos 48 segundos30:48
+Albella, Guillermo 30 minutos 48 segundos
+Mm.
+
+Ramadori, Luis
+30 minutos 49 segundos30:49
+Ramadori, Luis 30 minutos 49 segundos
+O sea, yo conocía hace muchos años internas de Unix, me movía todo con archivos de texto, tonelada de cosas, hasta parche utilitarios Unix en absoluto en la memoria, en el disco, o sea, no tenía la fuente, los divagué y los
+Ramadori, Luis 31 minutos 8 segundos
+parché en absoluto directamente para que funcione. Pero ya me fui. Ahora programo en Word, programo en Excel, programo en PowerPoint. Ese se volvió mi mundo, estoy muy lejos de esto. Pero me encantaría. Bueno, dale, vamos.
+
+No es difícil. ¿En qué? ¿En qué? ¿Dónde nos habíamos quedado Luis? Porque no me acuerdo, pues yo con Pilar seguí.
+
+Ramadori, Luis
+31 minutos 32 segundos31:32
+Ramadori, Luis 31 minutos 32 segundos
+Traelo, traelo.
+
+Infantas, Pilar
+31 minutos 32 segundos31:32
+Infantas, Pilar 31 minutos 32 segundos
+Muéstralo, yo me acuerdo donde se quedó Luis.
+
+Albella, Guillermo
+31 minutos 35 segundos31:35
+Albella, Guillermo 31 minutos 35 segundos
+Acá no lo ven.
+
+Infantas, Pilar
+31 minutos 37 segundos31:37
+Infantas, Pilar 31 minutos 37 segundos
+Yo no.
+
+Ramadori, Luis
+31 minutos 38 segundos31:38
+Ramadori, Luis 31 minutos 38 segundos
+No, no.
+
+Infantas, Pilar
+31 minutos 40 segundos31:40
+Infantas, Pilar 31 minutos 40 segundos
+No.
+
+Albella, Guillermo
+31 minutos 40 segundos31:40
+Albella, Guillermo 31 minutos 40 segundos
+No estoy compartiendo que soy tonto.
+
+Infantas, Pilar
+31 minutos 42 segundos31:42
+Infantas, Pilar 31 minutos 42 segundos
+No.
+
+Ramadori, Luis
+31 minutos 43 segundos31:43
+Ramadori, Luis 31 minutos 43 segundos
+No dijiste, voy a cambiar y voy a cambiar.
+Ramadori, Luis 31 minutos 50 segundos
+A ver, vamos por acá, sí, señor.
+
+Albella, Guillermo
+31 minutos 50 segundos31:50
+Albella, Guillermo 31 minutos 50 segundos
+Ahora sí, lo ven ahora.
+
+Infantas, Pilar
+31 minutos 52 segundos31:52
+Infantas, Pilar 31 minutos 52 segundos
+El impact change análisis me parece que te quedaste, Luis.
+
+Ramadori, Luis
+31 minutos 55 segundos31:55
+Ramadori, Luis 31 minutos 55 segundos
+Sí, acá estábamos, yo este cuadrito lo vi en el impact change análisis. Me acuerdo que habíamos hablado del tema de high versus breaking y medium low para unificar criterio de que si es lo mismo que se llame de la misma manera.
+
+Albella, Guillermo
+32 minutos 6 segundos32:06
+Albella, Guillermo 32 minutos 6 segundos
+Sí.
+
+Ramadori, Luis
+32 minutos 14 segundos32:14
+Ramadori, Luis 32 minutos 14 segundos
+¿Te acordás el rojo? Sí.
+
+Albella, Guillermo
+32 minutos 15 segundos32:15
+Albella, Guillermo 32 minutos 15 segundos
+Sí, me acuerdo.
+
+Ramadori, Luis
+32 minutos 21 segundos32:21
+Ramadori, Luis 32 minutos 21 segundos
+Okay.
+
+Albella, Guillermo
+32 minutos 24 segundos32:24
+Albella, Guillermo 32 minutos 24 segundos
+Esto básicamente debería mostrar el sí.
+
+Ramadori, Luis
+32 minutos 27 segundos32:27
+Ramadori, Luis 32 minutos 27 segundos
+Mira lo que te digo, mira así.
+Ramadori, Luis 32 minutos 31 segundos
+Si vas al cuadrito que tiene el 19 en el centro con el arito medio oscuro, ese fíjate que dice arriba, changes by schema with breaking count.
+
+Albella, Guillermo
+32 minutos 37 segundos32:37
+Albella, Guillermo 32 minutos 37 segundos
+Sí.
+Albella, Guillermo 32 minutos 43 segundos
+Claro, pero encima.
+
+Ramadori, Luis
+32 minutos 44 segundos32:44
+Ramadori, Luis 32 minutos 44 segundos
+Si vas abajo, si vas al del costado, al izquierdo changes vice verity 19 con breaking count 19, pero en rojo no hay 19 en el de al lado. Entonces, si high es rojo y high es breaking.
+
+Albella, Guillermo
+32 minutos 55 segundos32:55
+Albella, Guillermo 32 minutos 55 segundos
+Mm.
+
+Infantas, Pilar
+32 minutos 59 segundos32:59
+Infantas, Pilar 32 minutos 59 segundos
+I am.
+
+Albella, Guillermo
+33 minutos33:00
+Albella, Guillermo 33 minutos
+¿Sí, hay una confusión, no? Y aparte acá, otro error que vivimos ayer con Pilar es que en el entre la no hay esquemas existen, o k estabas.
+
+Ramadori, Luis
+33 minutos33:00
+Ramadori, Luis 33 minutos
+Algo no me suma.
+Ramadori, Luis 33 minutos 7 segundos
+Sí, eso lo vimos juntos, yo estuve en la conversación, sí.
+
+Infantas, Pilar
+33 minutos 10 segundos33:10
+Infantas, Pilar 33 minutos 10 segundos
+Y arriba también el conteo, ¿te acuerdas? Claro, y ahí se fue Luis. Ahí nos quedamos viendo esa parte de arriba en el que habían algunos campos que no entendemos, no el Impact Notes, el Max Deep, el Impact Score también.
+
+Albella, Guillermo
+33 minutos 12 segundos33:12
+Albella, Guillermo 33 minutos 12 segundos
+Sí, acá.
+Albella, Guillermo 33 minutos 16 segundos
+What is that?
+Albella, Guillermo 33 minutos 21 segundos
+Bueno, habrá que preguntarle a Clau porque lo puso así, ¿no?
+
+Infantas, Pilar
+33 minutos 26 segundos33:26
+Infantas, Pilar 33 minutos 26 segundos
+sí.
+
+Albella, Guillermo
+33 minutos 28 segundos33:28
+Albella, Guillermo 33 minutos 28 segundos
+¿Es high risk, por qué high risk?
+Albella, Guillermo 33 minutos 33 segundos
+Y a bueno, y acá los tipos de lo cambian, no con los columnas, columnas añadidas, columnas cambiadas, tablas. Bueno, todo esto no.
+
+Ramadori, Luis
+33 minutos 47 segundos33:47
+Ramadori, Luis 33 minutos 47 segundos
+Perfecto, me parece buenísimo.
+
+Y esto es otra cosa que quedaba en duda, el downstream y el upstream. Sí, y eso también quedó en que no entendíamos qué es. Bueno, y acá un.
+
+Infantas, Pilar
+33 minutos 53 segundos33:53
+Infantas, Pilar 33 minutos 53 segundos
+Y el upstream.
+Infantas, Pilar 33 minutos 56 segundos
+¿Que no entendíamos, no?
+
+Albella, Guillermo
+34 minutos 2 segundos34:02
+Albella, Guillermo 34 minutos 2 segundos
+Impacto por cambio.
+Albella, Guillermo 34 minutos 4 segundos
+Pero claro, acá está el breaking famoso que no entendemos todo bien.
+
+Ramadori, Luis
+34 minutos 7 segundos34:07
+Ramadori, Luis 34 minutos 7 segundos
+Está en breaking, pero es medium el impact, el severity, severity es medium, pero es breaking.
+
+Albella, Guillermo
+34 minutos 9 segundos34:09
+Albella, Guillermo 34 minutos 9 segundos
+Claro, o sea, no tiene mucho sentido, ¿no?
+Albella, Guillermo 34 minutos 13 segundos
+Claro, no tiene mucho sentido.
+
+Ramadori, Luis
+34 minutos 14 segundos34:14
+Ramadori, Luis 34 minutos 14 segundos
+No, a lo mejor tiene todo sentido, lo único que hay que encontrarle es la relación, claro.
+
+Infantas, Pilar
+34 minutos 17 segundos34:17
+Infantas, Pilar 34 minutos 17 segundos
+La lógica.
+
+Albella, Guillermo
+34 minutos 19 segundos34:19
+Albella, Guillermo 34 minutos 19 segundos
+Claro, la relación no puede ser y acá hay un escort también que no lo entiendo muy bien, que de dónde sale.
+
+Infantas, Pilar
+34 minutos 24 segundos34:24
+Infantas, Pilar 34 minutos 24 segundos
+Sí, hay que preguntarle eso, no el score, el breaking, la clasificación.
+
+Albella, Guillermo
+34 minutos 27 segundos34:27
+Albella, Guillermo 34 minutos 27 segundos
+sí, por eso.
+
+Ramadori, Luis
+34 minutos 30 segundos34:30
+Ramadori, Luis 34 minutos 30 segundos
+Claro, mostrale esta pantalla y decile, bueno, ahora revisando tu código y con este output quiero que me describas todo esto.
+
+Albella, Guillermo
+34 minutos 39 segundos34:39
+Albella, Guillermo 34 minutos 39 segundos
+Sí, es lo que pensaba hacer, por eso estoy guardando la transcripción y sí, es más fácil.
+
+Ramadori, Luis
+34 minutos 45 segundos34:45
+Ramadori, Luis 34 minutos 45 segundos
+Bueno, listo, excelente.
+
+Albella, Guillermo
+34 minutos 47 segundos34:47
+Albella, Guillermo 34 minutos 47 segundos
+Bueno, líneas líneas, básicamente que esto le encantó a Pilar. es.
+
+Infantas, Pilar
+34 minutos 52 segundos34:52
+Infantas, Pilar 34 minutos 52 segundos
+Es ahí apareció.
+
+Albella, Guillermo
+34 minutos 55 segundos34:55
+Albella, Guillermo 34 minutos 55 segundos
+Ver, tú tengo acá selecciones de accounts, que es este accounts entra información por esta tabla transaction, pero a su vez accounts le da información a estas 2 tablas. Sí, como las relaciones entre tablas, y eso pasa con cualquiera.
+
+Ramadori, Luis
+35 minutos 12 segundos35:12
+Ramadori, Luis 35 minutos 12 segundos
+Perfect.
+
+Albella, Guillermo
+35 minutos 16 segundos35:16
+Albella, Guillermo 35 minutos 16 segundos
+Sí, cualquiera que tú uno elija, no, acá tiene todo las tablas de, en este caso, bueno, algunas que no tienen nada.
+Albella, Guillermo 35 minutos 25 segundos
+Pero uno acá tiene todas las tablas, no de.
+Albella, Guillermo 35 minutos 29 segundos
+Y ver acá de dónde where data comes, all the details y where data goes, no para hacer todo el caminito. Después tenemos el los grafos. ¿Qué es un grafo? Pues básicamente es ver todo el motor en un tiempo determinado cómo estaba.
+Albella, Guillermo 35 minutos 47 segundos
+Pero de manera gráfica.
+
+Ramadori, Luis
+35 minutos 48 segundos35:48
+Ramadori, Luis 35 minutos 48 segundos
+Sí, eso lo eso hasta aquí había llegado, hasta acá lo habíamos visto. Yo lo que recuerdo como pedido más, no sé si importante, pero para mí funcionalmente era cuando veíamos el cambio y veíamos core banking. No sé lo que me acuerdo cómo se llamaba, por ejemplo, cuántos scripts están afectados por esto.
+
+Albella, Guillermo
+36 minutos 9 segundos36:09
+Albella, Guillermo 36 minutos 9 segundos
+Sí, que eso, pero eso lo habíamos visto en acá, lo habíamos visto en.
+
+Arriba, lo changues, creo.
+
+Ramadori, Luis
+36 minutos 14 segundos36:14
+Ramadori, Luis 36 minutos 14 segundos
+Sí, bueno, pero vos fijate que si le ponés la funcionalidad esta de un menú asociado, desplegable o qué sé yo, y vos estás en Impact Análisis y de ahí te querés ir o en el otro en Linage y de Linage te querés ir a quiero ver los scripts.
+
+Albella, Guillermo
+36 minutos 24 segundos36:24
+Albella, Guillermo 36 minutos 24 segundos
+Sí.
+Albella, Guillermo 36 minutos 26 segundos
+Per.
+
+Ramadori, Luis
+36 minutos 32 segundos36:32
+Ramadori, Luis 36 minutos 32 segundos
+Ya no quiero ver el lineage de las tablas, sino que quiero saber cuáles son los scripts que vienen del upstream y del downstream.
+
+Albella, Guillermo
+36 minutos 41 segundos36:41
+Albella, Guillermo 36 minutos 41 segundos
+O sea, con un clic volver o K, te entiendo, sí.
+
+Ramadori, Luis
+36 minutos 44 segundos36:44
+Ramadori, Luis 36 minutos 44 segundos
+¿Entendés? Porque yo digo, genial, bueno, cambié este y lo otro que por supuesto creo que ya lo habíamos hablado. Lo dije ayer seguro en una palabrita así cortita, es simulation, no tengo que cambiar.
+
+Albella, Guillermo
+36 minutos 57 segundos36:57
+Albella, Guillermo 36 minutos 57 segundos
+Es.
+
+Infantas, Pilar
+36 minutos 58 segundos36:58
+Infantas, Pilar 36 minutos 58 segundos
+¿Qué pasaría?
+
+Ramadori, Luis
+36 minutos 59 segundos36:59
+Ramadori, Luis 36 minutos 59 segundos
+Esto por no importa, por los motivos que fuera, tengo que pasar de número de cuenta numérico a alfanumérico.
+
+Albella, Guillermo
+37 minutos 10 segundos37:10
+Albella, Guillermo 37 minutos 10 segundos
+¿Qué pasaría si hago ese cambio, no?
+
+Ramadori, Luis
+37 minutos 11 segundos37:11
+Ramadori, Luis 37 minutos 11 segundos
+¿Claro, cuánto tengo que tocar 4500 SQLs? Bueno, no sé, 10 store procedio, qué sé yo, no sé lo que sea que diga.
+
+Albella, Guillermo
+37 minutos 15 segundos37:15
+Albella, Guillermo 37 minutos 15 segundos
+Claro.
+Albella, Guillermo 37 minutos 20 segundos
+Claro, que te diga todos los que diga todos los objetos afectados por se verían afectados por ese cambio.
+
+Ramadori, Luis
+37 minutos 27 segundos37:27
+Ramadori, Luis 37 minutos 27 segundos
+Yeah.
+
+Albella, Guillermo
+37 minutos 28 segundos37:28
+Albella, Guillermo 37 minutos 28 segundos
+Sí, eso lo hablaste ayer, sí, me acuerdo.
+Albella, Guillermo 37 minutos 32 segundos
+¿Básicamente esto es para ver visualizar toda la base, no? Y con sus referencias, si es una, si es un esquema, si es una tabla, si es una vista, o sea, ver todo, tener un patriazo general de toda la base, pero sí estaría bueno poder cliquear y que te diga más información, no, eso sería.
+
+Ramadori, Luis
+37 minutos 51 segundos37:51
+Ramadori, Luis 37 minutos 51 segundos
+¿Te hago una preguntita, los colores tienen que ver con el low medium high? No, porque el azul no está abajo.
+
+Albella, Guillermo
+37 minutos 52 segundos37:52
+Albella, Guillermo 37 minutos 52 segundos
+Sí.
+Albella, Guillermo 37 minutos 57 segundos
+No, no, no.
+
+Infantas, Pilar
+37 minutos 58 segundos37:58
+Infantas, Pilar 37 minutos 58 segundos
+Abajo está, mira, low es verde, medium es naranja y high es rojo.
+
+Ramadori, Luis
+38 minutos 3 segundos38:03
+Ramadori, Luis 38 minutos 3 segundos
+Sí, pero esquema es azul, table es verde y view es rojo.
+
+Infantas, Pilar
+38 minutos 6 segundos38:06
+Infantas, Pilar 38 minutos 6 segundos
+Sí.
+
+Albella, Guillermo
+38 minutos 7 segundos38:07
+Albella, Guillermo 38 minutos 7 segundos
+Claro, no tiene nada que no.
+
+Infantas, Pilar
+38 minutos 10 segundos38:10
+Infantas, Pilar 38 minutos 10 segundos
+Lo repitió.
+
+Ramadori, Luis
+38 minutos 10 segundos38:10
+Ramadori, Luis 38 minutos 10 segundos
+O sea, ese es el borde, el color del borde y el relleno del centro es el otro, el no low medium.
+
+Albella, Guillermo
+38 minutos 10 segundos38:10
+Albella, Guillermo 38 minutos 10 segundos
+Es.
+Albella, Guillermo 38 minutos 14 segundos
+Mm.
+Albella, Guillermo 38 minutos 18 segundos
+No está mal, está mal, evidentemente está mal, esto está mal.
+
+Ramadori, Luis
+38 minutos 22 segundos38:22
+Ramadori, Luis 38 minutos 22 segundos
+Okay, listo.
+
+Albella, Guillermo
+38 minutos 24 segundos38:24
+Albella, Guillermo 38 minutos 24 segundos
+Y aparte de esquema no va y aparte de acá falta esto procedure, falta macros, faltan otros objetos que sí tienes de la otra, o sea, acá faltan falta de información, pero bueno, que se vea como se vería esto si estuviera bien.
+
+Ramadori, Luis
+38 minutos 32 segundos38:32
+Ramadori, Luis 38 minutos 32 segundos
+Okay.
+Ramadori, Luis 38 minutos 39 segundos
+Perfecto, buenísimo.
+
+Albella, Guillermo
+38 minutos 41 segundos38:41
+Albella, Guillermo 38 minutos 41 segundos
+En métricas, nosotros vemos cómo fue evolucionando la según el la el DIF que tenemos seleccionado, vemos cómo fueron los cambios en una tablita, no que se cambiaron columnas.
+Albella, Guillermo 39 minutos
+Tablas y demás.
+Albella, Guillermo 39 minutos 3 segundos
+Vemos la cantidad de esquemas, tablas, vistas y columnas en total. Esto es lo que hablamos. Habíamos hablado de que no lo pongamos acá, que es la protección que yo le he puesto a al a los snapshot. No, esto ya lo habíamos visto, me acuerdo.
+
+Infantas, Pilar
+39 minutos 14 segundos39:14
+Infantas, Pilar 39 minutos 14 segundos
+Es.
+Infantas, Pilar 39 minutos 20 segundos
+Sí, es que ahí regresó, Luis.
+
+¿Cómo?
+
+Infantas, Pilar
+39 minutos 24 segundos39:24
+Infantas, Pilar 39 minutos 24 segundos
+Ahí volvió Luis. ¿Te acuerdas que él se fue y regresó? Creo que ya había vuelto, sí.
+
+Albella, Guillermo
+39 minutos 26 segundos39:26
+Albella, Guillermo 39 minutos 26 segundos
+Ahí volvió, claro, es verdad, es verdad. Bueno, esto ya dijimos que lo saco de acá, lo mantengo esa verificación, pero lo sacamos el tema del hash. Después acá tenemos una del uso, del uso, sí.
+
+Infantas, Pilar
+39 minutos 35 segundos39:35
+Infantas, Pilar 39 minutos 35 segundos
+Exacto.
+Infantas, Pilar 39 minutos 42 segundos
+Eso ya no vimos, ya hasta arriba nos quedamos, me parece, porque ya también nos fuimos. ¿Te acuerdas? Sí, esto ya no lo revisamos.
+
+Albella, Guillermo
+39 minutos 47 segundos39:47
+Albella, Guillermo 39 minutos 47 segundos
+O K, bueno, esto es esto es una pantalla para revisar el uso, no un head map porque por query count, sí, donde vemos sí.
+
+Infantas, Pilar
+39 minutos 51 segundos39:51
+Infantas, Pilar 39 minutos 51 segundos
+O rápido, creo.
+Infantas, Pilar 39 minutos 53 segundos
+Mhm.
+
+Ramadori, Luis
+40 minutos40:00
+Ramadori, Luis 40 minutos
+Pregunta.
+Ramadori, Luis 40 minutos 2 segundos
+¿Esos son la cantidad de queries que en su código contienen ese campo o es la cantidad de veces que se corrió el mismo query accesando de ese campo?
+
+Albella, Guillermo
+40 minutos 6 segundos40:06
+Albella, Guillermo 40 minutos 6 segundos
+Sí.
+Albella, Guillermo 40 minutos 11 segundos
+El no, la cantidad de queries.
+Albella, Guillermo 40 minutos 16 segundos
+Sí, la cantidad de queries que según los que hubo que se accedió a este campo.
+
+Infantas, Pilar
+40 minutos 18 segundos40:18
+Infantas, Pilar 40 minutos 18 segundos
+He usan.
+
+Ramadori, Luis
+40 minutos 23 segundos40:23
+Ramadori, Luis 40 minutos 23 segundos
+O K, eso sería parte del impact análisis o del que yo decía quiero saber cuántos SQL toca en este campo, o sea, me hubiera dicho 28500.
+
+Albella, Guillermo
+40 minutos 29 segundos40:29
+Albella, Guillermo 40 minutos 29 segundos
+Claro.
+Albella, Guillermo 40 minutos 32 segundos
+Sí, exactamente, pero bueno, esto es esto es más para uso, no usage.
+
+Ramadori, Luis
+40 minutos 34 segundos40:34
+Ramadori, Luis 40 minutos 34 segundos
+Perfecto.
+Ramadori, Luis 40 minutos 37 segundos
+No está bien, está bien, pero el dato está. ¿O sea, si yo digo quiero alterar este campo, cuál es el impacto en el trabajo de las cosas que tengo que tocar? Van a decir, mira, 28500.
+
+Albella, Guillermo
+40 minutos 37 segundos40:37
+Albella, Guillermo 40 minutos 37 segundos
+En.
+Albella, Guillermo 40 minutos 40 segundos
+Mhm.
+Albella, Guillermo 40 minutos 50 segundos
+Claro, es verdad, sí.
+
+Ramadori, Luis
+40 minutos 51 segundos40:51
+Ramadori, Luis 40 minutos 51 segundos
+O debería decirme eso porque el dato lo tiene o k perfecto.
+
+Albella, Guillermo
+40 minutos 53 segundos40:53
+Albella, Guillermo 40 minutos 53 segundos
+Claro, ¿de dónde lo tienes?
+Albella, Guillermo 40 minutos 56 segundos
+Esto es un hit map por objeto, sí, un poco más visual.
+Albella, Guillermo 41 minutos 2 segundos
+De uso, o sea, total, las se usan muchísimo. Estas en amarillo se usan menos y estas verdes prácticamente ni se usan. Se usan muy poco.
+
+Ramadori, Luis
+41 minutos 11 segundos41:11
+Ramadori, Luis 41 minutos 11 segundos
+Podemos pedirle a Code que agrande un poquito el tamaño de la letra.
+
+Infantas, Pilar
+41 minutos 15 segundos41:15
+Infantas, Pilar 41 minutos 15 segundos
+De la sí.
+
+Albella, Guillermo
+41 minutos 15 segundos41:15
+Albella, Guillermo 41 minutos 15 segundos
+No sé si podrás hacer algo tan complicado.
+
+Infantas, Pilar
+41 minutos 20 segundos41:20
+Infantas, Pilar 41 minutos 20 segundos
+El texto, el size, el font size.
+
+Ramadori, Luis
+41 minutos 22 segundos41:22
+Ramadori, Luis 41 minutos 22 segundos
+Por eso te pedía Por eso te pedía comentarios en el código, porque eso hasta creo que lo puedo hacer yo, pedirle que tenga un fondo más grande.
+
+Albella, Guillermo
+41 minutos 22 segundos41:22
+Albella, Guillermo 41 minutos 22 segundos
+Sí.
+
+Infantas, Pilar
+41 minutos 28 segundos41:28
+Infantas, Pilar 41 minutos 28 segundos
+Y.
+Infantas, Pilar 41 minutos 30 segundos
+De todas maneras.
+
+Albella, Guillermo
+41 minutos 30 segundos41:30
+Albella, Guillermo 41 minutos 30 segundos
+Sí, está muy chico, yo lo veo igual, pero está muy chico.
+
+Infantas, Pilar
+41 minutos 34 segundos41:34
+Infantas, Pilar 41 minutos 34 segundos
+No está chiquito.
+
+Y acá, bueno, el usar por objeto no ves que en transversión tiene un 100 * 100% de uso, por eso está en high y lo demás no luego High Medium. Y esto, obviamente, cuando tenga mucha cantidad de objetos va a poder permitir bajar, pero en o sea que no te.
+Albella, Guillermo 41 minutos 56 segundos
+Que no te la que la página no te ocupe mucho para abajo, sino que lo puedas trolear tú. Esa es la idea, sí.
+
+Ramadori, Luis
+42 minutos 3 segundos42:03
+Ramadori, Luis 42 minutos 3 segundos
+Okay, te hago una, te hago un pedido que es parecido a algo anterior. Acá tenés otra vez una codificación low high medium, pero no tiene que ver con la severidad, sino con la criticalidad. La pregunta es, ¿es el mismo low high medium?
+Ramadori, Luis 42 minutos 23 segundos
+¿De la gráfica que estaba rojo, amarillo, verde, 3 pantallas más atrás o es distinto? Si es otro criterio porque es otro campo, pero tiene otra vez criterio de verde, amarillo, rojo, en algún lado tendría que ser fácil entender qué cuernos estamos viendo.
+
+Albella, Guillermo
+42 minutos 39 segundos42:39
+Albella, Guillermo 42 minutos 39 segundos
+Claro, tener como una código de colores o algo que te explique qué estamos viendo.
+
+Ramadori, Luis
+42 minutos 44 segundos42:44
+Ramadori, Luis 42 minutos 44 segundos
+O te paras arriba de criticalidad y te sale la explicación de qué es criticalidad y por qué es rojo, amarillo, verde. O sea, en el mundo de hoy esperar que alguien le tenga un manual al lado para poder interpretar lo que está viendo no existe.
+
+Albella, Guillermo
+42 minutos 52 segundos42:52
+Albella, Guillermo 42 minutos 52 segundos
+Yeah.
+
+Ramadori, Luis
+42 minutos 59 segundos42:59
+Ramadori, Luis 42 minutos 59 segundos
+Entonces habría que facilitar todo eso, porque son todas las cosas que hacen que si hay rotación de personal, el que viene atrás no tiene tanto problema para entender lo que está mirando. Porque no necesita un mes de curso y cuatro manuales para entender cada pantalla, sino que directamente va a la pantalla.
+
+Albella, Guillermo
+43 minutos 6 segundos43:06
+Albella, Guillermo 43 minutos 6 segundos
+What?
+Albella, Guillermo 43 minutos 11 segundos
+Claro.
+
+Ramadori, Luis
+43 minutos 19 segundos43:19
+Ramadori, Luis 43 minutos 19 segundos
+Obviamente tiene que entender qué es lo que está mirando conceptualmente hablando, pero donde tenga dudas poder resolverlas.
+
+Albella, Guillermo
+43 minutos 26 segundos43:26
+Albella, Guillermo 43 minutos 26 segundos
+Claro, no, si es bueno eso, poder tener una mejor ayuda visual y entender lo que estamos viendo. No este usa Score, bueno, se entiende, pero este Craft Core, por ejemplo, no se entiende tampoco. Si nos ponemos a pensar qué es esto, qué está midiendo. No lo sabemos. Entonces, acá se aplica lo mismo que en critical.
+
+Infantas, Pilar
+43 minutos 42 segundos43:42
+Infantas, Pilar 43 minutos 42 segundos
+No.
+
+Albella, Guillermo
+43 minutos 46 segundos43:46
+Albella, Guillermo 43 minutos 46 segundos
+Criticiality, *****, que a veces me trabo. Bueno, este lo voy a sacar el Intelligence. ¿Por qué lo voy a sacar? Porque la idea de este Intelligence, no del rasoning, era este Intelligence es.
+
+Infantas, Pilar
+43 minutos 46 segundos43:46
+Infantas, Pilar 43 minutos 46 segundos
+Criticalicidad.
+
+Albella, Guillermo
+44 minutos 3 segundos44:03
+Albella, Guillermo 44 minutos 3 segundos
+¿Cuán healthy, cuán cómo se dice healthy en español? ¿Cuán saludable está la base, no la warehouse? Sí.
+
+Ramadori, Luis
+44 minutos 8 segundos44:08
+Ramadori, Luis 44 minutos 8 segundos
+Saludable.
+
+Infantas, Pilar
+44 minutos 8 segundos44:08
+Infantas, Pilar 44 minutos 8 segundos
+Saludable.
+
+Albella, Guillermo
+44 minutos 17 segundos44:17
+Albella, Guillermo 44 minutos 17 segundos
+De eso lo mide por los cambios que tuvo, sí.
+
+Ramadori, Luis
+44 minutos 21 segundos44:21
+Ramadori, Luis 44 minutos 21 segundos
+O K, no quiere decir que esté mal.
+
+Albella, Guillermo
+44 minutos 21 segundos44:21
+Albella, Guillermo 44 minutos 21 segundos
+A bit up.
+
+Ramadori, Luis
+44 minutos 27 segundos44:27
+Ramadori, Luis 44 minutos 27 segundos
+Porque vos estás diciendo cuán saludable está el warehouse. Entonces yo digo que vamos a tener problemas, se va a caer la base. ¿Qué le está pasando? ¿Tiene una caída de performance? ¿Qué le pasó? O sea, ¿por qué está mal el warehouse?
+
+Albella, Guillermo
+44 minutos 27 segundos44:27
+Albella, Guillermo 44 minutos 27 segundos
+¿Cómo no quiere decir que?
+Albella, Guillermo 44 minutos 30 segundos
+Sí.
+Albella, Guillermo 44 minutos 34 segundos
+No.
+Albella, Guillermo 44 minutos 40 segundos
+O sea, lo que se refiere.
+
+Ramadori, Luis
+44 minutos 42 segundos44:42
+Ramadori, Luis 44 minutos 42 segundos
+Ojo, ojo, como lo de cómo lo definimos. O sea, no es que yo sea un súper cultor del idioma, pero ojo con lo que decimos, porque después sale corriendo la gente.
+
+Albella, Guillermo
+44 minutos 44 segundos44:44
+Albella, Guillermo 44 minutos 44 segundos
+Dime.
+Albella, Guillermo 44 minutos 49 segundos
+Claro.
+Albella, Guillermo 44 minutos 56 segundos
+Acá lo dice mira.
+
+Ramadori, Luis
+44 minutos 57 segundos44:57
+Ramadori, Luis 44 minutos 57 segundos
+Score de Hells.
+
+Acá dice, cada esquema se escorea basado en how many chains, breaking chains, don't tend impact and critical of it has. O sea, eso es lo que he tomado como valores para definir cuan healthy está.
+
+Ramadori, Luis
+45 minutos 14 segundos45:14
+Ramadori, Luis 45 minutos 14 segundos
+Ok, y ese healthy volvió un cachito del encabezado.
+Ramadori, Luis 45 minutos 18 segundos
+Ese healthy es en función del snapshot que estás viendo. No es como vimos más arriba, donde había las diferencias en changes entre el uno y el 3, entre el 2 y el 3, entre el 1 y el 2. Esto es solo el que estás viendo ahí arriba.
+
+Albella, Guillermo
+45 minutos 24 segundos45:24
+Albella, Guillermo 45 minutos 24 segundos
+Siri.
+
+Infantas, Pilar
+45 minutos 26 segundos45:26
+Infantas, Pilar 45 minutos 26 segundos
+Yes.
+
+Albella, Guillermo
+45 minutos 35 segundos45:35
+Albella, Guillermo 45 minutos 35 segundos
+Claro, por ejemplo, yo pongo el uno y automáticamente esto me fue, me fue, me cambió todos los valores. Sí, yo me voy al me voy al 2.
+
+Ramadori, Luis
+45 minutos 42 segundos45:42
+Ramadori, Luis 45 minutos 42 segundos
+O K, yo buscaría cómo llamarlo, hagamos después un consenso, cómo llamarlo que no sea salud.
+
+Albella, Guillermo
+45 minutos 47 segundos45:47
+Albella, Guillermo 45 minutos 47 segundos
+Sí.
+Albella, Guillermo 45 minutos 51 segundos
+Okay.
+
+Ramadori, Luis
+45 minutos 53 segundos45:53
+Ramadori, Luis 45 minutos 53 segundos
+O sea, sí me parece interesante evaluar todo eso, pero no es un problema. Salud podría ser un problema si todos los cambios que hicieron no funcionaron y ahora no anda nada, pero si los cambios funcionaron.
+
+Albella, Guillermo
+45 minutos 53 segundos45:53
+Albella, Guillermo 45 minutos 53 segundos
+Que sea de otra cosa.
+Albella, Guillermo 46 minutos 3 segundos
+Mhm.
+
+Ramadori, Luis
+46 minutos 8 segundos46:08
+Ramadori, Luis 46 minutos 8 segundos
+No sé, o después un análisis de volatilidad.
+Ramadori, Luis 46 minutos 15 segundos
+Porque está teniendo cambios.
+
+Albella, Guillermo
+46 minutos 17 segundos46:17
+Albella, Guillermo 46 minutos 17 segundos
+Puede ser eso, sí, y lo puso como.
+
+Ramadori, Luis
+46 minutos 17 segundos46:17
+Ramadori, Luis 46 minutos 17 segundos
+Es volátil porque 57% de los objetos tuvieron cambio.
+Ramadori, Luis 46 minutos 24 segundos
+Podría ser, no sé, habrá que buscarle una historia para contarlo. ¿Está bien? Me parece, claro, sí, no es salud.
+
+Albella, Guillermo
+46 minutos 29 segundos46:29
+Albella, Guillermo 46 minutos 29 segundos
+Una vuelta diferente.
+Albella, Guillermo 46 minutos 33 segundos
+Es otra vez, sí, me saludo. OK, sí, estoy de acuerdo, estoy, estoy de acuerdo, estoy bastante de acuerdo con eso. Después tenemos esta es la que sí, seguramente saque. ¿Por qué la de resoning? ¿Por qué? ¿Porque cuál es? ¿Cuál era la idea acá de resoning? Que acá dentro de esta que resoning.
+Albella, Guillermo 46 minutos 53 segundos
+El usuario pudiera preguntarle a Taisa cosas de su de acá, pero ¿qué pasa? Yo a Taisa ya le añadí todas las ventanas porque acá tienes un al Taisa ya en cualquier ventana desde aquí, claro, desde acá, entonces tú desde acá, estés donde estés.
+
+Ramadori, Luis
+46 minutos 57 segundos46:57
+Ramadori, Luis 46 minutos 57 segundos
+Ajá.
+Ramadori, Luis 46 minutos 59 segundos
+Jay.
+
+Infantas, Pilar
+47 minutos 6 segundos47:06
+Infantas, Pilar 47 minutos 6 segundos
+como asistente ya.
+
+Albella, Guillermo
+47 minutos 12 segundos47:12
+Albella, Guillermo 47 minutos 12 segundos
+Tú ya le puedes preguntar sobre Zion o sobre lo que estás viendo directamente en parado en cualquier página. Entonces, la parte esta de Resonic no tiene mucho sentido. Sí, está como duplicado porque tú puedes hablar por acá, por la plaisa.
+Albella, Guillermo 47 minutos 30 segundos
+Y me va a responder y yo puedo irme a resoning.
+
+Ramadori, Luis
+47 minutos 34 segundos47:34
+Ramadori, Luis 47 minutos 34 segundos
+Daisa está aware, Daisa conoce el código.
+
+Albella, Guillermo
+47 minutos 34 segundos47:34
+Albella, Guillermo 47 minutos 34 segundos
+A quemar.
+Albella, Guillermo 47 minutos 39 segundos
+El código no.
+
+Ramadori, Luis
+47 minutos 40 segundos47:40
+Ramadori, Luis 47 minutos 40 segundos
+Okey, o sea, no le preguntar a Taisha porque criticality es high, medium, low en amarillo.
+
+Albella, Guillermo
+47 minutos 41 segundos47:41
+Albella, Guillermo 47 minutos 41 segundos
+El código no algo.
+Albella, Guillermo 47 minutos 48 segundos
+Sí, a lo mejor le puedo, a lo mejor le puedo preguntar a ver qué me responde.
+
+Infantas, Pilar
+47 minutos 48 segundos47:48
+Infantas, Pilar 47 minutos 48 segundos
+No, eso sería.
+Infantas, Pilar 47 minutos 52 segundos
+¿Pero no tiene acceso, no? ¿O sí?
+
+Albella, Guillermo
+47 minutos 55 segundos47:55
+Albella, Guillermo 47 minutos 55 segundos
+Pero tiene cierto a la aplicación, sí, al código no.
+
+Infantas, Pilar
+47 minutos 59 segundos47:59
+Infantas, Pilar 47 minutos 59 segundos
+Okay.
+
+Albella, Guillermo
+48 minutos48:00
+Albella, Guillermo 48 minutos
+Esto lo, o sea.
+
+Ramadori, Luis
+48 minutos48:00
+Ramadori, Luis 48 minutos
+Ponele, ponele, ponele ahí, ve how many esquemas at each risk level.
+Ramadori, Luis 48 minutos 8 segundos
+Pregúntale qué significa el risk level de los esquemas.
+Ramadori, Luis 48 minutos 13 segundos
+¿O cómo se define el risk level de los esquemas? ¿Ves que justo al lado de la ventanita de Taiza tenés un cuadrito que está como partido al medio por la ventana y eso dice how many esquemas at each risk level? Entonces, lo que quiero que le preguntes es cómo definís los diferentes niveles de riesgo de los esquemas o cómo se define, ¿no?
+
+Albella, Guillermo
+48 minutos 22 segundos48:22
+Albella, Guillermo 48 minutos 22 segundos
+Sí.
+Albella, Guillermo 48 minutos 24 segundos
+Sí.
+Albella, Guillermo 48 minutos 32 segundos
+In.
+Albella, Guillermo 48 minutos 34 segundos
+¿Qué significa Risk Level en los esquemas de los esquemas? El nivel de riego de los esquemas se refiere a la evaluación del impacto que tienen los cambios estructurales en la base de datos sobre los diferentes esquemas que la componen. En tus datos, veo que esquemas como banking, risk planner mini reporting station han sido afectados por cambios.
+Albella, Guillermo 48 minutos 52 segundos
+El nivel de riesgo se clasifica por función de la cantidad y el tipo de cambios que han ocurrido en cada esquema. Básicamente eso, bueno, te da un montón de información, ¿no? Pero le puedes preguntar perfectamente.
+
+Ramadori, Luis
+49 minutos 6 segundos49:06
+Ramadori, Luis 49 minutos 6 segundos
+Está bien, pero te está explicando lo que está viendo, que es más o menos lo mismo que vemos nosotros.
+
+Albella, Guillermo
+49 minutos 10 segundos49:10
+Albella, Guillermo 49 minutos 10 segundos
+Claro.
+
+Ramadori, Luis
+49 minutos 11 segundos49:11
+Ramadori, Luis 49 minutos 11 segundos
+El tema yo quiero saber por qué decidiste que era por qué dijiste que era amarillo.
+
+
+Albella, Guillermo
+49 minutos 30 segundos49:30
+Albella, Guillermo 49 minutos 30 segundos
+Google.
+Albella, Guillermo 49 minutos 34 segundos
+Yes.
+
+Ramadori, Luis
+49 minutos 45 segundos49:45
+Ramadori, Luis 49 minutos 45 segundos
+Por decir una cosa cualquiera, si me encanta, pero sabes que nosotros consideramos que operativamente el riesgo rojo es por arriba del 50%. ¿Podés cambiarlo en tu aplicación? O sea, si no le podemos explicar al cliente, al usuario, al que va a estar viendo esto.
+
+Albella, Guillermo
+49 minutos 47 segundos49:47
+Albella, Guillermo 49 minutos 47 segundos
+Sí, sí, sí.
+Albella, Guillermo 49 minutos 58 segundos
+Team, no.
+
+Ramadori, Luis
+50 minutos 4 segundos50:04
+Ramadori, Luis 50 minutos 4 segundos
+¿Cuál es el criterio? El usuario no va a poder tomar su propia decisión.
+
+Albella, Guillermo
+50 minutos 8 segundos50:08
+Albella, Guillermo 50 minutos 8 segundos
+Lógicamente.
+
+Ramadori, Luis
+50 minutos 10 segundos50:10
+Ramadori, Luis 50 minutos 10 segundos
+Yep, policio.
+
+Albella, Guillermo
+50 minutos 10 segundos50:10
+Albella, Guillermo 50 minutos 10 segundos
+Sí, y de hecho le acabo de explicar, le acabo de preguntar por qué se decidió que se fuera amarillo y me dice el registro que se ha decidido que el nivel de Diego fuera amarillo. O sea, no, o sea, claro, pueden leer la aplicación, pero no pueden leer el código. Sí, porque lo tengo muy limitado, no le voy a dejar hacer todo. Por eso la parte de razoning.
+
+Infantas, Pilar
+50 minutos 20 segundos50:20
+Infantas, Pilar 50 minutos 20 segundos
+I love that.
+
+Ramadori, Luis
+50 minutos 21 segundos50:21
+Ramadori, Luis 50 minutos 21 segundos
+No sabe, está bien.
+Ramadori, Luis 50 minutos 30 segundos
+Se pone celoso, se pone si Guillermo está celoso de Taiza, dice, no lo voy a dejar hacer todo.
+
+Albella, Guillermo
+50 minutos 32 segundos50:32
+Albella, Guillermo 50 minutos 32 segundos
+Mhm.
+
+Infantas, Pilar
+50 minutos 36 segundos50:36
+Infantas, Pilar 50 minutos 36 segundos
+Ja, ja.
+
+Albella, Guillermo
+50 minutos 38 segundos50:38
+Albella, Guillermo 50 minutos 38 segundos
+Si yo acá le digo, hola, ¿cómo estás? También me responde.
+
+Ramadori, Luis
+50 minutos 43 segundos50:43
+Ramadori, Luis 50 minutos 43 segundos
+Guille, a ver, después de haber probado la el automatismo.
+
+Albella, Guillermo
+50 minutos 43 segundos50:43
+Albella, Guillermo 50 minutos 43 segundos
+Best.
+
+Ramadori, Luis
+50 minutos 50 segundos50:50
+Ramadori, Luis 50 minutos 50 segundos
+Revolucionario, yo les conté el artículo que leí sobre Claude.
+
+Albella, Guillermo
+50 minutos 55 segundos50:55
+Albella, Guillermo 50 minutos 55 segundos
+No creo que no.
+
+Infantas, Pilar
+50 minutos 56 segundos50:56
+Infantas, Pilar 50 minutos 56 segundos
+Creo que no.
+
+Ramadori, Luis
+50 minutos 58 segundos50:58
+Ramadori, Luis 50 minutos 58 segundos
+Antropic.
+Ramadori, Luis 51 minutos
+Estaba por liberar un nuevo modelo.
+
+Albella, Guillermo
+51 minutos 4 segundos51:04
+Albella, Guillermo 51 minutos 4 segundos
+Pues sí, maito minitos.
+Albella, Guillermo 51 minutos 7 segundos
+Sí, yo lo conozco, yo leí por mi cuenta.
+
+Ramadori, Luis
+51 minutos 8 segundos51:08
+Ramadori, Luis 51 minutos 8 segundos
+Jamaa Google.
+Ramadori, Luis 51 minutos 10 segundos
+Llamó a Microsoft, llamó a Apple, no sé a cuánto llamó y les dijo, miren, su sistema tiene todas estas vulnerabilidades.
+Ramadori, Luis 51 minutos 24 segundos
+El nuevo modelo.
+Ramadori, Luis 51 minutos 28 segundos
+Entropic detectó vulnerabilidades en browser, sistemas de acceso.
+Ramadori, Luis 51 minutos 36 segundos
+O sea, si ese modelo estuviera disponible para todo el mundo, habría un millar de hackers hackers súper felices, rompiendo todo lo que hay por ahí dando vueltas.
+Ramadori, Luis 51 minutos 50 segundos
+Entonces tomaron la decisión, primero les avisaron a todos estos porque son parte de un consorcio en el que está en Tropic y qué sé yo, mira a ustedes que son parte, son amigos míos, les digo, mi modelo puede romper la seguridad que ustedes tienen.
+Ramadori, Luis 52 minutos 4 segundos
+Y decidieron que va a haber parte de ese modelo que nunca van a ser públicas por ahora.
+
+Albella, Guillermo
+52 minutos 14 segundos52:14
+Albella, Guillermo 52 minutos 14 segundos
+Yes.
+
+Ramadori, Luis
+52 minutos 14 segundos52:14
+Ramadori, Luis 52 minutos 14 segundos
+Se está complicando el mundo.
+
+Albella, Guillermo
+52 minutos 15 segundos52:15
+Albella, Guillermo 52 minutos 15 segundos
+Sí, pero vos también leí, no sé si leíste ese artículo o otra o en ese artículo estaba de lo que pasó o de las algunas cosas que pasaron en que están, que los puso el propio Anthrovic, de que como en su laboratorio hizo hacía hizo mitos.
+Albella, Guillermo 52 minutos 36 segundos
+No para justamente el tema de vulnerabilidades, no sé si te te cuento, si no.
+
+Ramadori, Luis
+52 minutos 42 segundos52:42
+Ramadori, Luis 52 minutos 42 segundos
+no leí como lo hicieron, no.
+
+Albella, Guillermo
+52 minutos 43 segundos52:43
+Albella, Guillermo 52 minutos 43 segundos
+Bueno.
+
+Infantas, Pilar
+52 minutos 43 segundos52:43
+Infantas, Pilar 52 minutos 43 segundos
+Yo tampoco no eres.
+
+Albella, Guillermo
+52 minutos 44 segundos52:44
+Albella, Guillermo 52 minutos 44 segundos
+Bueno, resulta que en una de las pruebas que estaban haciendo con este mitos, lo lo ponen en un en una, en una, en un ambiente supercerrado, sin Internet y sin nada, y le dan como objetivo que busque la manera de que se que se que busque la manera de comunicarse con él.
+
+Ramadori, Luis
+52 minutos 59 segundos52:59
+Ramadori, Luis 52 minutos 59 segundos
+Salir.
+Ramadori, Luis 53 minutos 1 segundo
+I got.
+
+Albella, Guillermo
+53 minutos 5 segundos53:05
+Albella, Guillermo 53 minutos 5 segundos
+El investigador que estaba haciendo esta prueba no, y lo dejan trabajar. Se ve que el investigador estaba en su horario de comida, estaba comiendo su comida y de repente le llega un mail de mito diciendo: ya pude.
+
+
+Infantas, Pilar
+55 minutos 41 segundos55:41
+Infantas, Pilar 55 minutos 41 segundos
+Paisano.
+
+Albella, Guillermo
+55 minutos 55 segundos55:55
+Albella, Guillermo 55 minutos 55 segundos
+Pero bueno, como no hemos definido o no está bien definido que son graves, que no lo son y tal, no tiene mucho sentido ahora leerlas, no, pero básicamente es eso.
+
+Ramadori, Luis
+56 minutos 3 segundos56:03
+Ramadori, Luis 56 minutos 3 segundos
+O sea, Taixa llenaría el log de alertas, independientemente de que vos pudieras ver el análisis de impacto, por ejemplo.
+
+Albella, Guillermo
+56 minutos 13 segundos56:13
+Albella, Guillermo 56 minutos 13 segundos
+Ve las que son, las que son high, las high, las que sí.
+Albella, Guillermo 56 minutos 20 segundos
+Básicamente porque te aparecen acá, o sea, cuando detecta alertas, te aparece una ventanita acá que te avisa, sí, y esto lo guarda en un lock, sí.
+
+Ramadori, Luis
+56 minutos 27 segundos56:27
+Ramadori, Luis 56 minutos 27 segundos
+O K, buenísimo, me encanta que existan las alertas, me gustaría algo más proactivo.
+
+Albella, Guillermo
+56 minutos 35 segundos56:35
+Albella, Guillermo 56 minutos 35 segundos
+Por ejemplo.
+
+Ramadori, Luis
+56 minutos 37 segundos56:37
+Ramadori, Luis 56 minutos 37 segundos
+No sé, tengo que pensar.
+
+Albella, Guillermo
+56 minutos 39 segundos56:39
+Albella, Guillermo 56 minutos 39 segundos
+Okay.
+
+Infantas, Pilar
+56 minutos 39 segundos56:39
+Infantas, Pilar 56 minutos 39 segundos
+Que tome acción dices tú, o sea que haga algo.
+
+Ramadori, Luis
+56 minutos 40 segundos56:40
+Ramadori, Luis 56 minutos 40 segundos
+Poneme, poneme modelo deep sinking.
+Ramadori, Luis 56 minutos 47 segundos
+En modelo research, tengo que entrar en modelo research para pensar más, ¿entendés? No estoy haciendo una broma.
+
+Albella, Guillermo
+56 minutos 47 segundos56:47
+Albella, Guillermo 56 minutos 47 segundos
+Mm.
+Albella, Guillermo 56 minutos 50 segundos
+Huh?
+Albella, Guillermo 56 minutos 52 segundos
+I.
+Albella, Guillermo 56 minutos 53 segundos
+O K, perdón, perdón, no te había entendido.
+
+Infantas, Pilar
+56 minutos 56 segundos56:56
+Infantas, Pilar 56 minutos 56 segundos
+No se nota, a veces no se nota.
+
+Albella, Guillermo
+56 minutos 58 segundos56:58
+Albella, Guillermo 56 minutos 58 segundos
+Y acá en control, básicamente es para poder reiniciar los engines. Sí, en caso de que fallara alguno, lo puedes, lo puedes reiniciar o tener que hacer un cambio en un engine. Lo puedes pagar suponiendo que esto está ya productivo, no en un cliente o en donde fuera que estuviera. Uno tiene que hacer un cambio en un engine o un o una actualización.
+Albella, Guillermo 57 minutos 20 segundos
+Puede parar desde acá a hacer la retención y volverlo a levantar y, o sea, poder operar sobre los engines que están corriendo. Sí, para eso sirve este.
+
+Ramadori, Luis
+57 minutos 30 segundos57:30
+Ramadori, Luis 57 minutos 30 segundos
+Ya sé dónde quiero alertas.
+
+Albella, Guillermo
+57 minutos 33 segundos57:33
+Albella, Guillermo 57 minutos 33 segundos
+Bien, Dime.
+
+Ramadori, Luis
+57 minutos 34 segundos57:34
+Ramadori, Luis 57 minutos 34 segundos
+¿Me llegó el snapshot? ¿Se carga automático o lo cargo yo? No importa. Supongamos que el modelo futuro, que sería el más razonable que todo el mundo acepte, se carga automático.
+
+Albella, Guillermo
+57 minutos 36 segundos57:36
+Albella, Guillermo 57 minutos 36 segundos
+Sí.
+Albella, Guillermo 57 minutos 40 segundos
+Sí.
+Albella, Guillermo 57 minutos 46 segundos
+Sí.
+
+Ramadori, Luis
+57 minutos 46 segundos57:46
+Ramadori, Luis 57 minutos 46 segundos
+Después estarán, vos tendrás los sistemas de control para que no se cargue 10 veces automático el mismo, ¿no?
+
+Albella, Guillermo
+57 minutos 52 segundos57:52
+Albella, Guillermo 57 minutos 52 segundos
+Claro.
+
+Ramadori, Luis
+57 minutos 53 segundos57:53
+Ramadori, Luis 57 minutos 53 segundos
+Ya se cargó y algún sistema para que te permita hacer dropear el último snapshot o dropear este snapshot porque descubrimos que le faltaba el 50% de la información porque se perdió en algún lado. Entonces tengo que volver a cargarlo, tengo que dropearlo y volver a cargarlo.
+
+Albella, Guillermo
+58 minutos 8 segundos58:08
+Albella, Guillermo 58 minutos 8 segundos
+Yeah, no.
+
+Ramadori, Luis
+58 minutos 10 segundos58:10
+Ramadori, Luis 58 minutos 10 segundos
+Si la carga es automática, sí quiero alerta sobre todo lo que es automático.
+
+Albella, Guillermo
+58 minutos 15 segundos58:15
+Albella, Guillermo 58 minutos 15 segundos
+Hmm.
+
+Ramadori, Luis
+58 minutos 16 segundos58:16
+Ramadori, Luis 58 minutos 16 segundos
+Entonces yo voy a ir a buscar el impact análisis, pero por ejemplo, si la alerta detectó, si el proceso de carga detectó objetos que no existían previamente pero que no tiene una definición, no sé, por ejemplo, un script que hace referencia a una tabla que no existe en el modelo.
+
+Albella, Guillermo
+58 minutos 37 segundos58:37
+Albella, Guillermo 58 minutos 37 segundos
+Sí.
+
+Ramadori, Luis
+58 minutos 40 segundos58:40
+Ramadori, Luis 58 minutos 40 segundos
+Te rompe el linaje, te rompe, o sea, de pronto tenés un objeto colgado en algún lado que no sabe dónde viene.
+
+Albella, Guillermo
+58 minutos 42 segundos58:42
+Albella, Guillermo 58 minutos 42 segundos
+Jade.
+Albella, Guillermo 58 minutos 47 segundos
+Claro.
+
+Ramadori, Luis
+58 minutos 48 segundos58:48
+Ramadori, Luis 58 minutos 48 segundos
+Está bien, eso para mí es una alerta.
+
+
+Ramadori, Luis 1 hora 55 segundos
+Y.
+Ramadori, Luis 1 hora 58 segundos
+Decide haciendo revisión, pensando en use cases, revisando los reportes, qué sé yo, surge esta duda, ¿cómo están manejando ustedes esto?
+
+Albella, Guillermo
+1 hora 1 minuto 8 segundos1:01:08
+Albella, Guillermo 1 hora 1 minuto 8 segundos
+Sí.
+
+Ramadori, Luis
+1 hora 1 minuto 8 segundos1:01:08
+Ramadori, Luis 1 hora 1 minuto 8 segundos
+Porque a mí me gustaría identificar en mi análisis los sistemas conexos, pero que están fuera de alcance.
+Ramadori, Luis 1 hora 1 minuto 19 segundos
+Porque vos podrías decir si lo vamos a hiper sofisticar esto, vos podrías decir tranquilamente, y tengo 3 sistemas de input que vienen de Hadoop, cuatro sistemas de output que van a Oracle, por ejemplo.
+
+Albella, Guillermo
+1 hora 1 minuto 21 segundos1:01:21
+Albella, Guillermo 1 hora 1 minuto 21 segundos
+Sí.
+Albella, Guillermo 1 hora 1 minuto 35 segundos
+Hmm.
+Albella, Guillermo 1 hora 1 minuto 38 segundos
+Sí, perfectamente.
+
+Ramadori, Luis
+1 hora 1 minuto 39 segundos1:01:39
+Ramadori, Luis 1 hora 1 minuto 39 segundos
+Vos podría decir el Teradata que estoy analizando está conectado con todo esto que está afuera y que está fuera de alcance.
+
+Albella, Guillermo
+1 hora 1 minuto 48 segundos1:01:48
+Albella, Guillermo 1 hora 1 minuto 48 segundos
+Y acá lo podríamos, lo podrías ver que te diga.
+
+Ramadori, Luis
+1 hora 1 minuto 51 segundos1:01:51
+Ramadori, Luis 1 hora 1 minuto 51 segundos
+Claro, es más, ya pensando en que Claude hace todo solo, yo iría, pero escuchame, data DNA para verte la data, nada más. Por Dios, no seas antiguo, mapea el Hadoop, mapea el Hadoop, mapea el oro, mapea a DB 2, mapea lo que se te ocurra.
+
+Albella, Guillermo
+1 hora 1 minuto 56 segundos1:01:56
+Albella, Guillermo 1 hora 1 minuto 56 segundos
+K.
+Albella, Guillermo 1 hora 2 minutos 2 segundos
+Sí.
+
+Infantas, Pilar
+1 hora 2 minutos 4 segundos1:02:04
+Infantas, Pilar 1 hora 2 minutos 4 segundos
+Carlos frentes.
+
+Ramadori, Luis
+1 hora 2 minutos 9 segundos1:02:09
+Ramadori, Luis 1 hora 2 minutos 9 segundos
+Que en la medida que esté accesible por Quelry Grid, yo puedo llegar.
+
+Albella, Guillermo
+1 hora 2 minutos 15 segundos1:02:15
+Albella, Guillermo 1 hora 2 minutos 15 segundos
+Sí, eso no lo había nada.
+
+Ramadori, Luis
+1 hora 2 minutos 16 segundos1:02:16
+Ramadori, Luis 1 hora 2 minutos 16 segundos
+Bueno, no importa, pero eso es para futuro, ya eso es versión 20.
+
+Infantas, Pilar
+1 hora 2 minutos 19 segundos1:02:19
+Infantas, Pilar 1 hora 2 minutos 19 segundos
+Fase 3.
+
+Albella, Guillermo
+1 hora 2 minutos 19 segundos1:02:19
+Albella, Guillermo 1 hora 2 minutos 19 segundos
+No, pero no lo había pensado, no lo había pensado. Y bueno, con esto y sí.
+
+Ramadori, Luis
+1 hora 2 minutos 22 segundos1:02:22
+Ramadori, Luis 1 hora 2 minutos 22 segundos
+Gracias, agrego valor, gracias.
+
+Albella, Guillermo
+1 hora 2 minutos 27 segundos1:02:27
+Albella, Guillermo 1 hora 2 minutos 27 segundos
+¿Y con esto, con esto termina esta este tour que hemos hecho, cómo lo ven?
+
+Ramadori, Luis
+1 hora 2 minutos 28 segundos1:02:28
+Ramadori, Luis 1 hora 2 minutos 28 segundos
+Bien.
+Ramadori, Luis 1 hora 2 minutos 33 segundos
+Bueno, buenísimo. Estoy pensando cómo hacemos para mostrárselo a Chris. Chris, le vuela con alguna de estas cosas, le vuela porque él a él le gusta el detalle, ¿no?
+Ramadori, Luis 1 hora 2 minutos 45 segundos
+Dale el detalle.
+
+Infantas, Pilar
+1 hora 2 minutos 48 segundos1:02:48
+Infantas, Pilar 1 hora 2 minutos 48 segundos
+Yeah.
+
+Albella, Guillermo
+1 hora 2 minutos 48 segundos1:02:48
+Albella, Guillermo 1 hora 2 minutos 48 segundos
+Yo pregunto, más allá de las modificaciones y me fue la que hay que hacerle, ¿cómo lo ven en general? ¿Lo ven viable, no viable?
+
+Infantas, Pilar
+1 hora 2 minutos 49 segundos1:02:49
+Infantas, Pilar 1 hora 2 minutos 49 segundos
+But...
+
+Ramadori, Luis
+1 hora 2 minutos 54 segundos1:02:54
+Ramadori, Luis 1 hora 2 minutos 54 segundos
+No, bien, me parece bárbaro.
+
+Infantas, Pilar
+1 hora 2 minutos 56 segundos1:02:56
+Infantas, Pilar 1 hora 2 minutos 56 segundos
+Mucho más de lo que yo imaginaba, la verdad.
+
+Ramadori, Luis
+1 hora 2 minutos 58 segundos1:02:58
+Ramadori, Luis 1 hora 2 minutos 58 segundos
+Lo que no, primero me parece espectacular la evolución del mockup acá a una aplicación, como decís vos, que es beta, o sea, ya tiene la funcionalidad adentro. Después ahora hay que analizarla, hay que hacer todo esto que estamos haciendo y hay que exponérsela al equipo.
+Ramadori, Luis 1 hora 3 minutos 14 segundos
+Mayor.
+
+Albella, Guillermo
+1 hora 3 minutos 16 segundos1:03:16
+Albella, Guillermo 1 hora 3 minutos 16 segundos
+Claro.
+
+Ramadori, Luis
+1 hora 3 minutos 16 segundos1:03:16
+Ramadori, Luis 1 hora 3 minutos 16 segundos
+Entonces ahí sí me parece que hay que avisarle a Rahul.
+Ramadori, Luis 1 hora 3 minutos 21 segundos
+Que la aplicación ya está lista.
+
+Albella, Guillermo
+1 hora 3 minutos 24 segundos1:03:24
+Albella, Guillermo 1 hora 3 minutos 24 segundos
+¿Y estás seguro?
+
+Infantas, Pilar
+1 hora 3 minutos 28 segundos1:03:28
+Infantas, Pilar 1 hora 3 minutos 28 segundos
+yo esperaría el archivo sabes trabajaría o sea ver con un input que esto funciona a mí me quedaron este Guille en general preguntar pregúntale a porque ha hecho todo con esquemas no porque el esquema en varias de las de las pantallas lo sigue mostrando como una jerarquía superior yo no sé si en alguna de las presentaciones y en esta presentación mayor estaba a ese nivel no recuerdo
+
+
+Infantas, Pilar 1 hora 8 minutos 30 segundos
+sí.
+
+Albella, Guillermo
+1 hora 8 minutos 37 segundos1:08:37
+Albella, Guillermo 1 hora 8 minutos 37 segundos
+Y ver si, o sea, está como es muy como yo, solo que bueno, le faltan algunas algunos conocimientos, otros me otros me faltan a mí, pero es igual que yo en crear cosas, así que se lo podría pasar a él perfectamente.
+
+Ramadori, Luis
+1 hora 8 minutos 49 segundos1:08:49
+Ramadori, Luis 1 hora 8 minutos 49 segundos
+Te hago una pregunta, sí, verdad, dale Pilar.
+
+Infantas, Pilar
+1 hora 8 minutos 49 segundos1:08:49
+Infantas, Pilar 1 hora 8 minutos 49 segundos
+Habíamos pens.
+Infantas, Pilar 1 hora 8 minutos 52 segundos
+Perdón, perdón Luis, cuando iniciamos la búsqueda, digamos, yo abrí la búsqueda externa, pero también interna, y de hecho habíamos pensado en Elton, que como dice Guille, cumple el perfil. Obviamente no sabe del tema, pero con quien nos reunimos también. Nosotros tenemos un grupo chico de innovación dentro de mi equipo y claro, hoy día tuvimos una reunión, Guille contó un poco, él hizo unas sugerencias entonces.
+Infantas, Pilar 1 hora 9 minutos 14 segundos
+Yo creo que él sería una buena persona para reemplazar a Guille en su ausencia. Obviamente tenemos que empezar desde ya porque fuera de la parte del código, digamos, toda la parte funcional que hoy conoce Guille, es también, digamos, más valioso incluso, ¿no?
+
+Ramadori, Luis
+1 hora 9 minutos 28 segundos1:09:28
+Ramadori, Luis 1 hora 9 minutos 28 segundos
+Decirle a Elton que lea los el código que ya está escrito, que lea los PowerPoint si ya está, digamos.
+
+Albella, Guillermo
+1 hora 9 minutos 35 segundos1:09:35
+Albella, Guillermo 1 hora 9 minutos 35 segundos
+Claro, ya está.
+
+Ramadori, Luis
+1 hora 9 minutos 35 segundos1:09:35
+Ramadori, Luis 1 hora 9 minutos 35 segundos
+****.
+Ramadori, Luis 1 hora 9 minutos 36 segundos
+Si Clot lo pudo hacer. Bueno, qué complicado que es el mundo en el que se que se viene.
+Ramadori, Luis 1 hora 9 minutos 44 segundos
+Yo diría.
+Ramadori, Luis 1 hora 9 minutos 47 segundos
+¿Cuánto tiempo te vas?
+Ramadori, Luis 1 hora 9 minutos 49 segundos
+6 y 8 semanas.
+
+Infantas, Pilar
+1 hora 9 minutos 50 segundos1:09:50
+Infantas, Pilar 1 hora 9 minutos 50 segundos
+23.
+
+Albella, Guillermo
+1 hora 9 minutos 50 segundos1:09:50
+Albella, Guillermo 1 hora 9 minutos 50 segundos
+Hasta.
+Albella, Guillermo 1 hora 9 minutos 52 segundos
+Hasta el 2720 días.
+
+Ramadori, Luis
+1 hora 9 minutos 54 segundos1:09:54
+Ramadori, Luis 1 hora 9 minutos 54 segundos
+Okay.
+
+Infantas, Pilar
+1 hora 9 minutos 55 segundos1:09:55
+Infantas, Pilar 1 hora 9 minutos 55 segundos
+In this.
+
+Ramadori, Luis
+1 hora 9 minutos 56 segundos1:09:56
+Ramadori, Luis 1 hora 9 minutos 56 segundos
+Bueno.
+Ramadori, Luis 1 hora 9 minutos 58 segundos
+Que le queden los fuentes.
+
+Albella, Guillermo
+1 hora 10 minutos 1 segundo1:10:01
+Albella, Guillermo 1 hora 10 minutos 1 segundo
+Mhm.
+
+Ramadori, Luis
+1 hora 10 minutos 2 segundos1:10:02
+Ramadori, Luis 1 hora 10 minutos 2 segundos
+Pero sobre todo, yo diría que tenga capacidad de levantar la demo.
+
+Albella, Guillermo
+1 hora 10 minutos 3 segundos1:10:03
+Albella, Guillermo 1 hora 10 minutos 3 segundos
+Thank you.
+Albella, Guillermo 1 hora 10 minutos 7 segundos
+Es muy fácil, es en sí, muy sencillo.
+
+Ramadori, Luis
+1 hora 10 minutos 9 segundos1:10:09
+Ramadori, Luis 1 hora 10 minutos 9 segundos
+Está bien porque acá va a venir un como un análisis funcional.
+
+Albella, Guillermo
+1 hora 10 minutos 10 segundos1:10:10
+Albella, Guillermo 1 hora 10 minutos 10 segundos
+Sí.
+
+Ramadori, Luis
+1 hora 10 minutos 15 segundos1:10:15
+Ramadori, Luis 1 hora 10 minutos 15 segundos
+Y va a salir una lista de requerimientos.
+
+Albella, Guillermo
+1 hora 10 minutos 18 segundos1:10:18
+Albella, Guillermo 1 hora 10 minutos 18 segundos
+Mhm.
+
+Ramadori, Luis
+1 hora 10 minutos 19 segundos1:10:19
+Ramadori, Luis 1 hora 10 minutos 19 segundos
+Entonces yo no estaría con la expectativa de que él haga los cambios.
+Ramadori, Luis 1 hora 10 minutos 25 segundos
+Hay que transferirle, la va a tener que tener por las dudas, cloud 2, cloud cloud.
+
+Infantas, Pilar
+1 hora 10 minutos 31 segundos1:10:31
+Infantas, Pilar 1 hora 10 minutos 31 segundos
+Está esperando que lo digas tú, sí.
+
+Ramadori, Luis
+1 hora 10 minutos 36 segundos1:10:36
+Ramadori, Luis 1 hora 10 minutos 36 segundos
+Okay.
+Ramadori, Luis 1 hora 10 minutos 39 segundos
+De vuelta.
+Ramadori, Luis 1 hora 10 minutos 41 segundos
+Con este resultado y este antecedente más lo que le dijo a Chris, Chris, seguro que no va a tener ningún problema en autorizar el cloud code.
+
+A.
+
+Ramadori, Luis
+1 hora 10 minutos 50 segundos1:10:50
+Ramadori, Luis 1 hora 10 minutos 50 segundos
+Prácticamente para nadie con estos resultados de vuelta cuando haya un objetivo por el cual.
+Ramadori, Luis 1 hora 10 minutos 58 segundos
+Vamos a ir, ¿no? Okey, bueno.
+
+Albella, Guillermo
+1 hora 11 minutos1:11:00
+Albella, Guillermo 1 hora 11 minutos
+Mhm.
+
+Ramadori, Luis
+1 hora 11 minutos 3 segundos1:11:03
+Ramadori, Luis 1 hora 11 minutos 3 segundos
+Sí, yo me aseguraría que lo pueda operar, o sea que pueda activar la demo.
+Ramadori, Luis 1 hora 11 minutos 9 segundos
+Que sí pueda a lo mejor explicar alguna cosa de lo que hace y no hace.
+Ramadori, Luis 1 hora 11 minutos 16 segundos
+Y.
+Ramadori, Luis 1 hora 11 minutos 18 segundos
+Sí, bien, perfecto, buenísimo.
+
+Albella, Guillermo
+1 hora 11 minutos 20 segundos1:11:20
+Albella, Guillermo 1 hora 11 minutos 20 segundos
+Okay, perfecto. Sí, yo lo o se lo puedo mandar directamente a él o subirlo en un GitHub privado. No sé, lo que sea más sencillo, podría hacer las 2 cosas. Lo bueno de tener un GitHub privado es que el código está en un solo lugar y si él o yo hace modificaciones se sube ahí.
+
+Infantas, Pilar
+1 hora 11 minutos 21 segundos1:11:21
+Infantas, Pilar 1 hora 11 minutos 21 segundos
+Luis.
+
+Ramadori, Luis
+1 hora 12 minutos 33 segundos1:12:33
+Ramadori, Luis 1 hora 12 minutos 33 segundos
+No habría que pedirlo, eso no me di cuenta, pero sí habría que pedirlo.
+
+Infantas, Pilar
+1 hora 12 minutos 39 segundos1:12:39
+Infantas, Pilar 1 hora 12 minutos 39 segundos
+Okey.
+
+Ramadori, Luis
+1 hora 12 minutos 40 segundos1:12:40
+Ramadori, Luis 1 hora 12 minutos 40 segundos
+Definitivamente ahora es mucho más fácil por los resultados, ¿no? Por eso quiero que hubiera estado bueno tener un video.
+
+Infantas, Pilar
+1 hora 12 minutos 40 segundos1:12:40
+Infantas, Pilar 1 hora 12 minutos 40 segundos
+Sí.
+
+Ramadori, Luis
+1 hora 12 minutos 48 segundos1:12:48
+Ramadori, Luis 1 hora 12 minutos 48 segundos
+Para.
+
+Infantas, Pilar
+1 hora 12 minutos 48 segundos1:12:48
+Infantas, Pilar 1 hora 12 minutos 48 segundos
+Pero quiere.
+Infantas, Pilar 1 hora 12 minutos 51 segundos
+¿Quieres de una vez que se que reservemos un espacio con Guillermo el juez para que nos muestre un ratito? Así salimos todos de eso.
+
+Ramadori, Luis
+1 hora 12 minutos 59 segundos1:12:59
+Ramadori, Luis 1 hora 12 minutos 59 segundos
+Uh.
+
+Albella, Guillermo
+1 hora 13 minutos 1 segundo1:13:01
+Albella, Guillermo 1 hora 13 minutos 1 segundo
+Y ese sí lo grabamos y va a estar en inglés y entonces ya lo puedes compartir con cualquiera.
+
+Infantas, Pilar
+1 hora 13 minutos 1 segundo1:13:01
+Infantas, Pilar 1 hora 13 minutos 1 segundo
+Es 23.
+
+Ramadori, Luis
+1 hora 13 minutos 1 segundo1:13:01
+Ramadori, Luis 1 hora 13 minutos 1 segundo
+¿A quienes?
+
+Infantas, Pilar
+1 hora 13 minutos 4 segundos1:13:04
+Infantas, Pilar 1 hora 13 minutos 4 segundos
+A nosotros, a los en nuestra red, Luis, nuestra red de los jueves.
+
+Ramadori, Luis
+1 hora 13 minutos 10 segundos1:13:10
+Ramadori, Luis 1 hora 13 minutos 10 segundos
+la de los jueves.
+
+Infantas, Pilar
+1 hora 13 minutos 12 segundos1:13:12
+Infantas, Pilar 1 hora 13 minutos 12 segundos
+Claro, lo invitamos ahí a 15 minutos y ya, o si quieres, yo busco un espacio quizás donde ya no estés tú por agenda, donde estemos los demás y lo hacemos antes del jueves, ¿no?
+
+Ramadori, Luis
+1 hora 13 minutos 23 segundos1:13:23
+Ramadori, Luis 1 hora 13 minutos 23 segundos
+Sí, son como 2 reuniones distintas porque a mí lo que me gustaría que Guille explique en 10 minutos es el proceso que siguió.
+
+Infantas, Pilar
+1 hora 13 minutos 31 segundos1:13:31
+Infantas, Pilar 1 hora 13 minutos 31 segundos
+Exacto.
+
+Ramadori, Luis
+1 hora 13 minutos 33 segundos1:13:33
+Ramadori, Luis 1 hora 13 minutos 33 segundos
+Yeah.
+Ramadori, Luis 1 hora 13 minutos 34 segundos
+No te ofenda que si un poquito más resumido.
+
+Infantas, Pilar
+1 hora 13 minutos 34 segundos1:13:34
+Infantas, Pilar 1 hora 13 minutos 34 segundos
+Por eso igual.
+Infantas, Pilar 1 hora 13 minutos 37 segundos
+En la nuestra, en la donde estamos Luis, este Francisco, Lu.
+
+Ramadori, Luis
+1 hora 13 minutos 40 segundos1:13:40
+Ramadori, Luis 1 hora 13 minutos 40 segundos
+No, yo te entiendo porque vos te apasionas porque vos lo viviste y vos fuiste viendo la evolución a lo largo de esas 4 horas, pero conceptualmente ya dijiste, bueno, y encontré un error y le dije y lo corrigió.
+
+Albella, Guillermo
+1 hora 13 minutos 40 segundos1:13:40
+Albella, Guillermo 1 hora 13 minutos 40 segundos
+Pero no era que te Luis, pero no era.
+Albella, Guillermo 1 hora 13 minutos 46 segundos
+Pero.
+
+Infantas, Pilar
+1 hora 13 minutos 50 segundos1:13:50
+Infantas, Pilar 1 hora 13 minutos 50 segundos
+Claro.
+
+Ramadori, Luis
+1 hora 13 minutos 52 segundos1:13:52
+Ramadori, Luis 1 hora 13 minutos 52 segundos
+Otra vez, otra vez, otra vez lo contaste una vez.
+
+Infantas, Pilar
+1 hora 13 minutos 52 segundos1:13:52
+Infantas, Pilar 1 hora 13 minutos 52 segundos
+Ya.
+
+Albella, Guillermo
+1 hora 13 minutos 54 segundos1:13:54
+Albella, Guillermo 1 hora 13 minutos 54 segundos
+Pero no me decía que te interesaban estas cosas, Luis.
+
+Ramadori, Luis
+1 hora 13 minutos 57 segundos1:13:57
+Ramadori, Luis 1 hora 13 minutos 57 segundos
+Sí, me interesan, pero con una vez ya lo conceptualicé. Una vez que lo conceptualicé, el resto ya está. Bueno, sí.
+
+Albella, Guillermo
+1 hora 14 minutos 5 segundos1:14:05
+Albella, Guillermo 1 hora 14 minutos 5 segundos
+Prometo ser más resumido.
+
+Ramadori, Luis
+1 hora 14 minutos 7 segundos1:14:07
+Ramadori, Luis 1 hora 14 minutos 7 segundos
+Y.
+Ramadori, Luis 1 hora 14 minutos 8 segundos
+Tengo que contestarle a Chris sobre esto, le voy a escribir a Chris un resumen de cómo lo conseguiste.
+Ramadori, Luis 1 hora 14 minutos 19 segundos
+Y lo habilito a Chris para armar una reunión con.
+Ramadori, Luis 1 hora 14 minutos 25 segundos
+Con el equipo de Rahul, el de Parser.
+
+Infantas, Pilar
+1 hora 14 minutos 29 segundos1:14:29
+Infantas, Pilar 1 hora 14 minutos 29 segundos
+Sí, claro.
+
+Albella, Guillermo
+1 hora 14 minutos 30 segundos1:14:30
+Albella, Guillermo 1 hora 14 minutos 30 segundos
+Okay.
+
+Ramadori, Luis
+1 hora 14 minutos 30 segundos1:14:30
+Ramadori, Luis 1 hora 14 minutos 30 segundos
+Ikon Rashesh.
+
+Infantas, Pilar
+1 hora 14 minutos 32 segundos1:14:32
+Infantas, Pilar 1 hora 14 minutos 32 segundos
+Mhm.
+
+Ramadori, Luis
+1 hora 14 minutos 33 segundos1:14:33
+Ramadori, Luis 1 hora 14 minutos 33 segundos
+Está bien.
+
+Albella, Guillermo
+1 hora 14 minutos 33 segundos1:14:33
+Albella, Guillermo 1 hora 14 minutos 33 segundos
+Ok, sí.
+
+Ramadori, Luis
+1 hora 14 minutos 35 segundos1:14:35
+Ramadori, Luis 1 hora 14 minutos 35 segundos
+Ahí yo diría, yo voy a ver cómo lo voy a ver si lo puedo.
+Ramadori, Luis 1 hora 14 minutos 41 segundos
+Porque Chris.
+Ramadori, Luis 1 hora 14 minutos 43 segundos
+A veces un poquito muy directo.
+Ramadori, Luis 1 hora 14 minutos 47 segundos
+¿Viste y como que si yo fuera del equipo del otro equipo, el de Parser?
+Ramadori, Luis 1 hora 14 minutos 52 segundos
+Dependiendo como me digan, mirá, che, estos te van a decir como tenés que usar Cloud Code, puede ser un poquito grotesco, entonces.
+
+Sí, nos van a odiar en cristiano.
+Infantas, Pilar 1 hora 15 minutos 1 segundo
+A.
+
+Ramadori, Luis
+1 hora 15 minutos 3 segundos1:15:03
+Ramadori, Luis 1 hora 15 minutos 3 segundos
+Yo diría que la posición que tendrías que tomar vos y vos, Pilar, porque vas a estar en el call, tiene que ver un poquito con compartir la experiencia.
+
+Infantas, Pilar
+1 hora 15 minutos 9 segundos1:15:09
+Infantas, Pilar 1 hora 15 minutos 9 segundos
+No.
+Infantas, Pilar 1 hora 15 minutos 13 segundos
+¿Cómo lo hicimos listo?
+
+Ramadori, Luis
+1 hora 15 minutos 14 segundos1:15:14
+Ramadori, Luis 1 hora 15 minutos 14 segundos
+Claro, viste como dicen, no, yo no doy consejos. Ahora una vez me encontré en una situación parecida y yo hice tal cosa, yo te estoy diciendo que vos hagas lo mismo, no te estoy dando un consejo, no te estoy criticando, lo único que estoy diciendo es yo en una situación similar hice esto otro.
+
+Albella, Guillermo
+1 hora 15 minutos 15 segundos1:15:15
+Albella, Guillermo 1 hora 15 minutos 15 segundos
+Hello.
+Albella, Guillermo 1 hora 15 minutos 24 segundos
+El típico Jose.
+
+Ramadori, Luis
+1 hora 15 minutos 32 segundos1:15:32
+Ramadori, Luis 1 hora 15 minutos 32 segundos
+Servigueta.
+
+Albella, Guillermo
+1 hora 15 minutos 32 segundos1:15:32
+Albella, Guillermo 1 hora 15 minutos 32 segundos
+You get again.
+
+Ramadori, Luis
+1 hora 15 minutos 35 segundos1:15:35
+Ramadori, Luis 1 hora 15 minutos 35 segundos
+Y para mí debería ir por ahí. El problema es que a veces Chris en el medio de una reunión te hace una pregunta directa donde quedaste entre la pared y la pared y le tenés que contestar. Esperemos que no pase. Bueno, habilito a Chris, le cuento cómo hiciste el desarrollo y.
+
+Ramadori, Luis
+1 hora 16 minutos 22 segundos1:16:22
+Ramadori, Luis 1 hora 16 minutos 22 segundos
+No vine el viernes, el viernes, sí.
+
+Infantas, Pilar
+1 hora 16 minutos 23 segundos1:16:23
+Infantas, Pilar 1 hora 16 minutos 23 segundos
+No se va el viernes, sí, perfecto.
+Infantas, Pilar 1 hora 16 minutos 28 segundos
+Sí, nosotros te llamábamos, te subimos a la llamada.
+
+Albella, Guillermo
+1 hora 16 minutos 30 segundos1:16:30
+Albella, Guillermo 1 hora 16 minutos 30 segundos
+Sí, no hay problema, no hay problema.
+
+Ramadori, Luis
+1 hora 16 minutos 34 segundos1:16:34
+Ramadori, Luis 1 hora 16 minutos 34 segundos
+Excelente, buenísimo y nos queda.
+Ramadori, Luis 1 hora 16 minutos 38 segundos
+Le voy a preguntar a Chris si el ver la demo, porque con la reunión, en la reunión con el grupo de los directores, lo que quiero es que cuentes cómo lo hiciste.
+Ramadori, Luis 1 hora 16 minutos 50 segundos
+Y quizás levantar la aplicación para hacer 2 o 3 clics para que vean lo que se produjo.
+
+Infantas, Pilar
+1 hora 16 minutos 55 segundos1:16:55
+Infantas, Pilar 1 hora 16 minutos 55 segundos
+Right.
+
+Albella, Guillermo
+1 hora 16 minutos 55 segundos1:16:55
+Albella, Guillermo 1 hora 16 minutos 55 segundos
+Claro.
+
+Ramadori, Luis
+1 hora 16 minutos 55 segundos1:16:55
+Ramadori, Luis 1 hora 16 minutos 55 segundos
+Bien, en el periodo de tiempo.
+Ramadori, Luis 1 hora 16 minutos 58 segundos
+Y.
+Ramadori, Luis 1 hora 17 minutos
+Pero no mucho más que eso. No quiero una recorrida general, pero Chris creo que claro, a Chris creo que le encantaría ver una recorrida más profunda. Le voy a preguntar cómo quiere hacer o si la hacemos rápida para el grupo de DN A.
+
+Infantas, Pilar
+1 hora 17 minutos 3 segundos1:17:03
+Infantas, Pilar 1 hora 17 minutos 3 segundos
+10 minutos tiene que hacer todo.
+
+Albella, Guillermo
+1 hora 17 minutos 11 segundos1:17:11
+Albella, Guillermo 1 hora 17 minutos 11 segundos
+Okay, I wasn't.
+
+Ramadori, Luis
+1 hora 17 minutos 17 segundos1:17:17
+Ramadori, Luis 1 hora 17 minutos 17 segundos
+De Data NA, la reunión con Johnny y con Kindy.
+Ramadori, Luis 1 hora 17 minutos 21 segundos
+Y.
+
+Infantas, Pilar
+1 hora 17 minutos 24 segundos1:17:24
+Infantas, Pilar 1 hora 17 minutos 24 segundos
+Esa reunión está el jueves, yo le voy a bajar hasta el juez en la mañana, pero es solo de 45 minutos. Yo lo que voy a hacer ahorita Luis es escribirle a Raúl y decirle, mira, nosotros ya hemos hecho el proyecto, el producto.
+
+Albella, Guillermo
+1 hora 17 minutos 27 segundos1:17:27
+Albella, Guillermo 1 hora 17 minutos 27 segundos
+El jueves también.
+Albella, Guillermo 1 hora 17 minutos 31 segundos
+11:30 nuestra, Luis.
+Albella, Guillermo 1 hora 17 minutos 42 segundos
+Ya está hecho, ya está.
+
+Infantas, Pilar
+1 hora 17 minutos 42 segundos1:17:42
+Infantas, Pilar 1 hora 17 minutos 42 segundos
+¿Cuándo los mostramos? ¿Cuánto espacio podemos tener en esta reunión? Otro espacio un poco para que él pueda pivotear eso.
+
+Ramadori, Luis
+1 hora 17 minutos 49 segundos1:17:49
+Ramadori, Luis 1 hora 17 minutos 49 segundos
+Rahul, noticia espectacular. Sí, avísale antes de que llame Chris, antes de que Chris lo llame para hacer la reunión.
+
+Infantas, Pilar
+1 hora 17 minutos 54 segundos1:17:54
+Infantas, Pilar 1 hora 17 minutos 54 segundos
+Sí, por eso le voy a dejar un mensaje ahí ahorita, o sea, usando Cloud Code, pa, pa, pa, pum.
+
+Ramadori, Luis
+1 hora 17 minutos 57 segundos1:17:57
+Ramadori, Luis 1 hora 17 minutos 57 segundos
+Yeah.
+Ramadori, Luis 1 hora 18 minutos
+No lo vas a poder creer. La aplicación ya está en beta en un estado full funcional para que se evalúe y se terminen de definir el alcance. También al demonio. Listo, perfecto, buenísimo. Felicitaciones, muy bueno, me encanta.
+
+Infantas, Pilar
+1 hora 18 minutos 5 segundos1:18:05
+Infantas, Pilar 1 hora 18 minutos 5 segundos
+Alfa, alfa.
+
+Albella, Guillermo
+1 hora 18 minutos 18 segundos1:18:18
+Albella, Guillermo 1 hora 18 minutos 18 segundos
+Gracias. This is.
+
+Infantas, Pilar
+1 hora 18 minutos 20 segundos1:18:20
+Infantas, Pilar 1 hora 18 minutos 20 segundos
+O K, otra vez, insisto, horas lo conversas tú con Chris, mando yo un correo a Raúl. ¿Cómo quieres que lo manejemos?
+
+Ramadori, Luis
+1 hora 18 minutos 28 segundos1:18:28
+Ramadori, Luis 1 hora 18 minutos 28 segundos
+Hagamos las 2 cosas, mándale un correo a Raúl.
+
+Infantas, Pilar
+1 hora 18 minutos 29 segundos1:18:29
+Infantas, Pilar 1 hora 18 minutos 29 segundos
+O K.
+Infantas, Pilar 1 hora 18 minutos 31 segundos
+Ya yo y voy a mandar lo de las preguntas. Yo le digo a Raúl, le digo a Raúl de cariño, no mentira.
+
+Ramadori, Luis
+1 hora 18 minutos 31 segundos1:18:31
+Ramadori, Luis 1 hora 18 minutos 31 segundos
+Rahul, acuérdate, no es Rahul, no.
+
+Albella, Guillermo
+1 hora 18 minutos 33 segundos1:18:33
+Albella, Guillermo 1 hora 18 minutos 33 segundos
+Sí, es Rahul, pero bueno.
+Albella, Guillermo 1 hora 18 minutos 37 segundos
+Es.
+
+Infantas, Pilar
+1 hora 18 minutos 39 segundos1:18:39
+Infantas, Pilar 1 hora 18 minutos 39 segundos
+Creo que tampoco sí se rayo lo vamos a preguntar la próxima vez. bueno.
+
+Ramadori, Luis
+1 hora 18 minutos 42 segundos1:18:42
+Ramadori, Luis 1 hora 18 minutos 42 segundos
+Bueno, listo.
+
+Albella, Guillermo
+1 hora 18 minutos 44 segundos1:18:44
+Albella, Guillermo 1 hora 18 minutos 44 segundos
+Bueno.
+
+Infantas, Pilar
+1 hora 18 minutos 44 segundos1:18:44
+Infantas, Pilar 1 hora 18 minutos 44 segundos
+Cuídense, un beso, chao.
+
+Ramadori, Luis
+1 hora 18 minutos 45 segundos1:18:45
+Ramadori, Luis 1 hora 18 minutos 45 segundos
+Buenísimo, gracias.

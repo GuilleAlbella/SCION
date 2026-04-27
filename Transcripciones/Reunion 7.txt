@@ -1,0 +1,627 @@
+nfantas, Pilar inició la transcripción
+
+Kulkarni, Rahul
+0 minutos 3 segundos0:03
+Kulkarni, Rahul 0 minutos 3 segundos
+From your side.
+
+Infantas, Pilar
+0 minutos 4 segundos0:04
+Infantas, Pilar 0 minutos 4 segundos
+But it.
+
+Albella, Guillermo
+0 minutos 5 segundos0:05
+Albella, Guillermo 0 minutos 5 segundos
+It is.
+Albella, Guillermo 0 minutos 5 segundos
+Yeah.
+
+Infantas, Pilar
+0 minutos 5 segundos0:05
+Infantas, Pilar 0 minutos 5 segundos
+Yes, I have to start that transcription in order to have the notes later. And if you prefer, we can start showing the solution that is built from side on side. So we can align any gaps in the definition or any doubts.
+
+Kulkarni, Rahul
+0 minutos 11 segundos0:11
+Kulkarni, Rahul 0 minutos 11 segundos
+Sure.
+
+Infantas, Pilar
+0 minutos 24 segundos0:24
+Infantas, Pilar 0 minutos 24 segundos
+can be clarified.
+
+Albella, Guillermo
+0 minutos 27 segundos0:27
+Albella, Guillermo 0 minutos 27 segundos
+Vit.
+
+Kulkarni, Rahul
+0 minutos 27 segundos0:27
+Kulkarni, Rahul 0 minutos 27 segundos
+Sure, yep.
+
+Infantas, Pilar
+0 minutos 29 segundos0:29
+Infantas, Pilar 0 minutos 29 segundos
+Perfect.
+
+Albella, Guillermo
+11 minutos 57 segundos11:57
+Albella, Guillermo 11 minutos 57 segundos
+Yes.
+
+Infantas, Pilar
+11 minutos 57 segundos11:57
+Infantas, Pilar 11 minutos 57 segundos
+Yes, go, please.
+
+Kulkarni, Rahul
+11 minutos 59 segundos11:59
+Kulkarni, Rahul 11 minutos 59 segundos
+how to filter or narrow down to specific object or objects in the lineage visualization part.
+
+Albella, Guillermo
+12 minutos 11 segundos12:11
+Albella, Guillermo 12 minutos 11 segundos
+Ah.
+Albella, Guillermo 12 minutos 14 segundos
+Ah.
+Albella, Guillermo 12 minutos 15 segundos
+You can. I don't understand correct perfectly the question. See.
+
+Infantas, Pilar
+12 minutos 21 segundos12:21
+Infantas, Pilar 12 minutos 21 segundos
+Como place. Como place. Filter on.
+
+Albella, Guillermo
+12 minutos 29 segundos12:29
+Albella, Guillermo 12 minutos 29 segundos
+Carvalho, I got the he.
+
+Infantas, Pilar
+12 minutos 32 segundos12:32
+Infantas, Pilar 12 minutos 32 segundos
+Let me, let me answer to be sure. Rahul, here you can select the snapshot and on object of interest, you can select the object that you want to search. For example, there are the list of the tables involved. I don't know if that's what you mean.
+
+Albella, Guillermo
+12 minutos 33 segundos12:33
+Albella, Guillermo 12 minutos 33 segundos
+He.
+
+Kulkarni, Rahul
+12 minutos 54 segundos12:54
+Kulkarni, Rahul 12 minutos 54 segundos
+Yeah, yeah, so yeah, the overall.
+Kulkarni, Rahul 12 minutos 57 segundos
+So intention was that.
+Kulkarni, Rahul 13 minutos 1 segundo
+But if there are large number of objects, so any large customer would have tables in hundreds, thousands, right? So.
+
+Infantas, Pilar
+13 minutos 10 segundos13:10
+Infantas, Pilar 13 minutos 10 segundos
+Mm.
+
+Kulkarni, Rahul
+13 minutos 13 segundos13:13
+Kulkarni, Rahul 13 minutos 13 segundos
+What's the best way to handle that? Maybe a search field or...
+
+Albella, Guillermo
+13 minutos 17 segundos13:17
+Albella, Guillermo 13 minutos 17 segundos
+We can, I can.
+Albella, Guillermo 13 minutos 19 segundos
+I can add to if you want, I know I think I can I can add here to filter to right then the the the and then the.
+
+Infantas, Pilar
+13 minutos 29 segundos13:29
+Infantas, Pilar 13 minutos 29 segundos
+The Castro.
+Infantas, Pilar 13 minutos 33 segundos
+Hey, so you can enter, you can enter that that the text if we understood correctly, Rahul, you mean that in in a regular customer we will have a lot of obvious and will be kind of difficult to choose in the drop down list, so it can be added a search.
+
+Albella, Guillermo
+13 minutos 37 segundos13:37
+Albella, Guillermo 13 minutos 37 segundos
+Okay, yes.
+Albella, Guillermo 13 minutos 50 segundos
+What?
+
+Infantas, Pilar
+13 minutos 54 segundos13:54
+Infantas, Pilar 13 minutos 54 segundos
+Tool.
+
+Kulkarni, Rahul
+13 minutos 56 segundos13:56
+Kulkarni, Rahul 13 minutos 56 segundos
+Yeah, yeah, something like that would be helpful. Or maybe some sort of a hierarchical way of navigating to the objects. I'm just thinking out, Kindy or others, you can also comment. Maybe by driving down through the database hierarchy.
+
+Albella, Guillermo
+13 minutos 59 segundos13:59
+Albella, Guillermo 13 minutos 59 segundos
+Okay.
+
+Kulkarni, Rahul
+14 minutos 15 segundos14:15
+Kulkarni, Rahul 14 minutos 15 segundos
+Right.
+Kulkarni, Rahul 14 minutos 17 segundos
+So you first narrow down to database and then the tables or views, whatever.
+
+Albella, Guillermo
+14 minutos 18 segundos14:18
+Albella, Guillermo 14 minutos 18 segundos
+Okay, I can add something like that.
+Albella, Guillermo 14 minutos 24 segundos
+Okay, yes.
+
+Ramadori, Luis
+14 minutos 24 segundos14:24
+Ramadori, Luis 14 minutos 24 segundos
+If I may, maybe the people that are using Data DNA today might be the right ones to suggest the best search mode, but probably having both.
+Ramadori, Luis 14 minutos 38 segundos
+Because it would be interesting if you just type, I don't know, banking or core underscore banking, and then you get loans and you get, I don't know, 20, 30 options, different options that might be you don't know exactly what is the navigate, the hierarchy that you need to navigate to get there.
+Ramadori, Luis 14 minutos 58 segundos
+So maybe if you have both options, would be interesting.
+
+Flyvholm, Kindy
+15 minutos 2 segundos15:02
+Flyvholm, Kindy 15 minutos 2 segundos
+Yeah, I mean, customers are typically looking for, you know, when they're searching, they're looking for a report or they're looking for a table or they're looking for, you know, maybe they're looking for a column or they're looking for an application. So that's kind of part of the hierarchy, right? So like columns belong to tables.
+
+Kulkarni, Rahul
+15 minutos 3 segundos15:03
+Kulkarni, Rahul 15 minutos 3 segundos
+Yes.
+
+Albella, Guillermo
+15 minutos 3 segundos15:03
+Albella, Guillermo 15 minutos 3 segundos
+Okay.
+
+
+Ramadori, Luis
+30 minutos 56 segundos30:56
+Ramadori, Luis 30 minutos 56 segundos
+Okay.
+
+Flyvholm, Kindy
+31 minutos 10 segundos31:10
+Flyvholm, Kindy 31 minutos 10 segundos
+like make sure that your environments are synced up and what's going to be the impact across them. This is excellent, right? Because for them to do this today, they have to do it manually. They, you know, they think that things are in sync, but of course they're not always in sync because when you have production problems, you fix those things in production.
+Flyvholm, Kindy 31 minutos 30 segundos
+So I can imagine this would be very, very useful for like the managed service team and the developers for sure.
+
+Kulkarni, Rahul
+31 minutos 42 segundos31:42
+Kulkarni, Rahul 31 minutos 42 segundos
+It's like a kind of testing of your impact analysis, so validation of your impact analysis, right? Actually. So you make code changes, yeah, you make code changes, you roll them out to a prod-like environment, and you validate whether the original impact analysis, yeah, you did.
+
+Ramadori, Luis
+31 minutos 49 segundos31:49
+Ramadori, Luis 31 minutos 49 segundos
+Yep.
+
+Flyvholm, Kindy
+31 minutos 50 segundos31:50
+Flyvholm, Kindy 31 minutos 50 segundos
+Yeah, yeah, yeah, yeah.
+
+Kulkarni, Rahul
+32 minutos 2 segundos32:02
+Kulkarni, Rahul 32 minutos 2 segundos
+is correct or you missed any impact.
+
+Ramadori, Luis
+32 minutos 5 segundos32:05
+Ramadori, Luis 32 minutos 5 segundos
+Yeah, sure.
+
+Kulkarni, Rahul
+32 minutos 7 segundos32:07
+Kulkarni, Rahul 32 minutos 7 segundos
+In fact,
+
+Ramadori, Luis
+32 minutos 7 segundos32:07
+Ramadori, Luis 32 minutos 7 segundos
+Because you can select the snapshot, you can go backward to the specific snapshot, or you can select the range, understand what happened because we're having so many problems. You can find that, yeah.
+
+Kulkarni, Rahul
+32 minutos 21 segundos32:21
+Kulkarni, Rahul 32 minutos 21 segundos
+Yeah.
+Kulkarni, Rahul 32 minutos 24 segundos
+In fact, talking about use cases, I'm thinking, and everybody you can comment, that based on this demo, the kind of features and capabilities, what use cases would be addressed by this?
+Kulkarni, Rahul 32 minutos 43 segundos
+Right, that will be important information for salespeople, or...
+
+Flyvholm, Kindy
+32 minutos 48 segundos32:48
+Flyvholm, Kindy 32 minutos 48 segundos
+I, I, I mean, I just...
+Flyvholm, Kindy 32 minutos 51 segundos
+Ah, salespeople don't care about this. I mean, I would just say, you know, the ability to compare, you know, data sets across environments, right? You can, and developers will immediately know what that means.
+Flyvholm, Kindy 33 minutos 8 segundos
+Right? And salespeople will never know what it means no matter how much you try to explain it to them.
+Flyvholm, Kindy 33 minutos 14 segundos
+That's just how it is.
+
+Kulkarni, Rahul
+33 minutos 16 segundos33:16
+Kulkarni, Rahul 33 minutos 16 segundos
+Yeah. I mean, for example, this is 1 use case we were talking about, right? What if analysis is definitely helpful for developers, even for planners, right? Hey, this is the kind of changes that I'm...
+
+Flyvholm, Kindy
+33 minutos 30 segundos33:30
+Flyvholm, Kindy 33 minutos 30 segundos
+Well, you know, just think like if a, you know, if we want to make a change to transcend and Teradata, right? Somebody has to say, I have to tell you what the impact of that's going to be, right? What all objects are going to be involved? What types of objects are they in order for me to get the relevant?
+
+Ramadori, Luis
+33 minutos 37 segundos33:37
+Ramadori, Luis 33 minutos 37 segundos
+Yes.
+
+Flyvholm, Kindy
+33 minutos 49 segundos33:49
+Flyvholm, Kindy 33 minutos 49 segundos
+programmers who can work with those objects, right? And then you can make an estimate of your plan. So, you know, so impact analysis is always helpful.
+
+Kulkarni, Rahul
+34 minutos 4 segundos34:04
+Kulkarni, Rahul 34 minutos 4 segundos
+I mean, that's one use case, right? I'm talking about and in the context of the architecture diagram that John had made, I just pasted it on chat. The right side of this diagram, right, it says use cases to be decided.
+Kulkarni, Rahul 34 minutos 20 segundos
+So now that we have...
+
+Flyvholm, Kindy
+34 minutos 21 segundos34:21
+Flyvholm, Kindy 34 minutos 21 segundos
+Right, but that is a use case.
+
+Kulkarni, Rahul
+34 minutos 24 segundos34:24
+Kulkarni, Rahul 34 minutos 24 segundos
+Yeah, that's just a use case, right? I'm talking about.
+Kulkarni, Rahul 34 minutos 27 segundos
+What different use cases do we think that this solution as we see in front of us would support?
+
+Ramadori, Luis
+34 minutos 35 segundos34:35
+Ramadori, Luis 34 minutos 35 segundos
+Yeah, I guess that we can start with the PowerPoints.
+Ramadori, Luis 34 minutos 39 segundos
+that we used to sell data DNA. I'm sure there should be a lot of details on what data DNA is, the value of data DNA. And then we can double.
+
+Flyvholm, Kindy
+34 minutos 49 segundos34:49
+Flyvholm, Kindy 34 minutos 49 segundos
+Oh, oh, Luis, we have hundreds, thousands of those pages, right? But I mean, of course we can use that, but this is a frustration I have with this project is that the people who need to sell this.
+Flyvholm, Kindy 35 minutos 7 segundos
+is the people we need to be talking to, right? We need just a small working group like...
+
+Ramadori, Luis
+35 minutos 10 segundos35:10
+Ramadori, Luis 35 minutos 10 segundos
+Yeah.
+
+Flyvholm, Kindy
+35 minutos 15 segundos35:15
+Flyvholm, Kindy 35 minutos 15 segundos
+half an hour of, you know, two salespeople in US, two in EMEA and two in Asia, right? That we say, if you had this and it did these following things for you, and we show it to them, you know, and maybe not just account people, but maybe they're architects, right?
+
+Ramadori, Luis
+35 minutos 36 segundos35:36
+Ramadori, Luis 35 minutos 36 segundos
+Yeah.
+
+Flyvholm, Kindy
+35 minutos 37 segundos35:37
+Flyvholm, Kindy 35 minutos 37 segundos
+How could you position this at your customers? How would you do this work, right? So instead of us putting the words in their mouth, they are saying, oh, they'll come up with stuff, you guys, that we couldn't think of in 100 years because they're out talking to the customer every day. And so if we get their input.
+Flyvholm, Kindy 35 minutos 57 segundos
+even just one working session per, you know, get, let's just get six people, eight people, show this to them, ask them for their input, aggregate that together, and then we can, then we can take that to create some initial, like, you know, like a one-pager kind of thing, right?
+Flyvholm, Kindy 36 minutos 17 segundos
+and start floating that out to see, okay, who's interested? This is like the marketing feasibility component of this, right?
+
+Ramadori, Luis
+36 minutos 25 segundos36:25
+Ramadori, Luis 36 minutos 25 segundos
+Yep.
+
+And 100%, guys, like, we're all down in the deep technical stuff. You know, they'll bring a perspective to this that we won't think of.
+
+Ramadori, Luis
+36 minutos 38 segundos36:38
+Ramadori, Luis 36 minutos 38 segundos
+Yeah, first of all, you have to convince them, you have to convince them that a well-managed platform, it's a platform that will grow. Because sometimes they think that a well-administered platform delays the ARR. So it's a...
+
+Kulkarni, Rahul
+36 minutos 38 segundos36:38
+Kulkarni, Rahul 36 minutos 38 segundos
+That's a good suggestion.
+
+Flyvholm, Kindy
+36 minutos 57 segundos36:57
+Flyvholm, Kindy 36 minutos 57 segundos
+This is a problem I mentioned today on the leadership team call, right? Is if the account teams think that this is going to give visibility into their system in a way that helps the customer make the system smaller or helps the customer migrate or whatever, they're not going to sell it at all, even if it's free.
+
+Ramadori, Luis
+37 minutos37:00
+Ramadori, Luis 37 minutos
+Yes.
+
+Flyvholm, Kindy
+37 minutos 19 segundos37:19
+Flyvholm, Kindy 37 minutos 19 segundos
+right? They're not going to let the customer have it if they're afraid of what the consequences of that are. That's a battle we can't fight in this team, right? All we can do is let's get a few different...
+Flyvholm, Kindy 37 minutos 35 segundos
+Account people.
+
+Albella, Guillermo
+46 minutos 20 segundos46:20
+Albella, Guillermo 46 minutos 20 segundos
+Mhm.
+
+Kulkarni, Rahul
+46 minutos 32 segundos46:32
+Kulkarni, Rahul 46 minutos 32 segundos
+Right, we are not processing any usage data, but we can help extract it, so Guillermo.
+Kulkarni, Rahul 46 minutos 41 segundos
+You can build that interface or I can build it, the usage data that you have, you need, the psion needs. We can build an extraction interface to get that data, right? Either, I guess either one of us can build it, right?
+
+Infantas, Pilar
+46 minutos 42 segundos46:42
+Infantas, Pilar 46 minutos 42 segundos
+Oh, got it.
+
+Albella, Guillermo
+46 minutos 53 segundos46:53
+Albella, Guillermo 46 minutos 53 segundos
+Okay.
+
+Kulkarni, Rahul
+46 minutos 57 segundos46:57
+Kulkarni, Rahul 46 minutos 57 segundos
+It's not a very large.
+
+Ramadori, Luis
+46 minutos 58 segundos46:58
+Ramadori, Luis 46 minutos 58 segundos
+If I may, if I may, and I'm not an architecture, an architect, so for the clarity of the interfaces, I would say that probably science should not be going directly.
+Ramadori, Luis 47 minutos 13 segundos
+Because if not, imagine that you have to administer this and then you have the parser extracted information, information that is extracted directly from Zion, maintaining the both access synchronized. So when we see statistics is in sync with the
+Ramadori, Luis 47 minutos 34 segundos
+parser snapshot and all that, we should have, my suggestion, is to have one input to Psion that comes from the same source. So all the connections are managed outside of the Psion interface. A suggestion.
+
+Kulkarni, Rahul
+47 minutos 54 segundos47:54
+Kulkarni, Rahul 47 minutos 54 segundos
+Yeah, yeah, that makes sense. So in fact, for data dictionary also, the spec that I shared, it's primarily based on Psion requirements, right? Because again, from code parsing perspective, we need a very small amount of information from data dictionary.
+Kulkarni, Rahul 48 minutos 14 segundos
+Right, column names, table names, and all. We don't even...
+Kulkarni, Rahul 48 minutos 18 segundos
+worry about data types and length and all from a lineage perspective. As of now, there could be additional features in future to compare the data types and lengths across the stream that the data is moving. But I mean, I think that's an advanced feature. So.
+Kulkarni, Rahul 48 minutos 37 segundos
+Again, the extract.
+Kulkarni, Rahul 48 minutos 41 segundos
+We can implement that based on Psion requirements. So, you know, pretty much the extraction will be, but it's a separate component, right? Even the data dictionary extractor is a separate component. TBQL extraction is another component. The usage extraction would be a third piece.
+Kulkarni, Rahul 49 minutos 1 segundo
+so that we keep those three pieces together. And the 4th one, when it comes in in a future release, would be the actual code. So BTX, et cetera, right? So that will be the 4th.
+Kulkarni, Rahul 49 minutos 13 segundos
+kind of group of information that we will extract. So I think I'm okay with implementing the usage extraction as well, based on what Psion needs. So again, code parser does not need usage information. The extraction will be.
+Kulkarni, Rahul 49 minutos 33 segundos
+Based on what I on needs.
+
+Albella, Guillermo
+49 minutos 37 segundos49:37
+Albella, Guillermo 49 minutos 37 segundos
+Okay.
+Albella, Guillermo 49 minutos 39 segundos
+Tool.
+
+Kulkarni, Rahul
+49 minutos 40 segundos49:40
+Kulkarni, Rahul 49 minutos 40 segundos
+Okay.
+Kulkarni, Rahul 49 minutos 44 segundos
+Graph, my next question is around graph. Again, the same question that how to handle high number of objects in the graph.
+Kulkarni, Rahul 49 minutos 54 segundos
+Because I remember John mentioning this multiple times that looking at the enterprise wide graph, it has, it's literally unmanageable, right? So it has to be, there has to be some kind of a drill up, drill down. I remember him mentioning that.
+
+Flyvholm, Kindy
+50 minutos 14 segundos50:14
+Flyvholm, Kindy 50 minutos 14 segundos
+Yeah, you have to have some kind of tolerance for how much you're actually going to visualize and then how the customer can, you know, expand the graph, how they can, you know, drill up and drill down or drill to the left or drill to the right. Because there can be
+Flyvholm, Kindy 50 minutos 33 segundos
+billions of relationships. I mean, I can tell you that we're working on the impact analysis right now for Lloyds Bank.
+Flyvholm, Kindy 50 minutos 42 segundos
+and there's over 500 million relationships.
+Flyvholm, Kindy 50 minutos 54 segundos
+So, you know, you're not going to show that all on one screen.
+
+Albella, Guillermo
+50 minutos 58 segundos50:58
+Albella, Guillermo 50 minutos 58 segundos
+No, this is impossible, but I need to have when when I have the the all the information to to to test really test this this tool, I will be I will make some modification to to.
+
+Infantas, Pilar
+50 minutos 59 segundos50:59
+Infantas, Pilar 50 minutos 59 segundos
+Yes.
+
+Flyvholm, Kindy
+51 minutos51:00
+Flyvholm, Kindy 51 minutos
+Yeah.
+
+Albella, Guillermo
+51 minutos 16 segundos51:16
+Albella, Guillermo 51 minutos 16 segundos
+To to have this better. OK, right now we have a small quantity of object, but when when I have when I have no have no.
+
+Infantas, Pilar
+51 minutos 29 segundos51:29
+Infantas, Pilar 51 minutos 29 segundos
+Hey, when we have a bigger data set.
+
+Albella, Guillermo
+51 minutos 30 segundos51:30
+Albella, Guillermo 51 minutos 30 segundos
+When I have.
+
+Ramadori, Luis
+51 minutos 31 segundos51:31
+Ramadori, Luis 51 minutos 31 segundos
+Yes.
+
+
+Kulkarni, Rahul
+59 minutos 5 segundos59:05
+Kulkarni, Rahul 59 minutos 5 segundos
+So I know we are out of time. I wanted to discuss one more point about the analytics piece, right? The reports, the click reports. Perhaps we need another meeting.
+
+Flyvholm, Kindy
+59 minutos 15 segundos59:15
+Flyvholm, Kindy 59 minutos 15 segundos
+Yeah, but you don't need click reports. You don't need them. You don't need them.
+Flyvholm, Kindy 59 minutos 20 segundos
+This is a great front end. This is amazing.
+
+Kulkarni, Rahul
+59 minutos 21 segundos59:21
+Kulkarni, Rahul 59 minutos 21 segundos
+Okay.
+Kulkarni, Rahul 59 minutos 24 segundos
+Okay. Okay.
+
+Flyvholm, Kindy
+59 minutos 26 segundos59:26
+Flyvholm, Kindy 59 minutos 26 segundos
+I mean...
+
+Kulkarni, Rahul
+59 minutos 27 segundos59:27
+Kulkarni, Rahul 59 minutos 27 segundos
+Cool, then, yeah.
+
+Flyvholm, Kindy
+59 minutos 29 segundos59:29
+Flyvholm, Kindy 59 minutos 29 segundos
+I think this is the front end, right? You want to interact with the environment in a way that you go, I'm looking at this object, now tell me all the things about this object, right? And you can't tell all the things about an object on one page. There's no way. You have to have multiple different, you know, pages.
+
+Infantas, Pilar
+59 minutos 30 segundos59:30
+Infantas, Pilar 59 minutos 30 segundos
+The.
+
+Flyvholm, Kindy
+59 minutos 48 segundos59:48
+Flyvholm, Kindy 59 minutos 48 segundos
+to tell different things about that object. What relationships does that object have? How, you know, how big is that object? Is the object used? Who uses the object? You know, what are all the columns in the object? When were the last changes that you made to object, right? I mean, there's all kinds of things that you would want to say about an object or a group of objects, but you've got...
+Flyvholm, Kindy 1 hora 12 segundos
+Many of them are already here.
+
+Kulkarni, Rahul
+1 hora 19 segundos1:00:19
+Kulkarni, Rahul 1 hora 19 segundos
+Okay, cool. So basically this is kind of a self-contained portal front end, right? Not just front end, but an application. And this will expand. This will go through its own roadmap as we.
+Kulkarni, Rahul 1 hora 35 segundos
+mature it more and more. Right now it has a certain set of very good features that I see. But in short, this is it, right? We don't need any other front end or any other further integration.
+
+Flyvholm, Kindy
+1 hora 48 segundos1:00:48
+Flyvholm, Kindy 1 hora 48 segundos
+I don't think so.
+
+Kulkarni, Rahul
+1 hora 48 segundos1:00:48
+Kulkarni, Rahul 1 hora 48 segundos
+Right, Kindy, that's what we are saying. Okay, okay.
+
+Flyvholm, Kindy
+1 hora 50 segundos1:00:50
+Flyvholm, Kindy 1 hora 50 segundos
+I don't think so. I mean, there will always come requests, guys. There will always come requests. And you know what? That's a good sign. That means people are engaged with what you're doing and they want to make it better. So, you know, you're never going to be done. But what you do need to do is come up with a way that says the functionality
+
+Albella, Guillermo
+1 hora 51 segundos1:00:51
+Albella, Guillermo 1 hora 51 segundos
+And either of Phishing.
+
+Flyvholm, Kindy
+1 hora 1 minuto 10 segundos1:01:10
+Flyvholm, Kindy 1 hora 1 minuto 10 segundos
+for version one or whatever you're calling it, is going to start here and end here, and then you're going to check that in, and that code has to stay stable, right? Because if you're going to install this in a customer's premise, for example, even we don't install code at a customer's premise, and we have to go through all kinds of infrastructure.
+Flyvholm, Kindy 1 hora 1 minuto 33 segundos
+information security checks, all kinds of checks. So you have to have versions of your code. You have to have a clear, you know, kind of warranty around the code that you've got. And you know, you need to show like you have a regular release cycle and you know, you have a fallback plan and you also have a plan for.
+Flyvholm, Kindy 1 hora 1 minuto 56 segundos
+you know, how to make bug fixes so that they apply to all the customers that have your code. They don't just roll out, you know, to individual customers. So, you know, so just something to be thinking about as you get closer to the version one, right?
+
+Albella, Guillermo
+1 hora 2 minutos 15 segundos1:02:15
+Albella, Guillermo 1 hora 2 minutos 15 segundos
+Mm.
+
+Kulkarni, Rahul
+1 hora 2 minutos 15 segundos1:02:15
+Kulkarni, Rahul 1 hora 2 minutos 15 segundos
+Sure, yes.
+Kulkarni, Rahul 1 hora 2 minutos 18 segundos
+point. Okay, so I think it has been a great meeting, fantastic application. So I think it's pretty much congratulations on that. We can present it to Chris and then we can think about the gaps. Yeah.
+
+Albella, Guillermo
+1 hora 2 minutos 30 segundos1:02:30
+Albella, Guillermo 1 hora 2 minutos 30 segundos
+Yeah.
+
+Infantas, Pilar
+1 hora 2 minutos 31 segundos1:02:31
+Infantas, Pilar 1 hora 2 minutos 31 segundos
+This already, I already saw it.
+
+Kulkarni, Rahul
+1 hora 2 minutos 35 segundos1:02:35
+Kulkarni, Rahul 1 hora 2 minutos 35 segundos
+Mm.
+Kulkarni, Rahul 1 hora 2 minutos 36 segundos
+Thank you.
+
+Infantas, Pilar
+1 hora 2 minutos 36 segundos1:02:36
+Infantas, Pilar 1 hora 2 minutos 36 segundos
+I saw it, so...
+
+Albella, Guillermo
+1 hora 2 minutos 38 segundos1:02:38
+Albella, Guillermo 1 hora 2 minutos 38 segundos
+Yes.
+
+Kulkarni, Rahul
+1 hora 2 minutos 39 segundos1:02:39
+Kulkarni, Rahul 1 hora 2 minutos 39 segundos
+OKOK, great, great.
+
+Albella, Guillermo
+1 hora 2 minutos 41 segundos1:02:41
+Albella, Guillermo 1 hora 2 minutos 41 segundos
+Yes.
+
+Flyvholm, Kindy
+1 hora 2 minutos 42 segundos1:02:42
+Flyvholm, Kindy 1 hora 2 minutos 42 segundos
+All right. Thank you, everybody.
+
+Kulkarni, Rahul
+1 hora 2 minutos 44 segundos1:02:44
+Kulkarni, Rahul 1 hora 2 minutos 44 segundos
+Thank you. Thank you very much.
+Kulkarni, Rahul 1 hora 2 minutos 46 segundos
+Bye-bye.
+
+Guedes, Helton detuvo la transcripción

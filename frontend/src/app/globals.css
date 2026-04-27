@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-td-navy: #00233C;
+  --color-td-navy-light: #003355;
+  --color-td-orange: #F37440;
+  --color-td-gray: #F0F0F0;
+  --color-td-gray-dark: #7C8185;
+  --color-td-upstream: #DC2626;
+  --color-td-downstream: #16A34A;
+  --color-td-object: #2563EB;
+  --color-td-white: #FFFFFF;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-td-gray);
+  color: #1a1a1a;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Dark mode overrides */
+.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Dark mode utility overrides for common patterns */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+.dark .bg-td-gray {
+  background-color: #0f172a !important;
+}
+.dark .bg-gray-50 {
+  background-color: #1e293b !important;
+}
+.dark .bg-gray-100 {
+  background-color: #334155 !important;
+}
+.dark .border-gray-200 {
+  border-color: #334155 !important;
+}
+.dark .border-gray-100 {
+  border-color: #1e293b !important;
+}
+.dark .border-gray-300 {
+  border-color: #475569 !important;
+}
+.dark .text-gray-700 {
+  color: #cbd5e1 !important;
+}
+.dark .text-td-navy {
+  color: #93c5fd !important;
+}
+.dark .text-td-gray-dark {
+  color: #94a3b8 !important;
+}
+.dark .hover\:bg-gray-50:hover {
+  background-color: #334155 !important;
+}
+.dark .hover\:bg-gray-200:hover {
+  background-color: #475569 !important;
+}
+.dark .shadow-sm {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+.dark input, .dark select, .dark textarea {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+.dark pre {
+  background-color: #0f172a !important;
+}
+.dark .bg-gradient-to-br.from-slate-50 {
+  background: #1e293b !important;
+}
+
+/* Page transition */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-page-in {
+  animation: pageIn 0.3s ease-out forwards;
+}
+
+/* Animated counter */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-count-up {
+  animation: countUp 0.5s ease-out forwards;
+}
+
+/* Toast animations */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+.toast-enter {
+  animation: toastIn 0.3s ease-out forwards;
+}
+.toast-exit {
+  animation: toastOut 0.2s ease-in forwards;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+.dark .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
