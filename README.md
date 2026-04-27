@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.11.01
+**Version:** BETA v1.11.02
 
 ---
 
@@ -44,7 +44,7 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 | **Graph & Impact** | SQL-native dependency graph, blast radius, fragility, query-count integration |
 | **Usage & Criticality** | Usage frequency scoring, combined criticality (60% usage + 40% graph) |
 | **Intelligence Metrics** | Governance scorecard, domain risk, volatility, stability timeline |
-| **TAISA AI Layer** | LLM-powered (Groq / Llama 4 Scout), conversational Q&A with full SCION access |
+| **TAISA AI Layer** | LLM-powered conversational Q&A with full SCION access |
 
 ---
 
@@ -58,7 +58,7 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 | Charts | Recharts |
 | Graphs | React Flow (@xyflow/react) + dagre layout |
 | Data fetching | SWR + Axios |
-| AI | Groq LLM (Llama 4 Scout) via TAISA |
+| AI | TAISA conversational layer |
 
 ---
 
@@ -74,7 +74,7 @@ backend/
     ddl/                 # DDL generator engine
     diff/                # Diff engine + rules + models
     graph/               # Graph builder, impact analyzer, blast radius
-    llm/                 # LLM provider abstraction (mock + Groq)
+    llm/                 # LLM provider abstraction (mock + real backend)
     metadata/            # Adapters (SQLite/Postgres/Teradata) — extract
     metrics/             # Intelligence metrics engine
     parser_ingest/       # NEW in v1.04 — DataDNA parser integration
@@ -338,7 +338,7 @@ curl -X POST http://localhost:8000/api/v1/parser-import/lineage?dry_run=true \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCION_TAISA_MODE` | `real` | `mock` or `real` (Groq LLM) |
+| `SCION_TAISA_MODE` | `real` | `mock` or `real` (TAISA backend) |
 | `SCION_BACKEND_HOST` | `127.0.0.1` | |
 | `SCION_BACKEND_PORT` | `8000` | |
 | `API_KEY` | _(not set)_ | Optional endpoint auth |
@@ -390,6 +390,15 @@ Supported object types: Database, Table, View, Stored Procedure, Macro, Function
 ---
 
 ## Changelog
+
+### v1.11.02 (2026-04-23) — Doc-only: TAISA branding sweep
+
+User-facing prose no longer mentions the underlying LLM provider — TAISA
+is the brand customers and stakeholders see. Replacements applied to
+README.md, `docs/use_cases.md`, `docs/demo.txt`, `docs/demo_en.txt`, and
+`docs/Estado de desarrollo.txt`. Backend module names, Python imports,
+and env variable names are unchanged (renaming would touch working code
+for no functional benefit; only the doc-level wording mattered).
 
 ### v1.11.01 (2026-04-23) — Internal engineering roadmap
 
@@ -1017,7 +1026,7 @@ explainable techniques — no ML, no training, no black boxes.
 - Dark Mode, animated counters, TAISA floating widget, Mission Control dashboard, Visual Diff, Risk Heatmap, skeleton loaders, toasts, page transitions, confetti, keyboard shortcuts
 
 ### v1.01.00 (2026-04-16) — Wow features
-- DDL Generator, Comparison Report, Timeline, Global Search, Alerts Panel, CSV Export, TAISA on Groq (Llama 4 Scout)
+- DDL Generator, Comparison Report, Timeline, Global Search, Alerts Panel, CSV Export, TAISA conversational layer
 
 ### v1.00.00 (2026-04-15) — Initial release
 - 7 engines, 13 pages, full diff/impact/reasoning pipeline

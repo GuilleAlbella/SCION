@@ -77,7 +77,7 @@ continuously churning — usually a sign of unclear ownership or bad schema.
 ### 8. Natural-language Q&A (TAISA)
 *"Ask SCION anything about your warehouse."*
 
-Groq-hosted Llama 4 Scout, grounded on the parsed snapshot + change events.
+TAISA, grounded on the parsed snapshot + change events.
 Demoed live. Works best for "what / why / when" questions about specific
 objects.
 

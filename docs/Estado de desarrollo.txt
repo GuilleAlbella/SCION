@@ -29,13 +29,13 @@ requirements/prod.txt → producción
 
 requirements/teradata.txt → TD instalado
 
-requirements/ai.txt → Groq instalado
+requirements/ai.txt → TAISA instalado
 
 🔌 IA
 
-TAISA como concepto
+TAISA como capa conversacional
 
-Groq como implementación temporal
+Backend LLM intercambiable (mock + real)
 
 Cambio futuro sin refactor (solo client)
 
@@ -1232,7 +1232,7 @@ Reemplazable
 
 ⚠️ En esta versión, TAISA no es un modelo real:
 se implementa el contrato, la persistencia y el pipeline, usando un cliente mock.
-Para la demo, el proveedor real será Groq, manteniendo el nombre TAISA.
+Para la demo se usa el cliente real de TAISA contra el backend LLM configurado.
 
 7.1 Principios de integración
 
@@ -1301,7 +1301,7 @@ No realiza llamadas HTTP
 
 No usa SDKs de IA
 
-No llama a Groq
+No llama al backend de TAISA
 
 Devuelve una respuesta mock determinística
 

@@ -491,8 +491,8 @@ WHAT TO SHOW
     why it is risky (GDPR, 3 downstream objects, BLOB not replaceable).
 
 WHAT TO SAY
-  "TAISA is the conversational layer. It runs on Groq with Llama 4
-  Scout. It has full access to the database -- snapshots, changes,
+  "TAISA is the conversational layer. It has full access to the
+  database -- snapshots, changes,
   impact events, lineage, criticality, usage -- plus an embedded
   'Algorithm Knowledge Base' that explains SCION's formulas (how
   impact_score is computed, fragility, criticality).
@@ -545,7 +545,8 @@ If something does not appear or looks odd during the demo:
        Generate DDL.
 
   [X] TAISA says "LLM provider not ready"
-    -> Check GROQ_API_KEY is set in backend/app/config/taisa_llm.yaml.
+    -> Check the TAISA API key is configured in backend/.env (see
+       backend/env.example for the required variables).
     -> Fallback is the mock_llm_provider which answers with a generic
        text.
 

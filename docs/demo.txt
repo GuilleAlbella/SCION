@@ -482,8 +482,8 @@ QUÉ MOSTRAR
     por qué es riesgoso (GDPR, 3 objetos downstream, BLOB no reemplazable).
 
 QUÉ DECIR
-  "TAISA es el layer conversacional. Corre sobre Groq con Llama 4 Scout.
-  Tiene acceso completo a la base — snapshots, changes, impact events,
+  "TAISA es el layer conversacional. Tiene acceso completo a la base —
+  snapshots, changes, impact events,
   lineage, criticality, usage — y además una 'Algorithm Knowledge Base'
   embebida que le explica las fórmulas de SCION (cómo se calcula el
   impact_score, la fragility, la criticality).
@@ -533,7 +533,8 @@ Si algo no aparece o se ve raro durante la demo:
     → Tildar al menos una fila con el checkbox antes de clickear Generate DDL.
 
   ✗ TAISA dice "LLM provider not ready"
-    → Verificar que GROQ_API_KEY esté en backend/app/config/taisa_llm.yaml.
+    → Verificar que el API key de TAISA esté configurado en backend/.env
+       (ver backend/env.example).
     → Como fallback usa el mock_llm_provider y responde con texto genérico.
 
   ✗ "Blast radius" vs "Impact spread"
