@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.05
+**Version:** BETA v1.14.06
 
 ---
 
@@ -359,10 +359,47 @@ Returns a JSON response with the new `snapshot_id` plus per-category counts (sch
 | `SCION_TAISA_MODE` | `real` | `mock` or `real` (TAISA backend) |
 | `SCION_BACKEND_HOST` | `127.0.0.1` | |
 | `SCION_BACKEND_PORT` | `8000` | |
-| `API_KEY` | _(not set)_ | Optional endpoint auth |
+| `API_KEY` | _(unset = auth disabled)_ | When set, all `/api/v1/*` endpoints require `X-API-Key` header. See "Security" below |
 | `DATABASE_URL` | SQLite demo | |
+| `NEXT_PUBLIC_API_KEY` | _(unset)_ | Frontend-side counterpart — included automatically on every API request when set |
 
 TAISA LLM settings in `backend/app/config/taisa_llm.yaml`.
+
+---
+
+## Security
+
+API key authentication is built in. **Off by default** for local
+development convenience; **must be enabled before any pilot deploy**
+(per `docs/release_policy.md` §3.2).
+
+**To enable:**
+
+1. Generate a strong key: `openssl rand -hex 32` (or any other
+   ≥32-char random string).
+2. Set on backend: add `API_KEY=<value>` to `backend/.env`.
+3. Set on frontend: add `NEXT_PUBLIC_API_KEY=<same value>` to
+   `frontend/.env.local`.
+4. Restart both services.
+
+**Behaviour with `API_KEY` set:**
+
+- Every endpoint under `/api/v1/*` requires the `X-API-Key: <value>`
+  header. Missing → `401`. Wrong → `403`.
+- `/api/v1/health`, `/api/v1/healthz`, and `/api/v1/health/ready`
+  are intentionally exempt so liveness/readiness probes don't
+  need the secret.
+- The frontend client (`frontend/src/lib/api/client.ts`) reads
+  `NEXT_PUBLIC_API_KEY` at build time and injects it on every
+  request via an Axios interceptor.
+
+**Behaviour with `API_KEY` unset (default):**
+
+- Every endpoint is open. Convenient for `dev.ps1`, never
+  acceptable for any deploy where the network is shared.
+
+**Out of scope today:** SSO via Teradata IDP, RBAC, per-user
+auditing. Those are tracked in the Phase-3 roadmap.
 
 ---
 
