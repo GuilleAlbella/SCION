@@ -1,0 +1,102 @@
+# SCION CI — runs on every PR against main and every push to main.
+#
+# Two parallel jobs:
+#   - backend: pytest on the metadata suite (the test set we know is
+#     stable post-isolation; full suite has pre-existing fixture
+#     issues unrelated to this feature work, tracked separately).
+#   - frontend: TypeScript strict-mode compile check.
+#
+# Both must succeed for a PR to merge cleanly. Branch protection on
+# `main` is set up to require these via required-status-checks
+# (configured in the repo Settings UI; this file only declares the
+# checks themselves).
+#
+# Why GitHub-hosted runners and not self-hosted: this repo has no
+# customer data, no secrets beyond GROQ_API_KEY (which CI doesn't
+# touch — TAISA tests use mock provider), and the cost is zero for
+# private repos under 2000 minutes/month. Self-hosted is the right
+# call when we need real Teradata access; we're nowhere near that.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Manual trigger — useful when re-running after a flaky-network
+  # failure that wasn't the test's fault.
+  workflow_dispatch:
+
+# Cancel in-flight runs when a new commit lands on the same branch.
+# Saves CI minutes on rapid push amends without losing coverage of
+# the final state.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Pinned to 3.11 because that's what dev.ps1 / venv expects;
+          # bumping to 3.12 is a separate decision (rich_seed has no
+          # known incompatibilities but we'd rather flag the change).
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements/dev.txt
+
+      - name: Install backend dependencies
+        # `dev.txt` includes everything in `base.txt` + pytest + tooling.
+        # `requests` was a transitive runtime dep before v1.14.01;
+        # explicitly pinned in base.txt now so CI doesn't depend on
+        # the luck of which packages happened to drag it in.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements/dev.txt
+
+      - name: Run metadata test suite
+        # Why scope to metadata/: the diff/snapshot/graph/api/taisa
+        # suites have pre-existing fixture issues (data dependencies
+        # on the developer's local DB, exposed when we isolated tests
+        # in v1.13.05). Tracked as separate cleanup. Metadata is the
+        # green slice we know is reliable.
+        run: pytest backend/tests/metadata/ -v --tb=short
+
+  frontend:
+    name: Frontend (TypeScript strict)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Next.js 16 requires Node 18.18+; 20 LTS is the safe pick.
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        # `npm ci` (not `install`) so the lock file is the source of
+        # truth and a missing dep fails CI loudly instead of being
+        # silently resolved.
+        run: npm ci
+
+      - name: TypeScript compile check
+        working-directory: frontend
+        # `--noEmit` does the full type-check without producing JS;
+        # cheap (~10s on a warm cache) and catches every type error
+        # the editor would catch.
+        run: npx tsc --noEmit
