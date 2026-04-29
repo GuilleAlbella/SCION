@@ -56,10 +56,16 @@ jobs:
 
       - name: Install backend dependencies
         # `dev.txt` includes everything in `base.txt` + pytest + tooling.
-        # No need to install separately — single resolve, single cache.
+        # `ai.txt` is required because `app.taisa.taisa_models` is loaded
+        # at import time by `app.db.base`, and TAISA's LLM provider
+        # imports the LLM HTTP client (`requests`) at module level. The
+        # metadata test suite doesn't *use* TAISA, but the registration
+        # cascade in `base.py` fail-imports without `requests` available.
+        # CI cost is negligible — pip caches both lockfiles after first
+        # run.
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements/dev.txt
+          pip install -r backend/requirements/dev.txt -r backend/requirements/ai.txt
 
       - name: Run metadata test suite
         # Why scope to metadata/: the diff/snapshot/graph/api/taisa
