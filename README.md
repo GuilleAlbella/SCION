@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.01
+**Version:** BETA v1.13.02
 
 ---
 
@@ -111,13 +111,12 @@ Parser/                  # Sample payloads from the extractor team
 
 ---
 
-## UI Pages (14)
+## UI Pages (13)
 
 | Page | Description |
 |------|-------------|
 | **Dashboard** | Mission control: animated KPIs, engine status, processing pipeline, breaking changes ticker, recent activity |
-| **Import** | Drag-and-drop multipart upload for the 6-file dict batch. Coverage indicator, per-file remove, server errors rendered verbatim. Format detection is server-side |
-| **Snapshots** | List snapshots, **protected delete** with typed-ID confirmation |
+| **Snapshots** | List snapshots, **3 ways to create**: capture live (demo backing DB), import parser JSON (two-phase preview/confirm), import dict `.dat` batch (multi-file drag-and-drop with coverage indicator). **Protected delete** with typed-ID confirmation |
 | **Changes** | Compare snapshots, filters, expandable before/after, **DDL Generator**, **Visual Diff**, **quick links** to Lineage/Timeline/Impact/Usage, **CSV export** |
 | **Impact Analysis** | Batch blast radius, donut charts, per-change table with **queries/users affected**, **Export Report** (HTML), **CSV export**, confetti on LOW risk |
 | **What-If Simulation** | Preview a hypothetical change's impact without applying it |
@@ -401,6 +400,30 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.13.02 (2026-04-29) — Consolidate Import into Snapshots
+
+The standalone `/import` page added in v1.13.00 was redundant: Snapshots
+already had an "Import from Parser" button, and a separate top-level
+nav entry for "Import" duplicated the same conceptual action ("create a
+snapshot from a file").
+
+Consolidation:
+
+- **Snapshots page** gains a third action: **"Import Dict Batch"**
+  (blue button, distinct from the orange parser button). Clicking it
+  toggles a drag-and-drop panel inline below the action row, with the
+  same coverage indicator and result card the standalone page had.
+- **`/import` route deleted.** Sidebar entry removed. The
+  `dict_import.ts` API client stays — it's the typed wrapper around
+  the multipart endpoint and was always meant to be reused.
+- **Intro text updated** to describe all three creation paths
+  (capture live / parser JSON / dict batch) instead of mentioning a
+  v1.10 plug-in point that never materialised.
+
+No backend changes — the `POST /api/v1/dict-import` endpoint is
+unchanged. Pure frontend reorganisation; users get one less nav item
+and a single page to manage all snapshot creation.
 
 ### v1.13.01 (2026-04-29) — Batch validator: stricter temporal checks
 
