@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.12.00
+**Version:** BETA v1.13.00
 
 ---
 
@@ -390,6 +390,44 @@ Supported object types: Database, Table, View, Stored Procedure, Macro, Function
 ---
 
 ## Changelog
+
+### v1.13.00 (2026-04-29) — Dict ingest UI + handover + hardening
+
+Follow-ups on top of v1.12.00 that don't depend on Rahul's pending
+format-direction reply, so the team has something to test against
+while we wait for his answer.
+
+**Frontend**
+- New `/import` page with drag-and-drop for the 6-file dict batch.
+  Coverage indicator (which views are present), per-file remove,
+  inline result panel with snapshot_id and counts, server errors
+  rendered verbatim (the batch-validator emits a multi-line diff that
+  we want users to see in full). Sidebar gains an "Import" entry.
+- `frontend/src/lib/api/dict_import.ts` — typed Axios client for the
+  multipart endpoint. Mirrors the response shape from the backend so
+  TypeScript flags drift if/when the contract changes.
+
+**Backend**
+- Alembic migration `a72b8c4f9d31` — adds a dedicated, indexed
+  `extract_run_id` column to `snapshot`. Replaces the fragile
+  `description LIKE '%extract_run_id=...%'` idempotency lookup. The
+  description-side hint stays for one release for backward
+  compatibility (drop in v1.14).
+- `dict_persister.py` — writes the new column on insert and reads
+  both the column and the legacy description as a transitional
+  fallback.
+
+**Tests**
+- 17 new edge-case tests for `format_detector.py`: empty / whitespace
+  input, JSON with BOM / leading whitespace / unknown shape,
+  flat-files with and without filename hints, arity drift, garbage /
+  XML / CSV. All pass.
+
+**Docs**
+- `docs/handover.md` — first-day checklist, conventions,
+  Windows gotchas, decision-not-to-relitigate list, who-to-ping.
+  Written before Guillermo's vacation (2026-05-07) so Helton can pick
+  up cold.
 
 ### v1.12.00 (2026-04-29) — Data dictionary ingest pipeline (Sample 1 wired)
 
