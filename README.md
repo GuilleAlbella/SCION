@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.02
+**Version:** BETA v1.14.03
 
 ---
 
@@ -400,6 +400,35 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.14.03 (2026-04-29) — Tooling: version bump + ingest benchmark
+
+Two scripts under `tools/` that internalise common operations we
+were doing by hand or not doing at all.
+
+**`tools/bump_version.ps1 <version> "<summary>"`**
+Single-command version bump. Updates
+`frontend/src/lib/constants.ts::APP_VERSION` and the
+`**Version:** BETA vX.Y.Z` line in `README.md`, then injects an
+empty changelog stub at the top of the Changelog section so we
+just have to fill in the body before committing. Solves the
+recurring "I forgot to bump the README" problem.
+
+**`tools/benchmark_ingest.py --sample-dir <path>`**
+End-to-end ingest benchmark. Runs parse → validate → persist →
+post-ingest pipeline against a fresh temp DB and reports the
+metrics we care about for the SQLite-vs-Postgres / VM-sizing
+decision (per `docs/internal_roadmap.md` §1.1):
+
+  - Wall time per stage (parse / validate / persist / post-ingest)
+  - Peak RSS RAM (POSIX `resource` or Windows `psutil`)
+  - `.db` size on disk
+  - Persisted counts (schemas / tables / columns / indices / partitioning / DDL)
+  - Final graph node + edge counts after post-ingest
+
+Designed to be re-runnable against any sample as Rahul ships
+larger extracts, so we can tell early when SQLite stops being
+enough. Sample 1 today: ~135ms total, 96 KB DB.
 
 ### v1.14.02 (2026-04-29) — Persist indices, partitioning, and DDL text
 
