@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.05
+**Version:** BETA v1.14.00
 
 ---
 
@@ -400,6 +400,25 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.14.00 (2026-04-29) — Liveness / readiness probe endpoints
+
+Two new endpoints under the existing `/api/v1/health` router for
+orchestrator integration:
+
+- **`GET /api/v1/healthz`** — liveness probe. Returns 200 with
+  `{"status": "ok"}` as long as the process is responsive. Does NOT
+  touch the DB or any other dependency. If a load balancer or
+  Docker `HEALTHCHECK` sees this fail, the process is hung — restart.
+- **`GET /api/v1/health/ready`** — readiness probe. Returns 200 if
+  the backend can serve real requests (SQLAlchemy `SELECT 1` succeeds
+  AND the engine registry's `database_ready` flag is true), 503
+  otherwise. Used by orchestrators to decide whether to route
+  traffic — a transient DB hiccup pulls the pod out of rotation
+  without restarting it.
+
+The existing `/api/v1/health` endpoint is unchanged — it remains
+the verbose, human-friendly engine-status view.
 
 ### v1.13.05 (2026-04-29) — Test isolation: stop wiping the developer's DB
 
