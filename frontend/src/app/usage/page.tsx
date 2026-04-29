@@ -63,13 +63,24 @@ function UsagePage() {
   const searchParams = useSearchParams();
   const focusedObject = searchParams.get("object");
 
-  // Usage summary is global (not tied to a snapshot) so load once on mount.
-  // Failures are swallowed because usage is optional — criticality still works.
+  // Usage summary is now snapshot-scoped (v1.13.04). When the user
+  // selects a snapshot, we re-fetch usage filtered to objects that
+  // exist in that snapshot's graph. Without a selection we don't fetch
+  // — global aggregation is misleading because UsageEvent rows from
+  // one source bleed across snapshots from a different source (e.g. a
+  // dict-imported `Transcend-DevTest` snapshot would otherwise see
+  // demo seed usage like `core_banking.transactions`).
+  // Failures are swallowed because usage is optional — criticality
+  // still works without it.
   useEffect(() => {
-    getUsageSummary()
+    if (!selectedSnap) {
+      setUsage(null);
+      return;
+    }
+    getUsageSummary(Number(selectedSnap))
       .then((d) => setUsage(d.items))
       .catch(() => {});
-  }, []);
+  }, [selectedSnap]);
 
   // Auto-seed criticality from an active diff, but ONLY if the user hasn't
   // already picked a snapshot manually — hence the `!selectedSnap` guard.

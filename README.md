@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.03
+**Version:** BETA v1.13.04
 
 ---
 
@@ -400,6 +400,36 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.13.04 (2026-04-29) — Usage page scoped to selected snapshot
+
+`/usage` was showing demo-seed data (`core_banking.transactions`,
+`reporting.daily_pl_summary`, etc.) even when a dict-imported snapshot
+like `Transcend-DevTest` was selected. Root cause: `UsageEvent` rows
+have no `snapshot_id` column (the table was designed as a "global"
+usage feed before the per-snapshot model firmed up), and the
+`/usage/summary` endpoint aggregated every row regardless of the
+selected snapshot.
+
+Fix:
+
+- **Backend** — `GET /api/v1/usage/summary` now accepts an optional
+  `snapshot_id` query param. When passed, the aggregation is filtered
+  to only objects present in that snapshot's `graph_node` set
+  (joining on `object_name`). When omitted, legacy global behaviour
+  is preserved for any caller that may still rely on it.
+- **Frontend** — the `/usage` page now re-fetches the summary every
+  time the user picks a snapshot, passing the snapshot ID through.
+  Without a snapshot selected the heatmap is empty. A snapshot whose
+  objects don't appear in any `usage_event` row (typical for
+  dict-imported snapshots until pipeline 3 lands) gets an empty list,
+  which is the correct answer rather than the misleading "global
+  bleed-through" we had before.
+
+No schema migration needed — we filter by joining on `object_name`.
+Adding a proper `snapshot_id` column to `UsageEvent` is the right
+long-term fix but was deferred because it would require backfilling
+every demo-seed row and isn't blocking anything.
 
 ### v1.13.03 (2026-04-29) — Dict snapshot post-ingest pipeline
 

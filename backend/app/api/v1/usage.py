@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Usage & Criticality API (v1)."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel
@@ -42,16 +42,37 @@ def ingest_usage(data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 @router.get("/summary", status_code=status.HTTP_200_OK)
-def get_usage_summary() -> Dict[str, Any]:
-    """Return top objects by usage."""
+def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
+    """Return top objects by usage.
+
+    `UsageEvent` rows are not tied to a `snapshot_id` (the table was
+    designed as a "global" usage observation feed before the per-snapshot
+    model was firmed up). To make this endpoint snapshot-scoped without
+    a schema migration, we filter the aggregation by joining usage rows
+    against the snapshot's `graph_node` set on `object_name`. Result:
+
+    - With `snapshot_id`: only objects that exist in that snapshot's
+      graph are returned. A snapshot whose objects have no matching
+      usage_event rows (e.g. dict-imported snapshots, since dict
+      doesn't bring usage data) returns an empty list.
+    - Without `snapshot_id`: legacy behaviour — global aggregation
+      across every usage_event row.
+
+    Why a graph_node join (and not table_snapshot): graph_node has the
+    fully-qualified `object_name` (`schema.table`) which is what
+    UsageEvent.object_name uses too. Joining on table_snapshot would
+    require concatenating `schema_name + '.' + table_name` per row;
+    cheaper to use the materialised graph names.
+    """
 
     from sqlalchemy import func, select
     from sqlalchemy.orm import Session
     from app.db.engine import engine
     from app.usage.usage_models import UsageEvent
+    from app.graph.graph_models import GraphNode
 
     with Session(bind=engine) as session:
-        rows = session.execute(
+        stmt = (
             select(
                 UsageEvent.object_name,
                 UsageEvent.object_type,
@@ -61,8 +82,23 @@ def get_usage_summary() -> Dict[str, Any]:
             )
             .group_by(UsageEvent.object_name, UsageEvent.object_type, UsageEvent.schema_name)
             .order_by(func.sum(UsageEvent.query_count).desc())
-            .limit(50)
-        ).all()
+        )
+
+        if snapshot_id is not None:
+            # Restrict to objects present in the snapshot's graph.
+            # `IN (subquery)` is fine here — graph_node is small per
+            # snapshot (hundreds to thousands of rows even for big
+            # warehouses) and SQLite/Postgres both pick a hash join.
+            scoped_names = (
+                select(GraphNode.object_name)
+                .where(GraphNode.snapshot_id == snapshot_id)
+            )
+            stmt = stmt.where(UsageEvent.object_name.in_(scoped_names))
+
+        # Hard cap is 50 rows post-filter — keeps the payload small
+        # for the UI which only ever shows the top 12 in the heatmap.
+        stmt = stmt.limit(50)
+        rows = session.execute(stmt).all()
 
     items = [
         {
@@ -75,7 +111,7 @@ def get_usage_summary() -> Dict[str, Any]:
         for r in rows
     ]
 
-    return {"items": items, "total": len(items)}
+    return {"items": items, "total": len(items), "snapshot_id": snapshot_id}
 
 
 @router.get(
