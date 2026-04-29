@@ -8,6 +8,37 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.06 (2026-04-29) — API key auth: docs + sensible defaults
+
+`require_api_key` was already implemented as a FastAPI dependency
+guarding every `/api/v1/*` route since the early days, but it was
+undiscoverable: nothing in the README documented the env var, no
+sample showed how to set it, and a 401 from the frontend produced
+a confusing "Network Error" toast.
+
+This release makes auth a first-class deploy concern without
+changing the wire-level mechanism:
+
+- **README "Security" section** — explains how to enable, what
+  paths are exempt (`/health`, `/healthz`, `/health/ready`), how
+  the frontend integrates via `NEXT_PUBLIC_API_KEY`, and what's
+  out of scope (SSO, RBAC).
+- **`backend/env.example`** — adds a commented-out `API_KEY` line
+  with `openssl rand -hex 32` as the suggested generator. Default
+  stays "unset = open" so `dev.ps1` keeps working without ceremony.
+- **Configuration table** — `API_KEY` and `NEXT_PUBLIC_API_KEY`
+  now properly listed.
+- **Frontend response interceptor** — turns 401/403 into clear,
+  actionable error messages ("set NEXT_PUBLIC_API_KEY", "key
+  doesn't match") so the user knows it's a config issue, not a
+  network failure.
+
+Wire-level behaviour unchanged. The dependency in `app/api/v1/__init__.py`
+still gates every route. Health endpoints stay exempt because
+orchestrator probes shouldn't need the secret. Out of scope:
+SSO via Teradata IDP, RBAC, per-user auditing — tracked in
+Phase 3 of `docs/internal_roadmap.md`.
+
 ### v1.14.05 (2026-04-29) — Quarantine known-broken test directories
 
 Three test directories (`graph/`, `api/`, `taisa/`) and the
