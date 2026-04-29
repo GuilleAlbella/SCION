@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.00
+**Version:** BETA v1.14.01
 
 ---
 
@@ -400,6 +400,23 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.14.01 (2026-04-29) — GitHub Actions CI
+
+`.github/workflows/ci.yml` runs on every PR against `main` and every
+push to `main`. Two parallel jobs:
+
+- **Backend (pytest)** — runs `pytest backend/tests/metadata/` on
+  Python 3.11. Scoped to metadata (the test set we know is stable
+  post-isolation in v1.13.05); the diff/snapshot/graph/api/taisa
+  suites have pre-existing fixture issues tracked as a separate
+  cleanup task.
+- **Frontend (TypeScript strict)** — runs `npx tsc --noEmit` on
+  Node 20.
+
+Both must succeed for a PR to merge. `concurrency` cancels in-flight
+runs when a new commit lands on the same branch, saving minutes on
+rapid amends without losing coverage of the final state.
 
 ### v1.14.00 (2026-04-29) — Liveness / readiness probe endpoints
 
