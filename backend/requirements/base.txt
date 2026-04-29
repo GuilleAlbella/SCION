@@ -11,6 +11,7 @@ alembic==1.13.3
 psycopg[binary]==3.2.13
 
 httpx==0.27.2
+requests==2.32.3   # used by app/llm/groq_provider.py — was previously a transitive dep, now pinned
 tenacity==9.0.0
 
 rich==13.9.2
