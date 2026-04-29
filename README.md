@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.04
+**Version:** BETA v1.14.05
 
 ---
 
@@ -404,7 +404,6 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 The full changelog lives in [`CHANGELOG.md`](./CHANGELOG.md).
 Bump the version with `.	oolsump_version.ps1 X.Y.Z "summary"` and
 edit the generated stub in `CHANGELOG.md` (no longer in README).
-
 
 ---
 
