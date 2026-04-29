@@ -21,7 +21,6 @@ import {
   Clock,
   Bell,
   FlaskConical,
-  Upload,
 } from "lucide-react";
 
 // Top-level navigation. Order reflects the intended user flow:
@@ -30,7 +29,6 @@ import {
 // operate (Timeline, Alerts, Control).
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/import", label: "Import", icon: Upload },
   { href: "/snapshots", label: "Snapshots", icon: Camera },
   { href: "/changes", label: "Changes", icon: GitCompareArrows },
   { href: "/impact", label: "Impact Analysis", icon: Target },

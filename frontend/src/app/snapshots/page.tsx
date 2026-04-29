@@ -10,8 +10,9 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useSelection } from "@/lib/SelectionContext";
 import { createSnapshot, deleteSnapshot } from "@/lib/api/snapshots";
 import { previewParserImport, confirmParserImport } from "@/lib/api/parser_import";
+import { importDictBatch, type DictImportResponse } from "@/lib/api/dict_import";
 import type { ParserImportResponse } from "@/lib/api/types";
-import { Plus, Check, Upload, FileJson, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle } from "lucide-react";
+import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/shared/ToastProvider";
 
 export default function SnapshotsPage() {
@@ -28,10 +29,11 @@ export default function SnapshotsPage() {
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  // Import state — hidden file input triggered by a button, then a preview
-  // panel before the user confirms the actual import. The flow is two-phase:
-  // (1) POST the raw JSON with dry_run=true to get an IngestionReport,
-  // (2) show counts/warnings, then on "Confirm" POST again with dry_run=false.
+  // ──── Parser JSON import state ────
+  // Hidden file input triggered by a button, then a preview panel before
+  // the user confirms the actual import. Two-phase flow:
+  //   1. POST the raw JSON with dry_run=true to get an IngestionReport
+  //   2. Show counts/warnings, then on "Confirm" POST again with dry_run=false
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   // Raw parsed JSON kept so the confirm call can re-POST the same payload.
@@ -40,6 +42,23 @@ export default function SnapshotsPage() {
   const [importing, setImporting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // ──── Dict batch import state (v1.12+) ────
+  // Multipart upload of up to 6 .dat files in any order. The server
+  // detects each file's content type and validates batch consistency
+  // (same source + run_id + temporal coherence) before persisting one
+  // snapshot keyed by `extract_run_id`.
+  //
+  // We keep this separate from the parser flow because:
+  //   - parser is JSON, single file, two-phase (preview → confirm)
+  //   - dict is .dat, multi-file, single-shot (server is idempotent so
+  //     no preview is needed — re-uploading is safe)
+  const dictInputRef = useRef<HTMLInputElement>(null);
+  const [dictPanelOpen, setDictPanelOpen] = useState(false);
+  const [dictFiles, setDictFiles] = useState<File[]>([]);
+  const [dictUploading, setDictUploading] = useState(false);
+  const [dictResult, setDictResult] = useState<DictImportResponse | null>(null);
+  const [dictError, setDictError] = useState<string | null>(null);
 
   async function handleCreate() {
     setCreating(true);
@@ -134,6 +153,93 @@ export default function SnapshotsPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  // ──── Dict batch helpers ────
+
+  function addDictFiles(incoming: FileList | File[]) {
+    const arr = Array.from(incoming);
+    setDictFiles((prev) => {
+      // Dedupe by name+size — dragging the same file twice shouldn't
+      // double up. The browser's File API gives a new object on each
+      // drag so identity-based dedup wouldn't work.
+      const key = (f: File) => `${f.name}::${f.size}`;
+      const seen = new Set(prev.map(key));
+      const merged = [...prev];
+      for (const f of arr) if (!seen.has(key(f))) merged.push(f);
+      return merged;
+    });
+    setDictResult(null);
+    setDictError(null);
+  }
+
+  function removeDictFile(idx: number) {
+    setDictFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function clearDictImport() {
+    setDictFiles([]);
+    setDictResult(null);
+    setDictError(null);
+    setDictPanelOpen(false);
+    if (dictInputRef.current) dictInputRef.current.value = "";
+  }
+
+  async function handleDictUpload() {
+    if (dictFiles.length === 0) return;
+    setDictUploading(true);
+    setDictError(null);
+    setDictResult(null);
+    try {
+      const r = await importDictBatch(dictFiles);
+      setDictResult(r);
+      // Refresh snapshot list so the new snapshot shows up below.
+      // Keep panel open so user sees the success card with counts.
+      await mutate("snapshots");
+      if (r.snapshot_id != null && !r.skipped_existing) {
+        setActiveSnapshotId(r.snapshot_id);
+        toast(
+          `Snapshot #${r.snapshot_id} created from dict batch (${r.source_system_name}). ` +
+            `${r.tables_created} tables, ${r.columns_created} columns persisted.`,
+          "success"
+        );
+      } else if (r.skipped_existing) {
+        toast(
+          `Idempotent: snapshot #${r.snapshot_id} already exists for this extract_run_id.`,
+          "success"
+        );
+      }
+    } catch (e: unknown) {
+      // Backend returns batch-validator messages multi-line; preserve them.
+      let msg = "Upload failed.";
+      if (typeof e === "object" && e !== null) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ax = e as any;
+        if (ax.response?.data?.detail) msg = String(ax.response.data.detail);
+        else if (ax.message) msg = ax.message;
+      }
+      setDictError(msg);
+    } finally {
+      setDictUploading(false);
+    }
+  }
+
+  // ──── Dict batch coverage check ────
+  // Mirrors the 6 view filenames Rahul's extractor produces. Pure
+  // presentation — the server accepts partial batches; this just gives
+  // the user a friendly "you have X of 6" hint.
+  const DICT_EXPECTED = [
+    { prefix: "databasesv_", label: "Databases" },
+    { prefix: "tablesv_", label: "Tables / Views / Procs" },
+    { prefix: "columnsv_", label: "Columns" },
+    { prefix: "indicesv_", label: "Indices" },
+    { prefix: "partitioningconstraintsv_", label: "Partitioning" },
+    { prefix: "tabletextv_", label: "DDL text" },
+  ];
+  const dictCoverage = DICT_EXPECTED.map((spec) => ({
+    ...spec,
+    matched: dictFiles.some((f) => f.name.toLowerCase().startsWith(spec.prefix)),
+  }));
+  const dictMatchedCount = dictCoverage.filter((c) => c.matched).length;
+
   async function handleDelete() {
     if (deleteTarget == null) return;
     setDeleting(true);
@@ -168,16 +274,32 @@ export default function SnapshotsPage() {
           A <strong>snapshot</strong> is a frozen, hashed copy of the warehouse&apos;s
           structural state at a point in time — databases, tables, views, columns,
           types, nullability. Everything else in SCION (diffs, impact, intelligence,
-          criticality) compares two snapshots to detect what moved. Create one via{" "}
-          <strong>Capture Live Snapshot</strong> (reads the configured engine) or{" "}
-          <strong>Import from Parser</strong> (ingests a DataDNA parser JSON feed —
-          dictionary feed will plug in here in v1.10). Only the latest snapshot can
-          be deleted; older ones are immutable to protect the diff history.
+          criticality) compares two snapshots to detect what moved. Three ways to
+          create one: <strong>Capture Live Snapshot</strong> (reads the local
+          backing DB; demo only),{" "}
+          <strong>Import from Parser</strong> (DataDNA parser JSON feed, two-phase
+          preview → confirm), or <strong>Import Dict Batch</strong> (the 6-file
+          .dat extract from the data-dictionary pipeline, idempotent by{" "}
+          <code className="font-mono">extract_run_id</code>). Only the latest
+          snapshot can be deleted; older ones are immutable to protect the diff history.
         </p>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-3 justify-end mb-4">
+      {/* Action buttons — three import paths in one row.
+          Order: dict batch (the new primary path for real customers) →
+          parser JSON (demo / parser team) → capture live (demo only). */}
+      <div className="flex gap-3 justify-end mb-4 flex-wrap">
+        <button
+          onClick={() => setDictPanelOpen((o) => !o)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            dictPanelOpen
+              ? "bg-blue-600 text-white"
+              : "bg-blue-500 text-white hover:bg-blue-600"
+          }`}
+        >
+          <Inbox size={16} />
+          Import Dict Batch
+        </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-2 bg-td-orange text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-td-orange/90 transition-colors"
@@ -201,6 +323,209 @@ export default function SnapshotsPage() {
           {creating ? "Creating..." : "Capture Live Snapshot"}
         </button>
       </div>
+
+      {/* ──── Dict batch import panel ────
+          Toggled open by the "Import Dict Batch" button. Drag-drop or
+          click-to-pick up to 6 .dat files; coverage indicator shows
+          which views are covered; server validates batch consistency
+          on upload. Same UX as the standalone /import page used to
+          have, consolidated into Snapshots in v1.13.02. */}
+      {dictPanelOpen && (
+        <div className="bg-white rounded-xl shadow-sm border-2 border-blue-500 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Inbox size={20} className="text-blue-500" />
+              <h3 className="text-sm font-semibold text-td-navy">
+                Data Dictionary Batch Import
+              </h3>
+            </div>
+            <button onClick={clearDictImport} className="text-td-gray-dark hover:text-td-navy">
+              <X size={16} />
+            </button>
+          </div>
+
+          <p className="text-[11px] text-td-gray-dark mb-3">
+            Drop the <strong>6 .dat files</strong> from one extraction run (any order).
+            All files must share the same <code className="font-mono">source_system_name</code> and{" "}
+            <code className="font-mono">extract_run_id</code>; mixed-batch uploads are rejected
+            server-side with a clear diff. Re-uploading the same batch is idempotent.
+          </p>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files.length > 0) addDictFiles(e.dataTransfer.files);
+            }}
+            onClick={() => dictInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-6 text-center cursor-pointer transition-colors bg-gray-50/40"
+          >
+            <Inbox size={24} className="mx-auto mb-2 text-gray-400" />
+            <p className="text-sm font-medium text-td-navy">
+              Drop 1–6 .dat files here, or click to pick
+            </p>
+            <p className="text-[10px] text-td-gray-dark mt-1">
+              Content type is detected server-side (filename is a tiebreaker only)
+            </p>
+            <input
+              ref={dictInputRef}
+              type="file"
+              multiple
+              onChange={(e) => {
+                if (e.target.files) addDictFiles(e.target.files);
+                e.target.value = "";
+              }}
+              className="hidden"
+            />
+          </div>
+
+          {/* File list */}
+          {dictFiles.length > 0 && (
+            <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-[11px] text-td-gray-dark flex items-center justify-between">
+                <span>
+                  {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"} ready
+                </span>
+                <button
+                  onClick={() => setDictFiles([])}
+                  className="text-blue-600 hover:underline text-[11px]"
+                >
+                  Clear all
+                </button>
+              </div>
+              <ul className="divide-y divide-gray-100">
+                {dictFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="px-3 py-1 flex items-center gap-2 text-[11px]">
+                    <FileText size={11} className="text-gray-400 shrink-0" />
+                    <span className="font-mono truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                      {(f.size / 1024).toFixed(1)} KB
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeDictFile(i);
+                      }}
+                      className="text-gray-400 hover:text-red-500"
+                      aria-label={`Remove ${f.name}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Coverage hint */}
+          {dictFiles.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wider mb-1.5">
+                Coverage: {dictMatchedCount} of {DICT_EXPECTED.length} views
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[11px]">
+                {dictCoverage.map((c) => (
+                  <div
+                    key={c.prefix}
+                    className={`flex items-center gap-1.5 ${c.matched ? "text-emerald-700" : "text-gray-400"}`}
+                  >
+                    {c.matched ? (
+                      <CheckCircle2 size={10} className="shrink-0" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full border border-gray-300 shrink-0" />
+                    )}
+                    <span className="truncate">{c.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload button + result */}
+          {!dictResult && (
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleDictUpload}
+                disabled={dictFiles.length === 0 || dictUploading}
+                className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                <Upload size={14} />
+                {dictUploading ? "Uploading…" : "Upload batch"}
+              </button>
+              {dictFiles.length > 0 && !dictUploading && (
+                <span className="text-[11px] text-td-gray-dark">
+                  {(dictFiles.reduce((s, f) => s + f.size, 0) / 1024).toFixed(1)} KB across{" "}
+                  {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Success card */}
+          {dictResult && (
+            <div
+              className={`mt-4 rounded-lg p-4 border ${
+                dictResult.skipped_existing
+                  ? "bg-amber-50 border-amber-200"
+                  : "bg-emerald-50 border-emerald-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2
+                  size={14}
+                  className={dictResult.skipped_existing ? "text-amber-600" : "text-emerald-600"}
+                />
+                <div className="text-sm font-semibold text-td-navy">
+                  {dictResult.skipped_existing
+                    ? `Idempotent — snapshot #${dictResult.snapshot_id} already existed`
+                    : `Snapshot #${dictResult.snapshot_id} created`}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                <SummaryStat label="Source" value={dictResult.source_system_name} />
+                <SummaryStat
+                  label="Run ID"
+                  value={dictResult.extract_run_id.slice(0, 16) + "…"}
+                />
+                <SummaryStat label="Schemas" value={String(dictResult.schemas_created)} />
+                <SummaryStat label="Tables" value={String(dictResult.tables_created)} />
+                <SummaryStat label="Columns" value={String(dictResult.columns_created)} />
+                <SummaryStat label="Indices" value={String(dictResult.indices_seen)} />
+                <SummaryStat
+                  label="Partitioning"
+                  value={String(dictResult.partitioning_seen)}
+                />
+                <SummaryStat
+                  label="DDL fragments"
+                  value={String(dictResult.tabletext_seen)}
+                />
+              </div>
+              <button
+                onClick={clearDictImport}
+                className="mt-3 text-xs text-blue-600 hover:underline"
+              >
+                Done — close panel
+              </button>
+            </div>
+          )}
+
+          {/* Error card — server batch-validator emits multi-line diffs;
+              preserve newlines and use mono so the user can see exactly
+              which file disagreed with which. */}
+          {dictError && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="flex items-start gap-2 mb-1">
+                <AlertCircle size={12} className="text-red-600 mt-0.5 shrink-0" />
+                <div className="text-xs font-semibold text-red-900">Upload rejected</div>
+              </div>
+              <pre className="text-[10px] text-red-900 whitespace-pre-wrap font-mono leading-relaxed pl-5">
+                {dictError}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ──── Parser import panel ────
           Shown whenever the user has picked a file. Walks through three
@@ -516,6 +841,19 @@ function CountsCard({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// SummaryStat — used by the dict-import success card. Kept inline
+// (instead of importing from a shared file) because it's a 4-line
+// component used only on this page; the indirection cost outweighs
+// the reuse benefit until a third caller appears.
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white/60 rounded p-2 border border-white/40">
+      <div className="text-[9px] text-td-gray-dark uppercase tracking-wider">{label}</div>
+      <div className="text-xs font-bold text-td-navy mt-0.5 font-mono truncate">{value}</div>
     </div>
   );
 }
