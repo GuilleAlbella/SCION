@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.02
+**Version:** BETA v1.13.03
 
 ---
 
@@ -400,6 +400,39 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.13.03 (2026-04-29) — Dict snapshot post-ingest pipeline
+
+The v1.12 dict-import was leaving snapshots in a half-baked state: rows
+landed in `snapshot` / `schema_snapshot` / `table_snapshot` /
+`column_snapshot`, but the analytical pipeline that fills `graph_node` /
+`graph_edge` / `snapshot_metrics` / `object_criticality` never ran.
+Result: a fresh dict-import showed up in `/snapshots` but every other
+page (`/graph`, `/lineage`, `/metrics`, `/usage`, `/intelligence`,
+`/impact`) reported the snapshot as empty.
+
+Fix:
+
+- **`run_post_ingest_pipeline(snapshot_id)`** — new public function
+  in `dict_persister.py`. Calls in order: `compute_structural_hash`,
+  `compute_snapshot_metrics`, `build_graph_for_snapshot`,
+  `persist_node_metrics`, `compute_criticality(usage_available=False)`.
+  Each step is wrapped in try/except + log so a failure in one
+  metric doesn't abort the whole pipeline.
+- **Endpoint hook** — `POST /api/v1/dict-import` now calls
+  `run_post_ingest_pipeline(result.snapshot_id)` after a successful
+  commit. Skipped on idempotent re-imports (the prior run already
+  did the work).
+- **Why `usage_available=False`** — dict-import doesn't bring usage
+  data; pipeline 3 (usage extractor) is still planned. The
+  graph-only criticality fallback (added in v1.08 for exactly this
+  scenario) keeps `/usage` and `/intelligence` populated. Combined
+  score equals the graph score; HIGH/MEDIUM/LOW thresholds
+  unchanged at 0.6 / 0.3.
+- **Verified end-to-end** against the user's already-imported
+  snapshot #11 (`Transcend-DevTest`): backfilled to 30 graph nodes,
+  10 edges, structural hash, 30 criticality rows. Future imports
+  run the pipeline automatically.
 
 ### v1.13.02 (2026-04-29) — Consolidate Import into Snapshots
 
