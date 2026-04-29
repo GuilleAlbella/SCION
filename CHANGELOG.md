@@ -8,62 +8,35 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
-### v1.14.06 (2026-04-29) — API key auth: docs + sensible defaults
+### v1.14.07 (2026-04-29) — Auto-diff dict snapshots against the previous one
 
-`require_api_key` was already implemented as a FastAPI dependency
-guarding every `/api/v1/*` route since the early days, but it was
-undiscoverable: nothing in the README documented the env var, no
-sample showed how to set it, and a 401 from the frontend produced
-a confusing "Network Error" toast.
+When a new dict batch is ingested, the post-ingest pipeline now
+automatically diffs the new snapshot against the most-recent prior
+snapshot from the same `source_system`. This was the obvious next
+step after v1.13.03 (post-ingest pipeline) — without it, the user
+has to navigate to `/changes` and run the diff manually every time
+they import an extract, even though the most natural workflow is
+"import this week's data, see what moved since last week".
 
-This release makes auth a first-class deploy concern without
-changing the wire-level mechanism:
+Mechanics:
+- New step 6 in `run_post_ingest_pipeline`. Late-imports the
+  `DiffEngine` (avoiding circular imports via `app.diff.__init__`).
+- Looks up the prior snapshot by `source_system_name` ordered by
+  `snapshot_time DESC`, excluding the current snapshot.
+- Calls `DiffEngine.compute_diff(prev_id, curr_id)`. The engine
+  itself persists `change_event` rows idempotently — re-runs are
+  no-ops, no duplicates.
+- Logs the result count at INFO level so operators see it during
+  development without checking `/changes`.
+- Failures swallowed per the pipeline's existing pattern: a bad
+  diff doesn't kill the import, just logs a warning. The user can
+  re-run the diff by hand.
 
-- **README "Security" section** — explains how to enable, what
-  paths are exempt (`/health`, `/healthz`, `/health/ready`), how
-  the frontend integrates via `NEXT_PUBLIC_API_KEY`, and what's
-  out of scope (SSO, RBAC).
-- **`backend/env.example`** — adds a commented-out `API_KEY` line
-  with `openssl rand -hex 32` as the suggested generator. Default
-  stays "unset = open" so `dev.ps1` keeps working without ceremony.
-- **Configuration table** — `API_KEY` and `NEXT_PUBLIC_API_KEY`
-  now properly listed.
-- **Frontend response interceptor** — turns 401/403 into clear,
-  actionable error messages ("set NEXT_PUBLIC_API_KEY", "key
-  doesn't match") so the user knows it's a config issue, not a
-  network failure.
-
-Wire-level behaviour unchanged. The dependency in `app/api/v1/__init__.py`
-still gates every route. Health endpoints stay exempt because
-orchestrator probes shouldn't need the secret. Out of scope:
-SSO via Teradata IDP, RBAC, per-user auditing — tracked in
-Phase 3 of `docs/internal_roadmap.md`.
-
-### v1.14.05 (2026-04-29) — Quarantine known-broken test directories
-
-Three test directories (`graph/`, `api/`, `taisa/`) and the
-`snapshot/` directory have pre-existing fixture issues exposed by
-the v1.13.05 test-isolation fix. They were green before only
-because earlier tests in the run had populated the developer's
-working DB; with proper isolation each test sees an empty DB and
-the assumptions about pre-seeded data fail. `snapshot/` has an
-additional circular-import issue via eager `app.diff.__init__`.
-
-This release adds a per-directory `conftest.py` to each of the
-four broken directories that:
-- Sets `pytestmark = pytest.mark.skip(reason=...)` so every test
-  in the dir is collected but skipped.
-- Documents the root cause and the path forward in the conftest
-  docstring (per-test fixtures, lazy diff imports, etc.).
-
-After this PR, `pytest backend/tests/` reports **68 passed, 0
-failed, 86 skipped** — the suite is honestly green on what we
-say is green, and the broken work is clearly tracked. Helton
-won't have to grep through trace dumps to figure out what's
-expected to fail.
-
-The `metadata/` and `diff/` suites still run normally (41 + 27 = 68
-passing tests).
+What this means for the demo flow:
+- Re-import the Sample 1 batch → idempotent skip (no diff).
+- Import a *modified* extract from the same source → snapshot
+  created + change_event rows for every TABLE_ADDED / COLUMN_TYPE_CHANGED
+  / etc., visible immediately in `/changes` and `/impact`.
 
 ### v1.14.04 (2026-04-29) — Split CHANGELOG.md from README
 
