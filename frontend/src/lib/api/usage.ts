@@ -1,8 +1,23 @@
 import client from "./client";
 import type { CriticalityResponse } from "./types";
 
-export async function getUsageSummary(): Promise<{ items: any[]; total: number }> {
-  const { data } = await client.get("/usage/summary");
+/**
+ * Top objects by query count.
+ *
+ * If `snapshotId` is provided, the result is restricted to objects
+ * that exist in that snapshot's graph (intersected against
+ * UsageEvent.object_name). Without it, returns the global aggregation
+ * across every recorded usage event — which is misleading on multi-
+ * source DBs and is kept only for a legacy caller; new code should
+ * always pass the snapshot.
+ */
+export async function getUsageSummary(
+  snapshotId?: number
+): Promise<{ items: any[]; total: number; snapshot_id?: number | null }> {
+  const url = snapshotId != null
+    ? `/usage/summary?snapshot_id=${snapshotId}`
+    : "/usage/summary";
+  const { data } = await client.get(url);
   return data;
 }
 
