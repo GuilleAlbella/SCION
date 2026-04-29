@@ -380,6 +380,66 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     except Exception as e:
         logger.warning("post-ingest: compute_criticality failed for %s: %s", snapshot_id, e)
 
+    # Step 6: auto-diff vs the previous snapshot of the same source.
+    # Without this, the user has to go to /changes and click Run Diff
+    # by hand to see what moved between two dict imports — an obvious
+    # ergonomic gap when the most natural workflow is "import this
+    # week's extract, see what changed since last week".
+    #
+    # We compare against the most-recent prior snapshot whose
+    # source_system matches AND that has a structural_hash (set in
+    # step 1) — anything older without a hash is ignored because
+    # it's a "naked" snapshot that hasn't been through this pipeline.
+    # The diff engine itself is idempotent (skips re-inserting
+    # change_event rows for the same pair), so a re-run is a no-op.
+    try:
+        _auto_diff_against_previous(snapshot_id)
+    except Exception as e:
+        logger.warning("post-ingest: auto-diff failed for %s: %s", snapshot_id, e)
+
+
+def _auto_diff_against_previous(snapshot_id: int) -> None:
+    """Find the prior snapshot from the same source and run a diff.
+
+    No-op if there isn't one. The diff is logged at INFO level so
+    operators see it in the dev console without having to peek at
+    /changes — useful during testing when you want to know
+    immediately whether the new extract had any structural drift.
+    """
+    from sqlalchemy import desc
+    from sqlalchemy.orm import Session as ORMSession
+    from app.db.engine import engine
+    from app.diff.diff_engine import DiffEngine
+
+    with ORMSession(bind=engine) as sess:
+        current = sess.get(Snapshot, snapshot_id)
+        if current is None:
+            return
+        previous = (
+            sess.query(Snapshot)
+            .filter(Snapshot.source_system == current.source_system)
+            .filter(Snapshot.snapshot_id != snapshot_id)
+            .order_by(desc(Snapshot.snapshot_time))
+            .first()
+        )
+        if previous is None:
+            logger.info(
+                "post-ingest: no prior snapshot for source=%r, skipping auto-diff",
+                current.source_system,
+            )
+            return
+        prev_id = previous.snapshot_id
+        prev_label = current.source_system
+
+    # DiffEngine.compute_diff persists ChangeEvent rows itself
+    # (idempotent — skips re-inserting on duplicate runs). The list
+    # it returns is just for our log line; we don't use it further.
+    changes = DiffEngine().compute_diff(prev_id, snapshot_id)
+    logger.info(
+        "post-ingest: auto-diff %d→%d for %s produced %d change(s)",
+        prev_id, snapshot_id, prev_label, len(changes),
+    )
+
 
 # ──── Helpers ────
 
