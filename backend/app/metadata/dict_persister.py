@@ -39,6 +39,9 @@ from app.db.models.snapshot import Snapshot
 from app.db.models.schema_snapshot import SchemaSnapshot
 from app.db.models.table_snapshot import TableSnapshot
 from app.db.models.column_snapshot import ColumnSnapshot
+from app.db.models.index_snapshot import IndexSnapshot
+from app.db.models.partitioning_snapshot import PartitioningSnapshot
+from app.db.models.ddl_text_snapshot import DDLTextSnapshot
 
 from .teradata_type_formatter import (
     format_column_type, is_nullable, object_type_from_tablekind,
@@ -46,7 +49,7 @@ from .teradata_type_formatter import (
 )
 from .dict_flat_file_reader import (
     DatabaseRecord, TableRecord, ColumnRecord, IndexRecord,
-    PartitioningRecord, TableTextRecord,
+    PartitioningRecord, TableTextRecord, assemble_ddl,
 )
 from .dict_batch_validator import BatchIdentity
 
@@ -60,11 +63,24 @@ logger = logging.getLogger(__name__)
 class PersistResult:
     """What was created (or skipped). Returned to the route handler so
     the response body can include human-readable counts without the
-    handler having to query back."""
+    handler having to query back.
+
+    The `_seen` fields are the raw record counts from Rahul's batch
+    (input). The `_created` fields are how many rows actually landed
+    in SCION's DB. They diverge when a record references a parent
+    object we didn't ingest (e.g. an index on a system table that
+    `tables.dat` didn't include) — we skip rather than abort.
+    """
     snapshot_id: int
     schemas_created: int
     tables_created: int
     columns_created: int
+    # Sub-tables added in v1.14.02 — counts of what was persisted, not
+    # just seen. The endpoint surfaces both `_created` and `_seen` so
+    # users can spot drops.
+    indices_created: int
+    partitioning_created: int
+    ddl_text_created: int
     indices_seen: int
     partitioning_seen: int
     tabletext_seen: int
@@ -122,6 +138,9 @@ def persist_batch(
                 schemas_created=0,
                 tables_created=0,
                 columns_created=0,
+                indices_created=0,
+                partitioning_created=0,
+                ddl_text_created=0,
                 indices_seen=len(indices),
                 partitioning_seen=len(partitioning),
                 tabletext_seen=len(tabletext),
@@ -205,11 +224,72 @@ def persist_batch(
         session.add(cs)
         columns_created += 1
 
+    # ──── Index rows (v1.14.02) ────
+    # One row per (index, column) pair, mirroring DBC.IndicesV. Skip
+    # any record whose target table isn't in our snapshot — same
+    # philosophy as columns: drop silently with a counter, don't abort.
+    indices_created = 0
+    for idx in indices:
+        table_id = table_id_by_qname.get((idx.database_name, idx.table_name))
+        if table_id is None:
+            continue
+        session.add(IndexSnapshot(
+            table_id=table_id,
+            index_name=idx.index_name,
+            index_number=idx.index_number,
+            index_type=idx.index_type,
+            unique_flag=idx.unique_flag,
+            column_name=idx.column_name,
+            column_position=idx.column_position,
+        ))
+        indices_created += 1
+
+    # ──── Partitioning rows (v1.14.02) ────
+    # One row per partitioning constraint. ConstraintText stored
+    # verbatim — see model docstring for why we don't parse it.
+    partitioning_created = 0
+    for p in partitioning:
+        table_id = table_id_by_qname.get((p.database_name, p.table_name))
+        if table_id is None:
+            continue
+        session.add(PartitioningSnapshot(
+            table_id=table_id,
+            constraint_type=p.constraint_type,
+            constraint_text=p.constraint_text,
+            create_timestamp=p.create_timestamp,
+        ))
+        partitioning_created += 1
+
+    # ──── DDL text rows (v1.14.02) ────
+    # Tabletext arrives as fragments ordered by `request_text_seq`;
+    # `assemble_ddl` concatenates them per (database, table) into the
+    # full CREATE statement. We persist one row per object regardless
+    # of how many fragments TableTextV produced.
+    ddl_text_created = 0
+    assembled = assemble_ddl(tabletext)  # {(db, tbl): full_ddl}
+    fragment_counts: dict[Tuple[str, str], int] = {}
+    for r in tabletext:
+        key = (r.database_name, r.table_name)
+        fragment_counts[key] = fragment_counts.get(key, 0) + 1
+    for (db_name, tbl_name), ddl in assembled.items():
+        table_id = table_id_by_qname.get((db_name, tbl_name))
+        if table_id is None:
+            continue
+        session.add(DDLTextSnapshot(
+            table_id=table_id,
+            ddl_text=ddl,
+            request_text_fragments=fragment_counts.get((db_name, tbl_name), 1),
+        ))
+        ddl_text_created += 1
+
     return PersistResult(
         snapshot_id=snap.snapshot_id,
         schemas_created=len(schema_id_by_name),
         tables_created=len(table_id_by_qname),
         columns_created=columns_created,
+        indices_created=indices_created,
+        partitioning_created=partitioning_created,
+        ddl_text_created=ddl_text_created,
         indices_seen=len(indices),
         partitioning_seen=len(partitioning),
         tabletext_seen=len(tabletext),
