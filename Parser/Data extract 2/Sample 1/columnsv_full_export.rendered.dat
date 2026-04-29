@@ -1,0 +1,10 @@
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§DBC§ServerV§ServerName§1,027§§§§§§§§
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§DEV_CSI§Systemx_SeqX§CSI_System_Num§1,028§§§§§§§§
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§DEV_RAW_ERP_OP_VW§partysite§LocationPEOLatitude§1,135§§§§§§§§
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§dev_raw_metricstreaming_VW§gtb_resusagesps_recent_gcp_us_central_1§DecayLevel1CPU§1,319§§§§§§§§
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§RAW_ERP_OP_TBL§negotiationresponsereqattribute§NegResReqAttAuctionHeaderId§1,368§N§18§18§0§Y§§0§N
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§raw_metricstreaming_TBL§gtb_resusagesawt_recent_aws_ap_northeast_3§NodeID§1,027§I§4§§§N§§0§N
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§raw_wla_tmp§ingestx_resusagesvpr_land_1620_stg8§CPUUExecPart24§1,388§F§8§§§N§0.00000000000000E000§0§N
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§UAT_OF_CSREPORTING§UTILIZATION§SPECIAL_PROJECTS§1,036§§§§§§§§
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§UAT_raw_metricstreaming_TBL§gtb_dbqlutilitytbl_aws_ap_northeast_1§Phase2MaxIOAmpNumber§1,127§I§4§§§Y§§0§N
+Transcend-DevTest§20260429T135225Z_1eeaac7385244269b33f097127d64cb7§2026-04-29 09:53:07.750000-04:00§2026-04-29§UAT_raw_metricstreaming_VW§gtb_resusagesawt_recent_az_us_east_2§WorkTypeAWTExhausted11§1,150§§§§§§§§

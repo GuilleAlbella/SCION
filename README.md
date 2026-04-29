@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.11.02
+**Version:** BETA v1.12.00
 
 ---
 
@@ -390,6 +390,64 @@ Supported object types: Database, Table, View, Stored Procedure, Macro, Function
 ---
 
 ## Changelog
+
+### v1.12.00 (2026-04-29) — Data dictionary ingest pipeline (Sample 1 wired)
+
+End-to-end implementation of Pipeline 2 (data dictionary). Validated
+against Rahul's first real sample at `Parser/Data extract 2/Sample 1/`.
+
+**What's in**
+
+- `backend/app/metadata/dict_flat_file_reader.py` — rewritten to
+  match Rahul's real 16-column fixed layout (was a guessed 12-col
+  layout with 5 tech fields including `row_hash`; reality is 4 tech
+  fields and a strict 16-col TPT-friendly layout). TableTextV stays
+  on its 9-field, ENDREC-terminated path.
+- `backend/app/metadata/format_detector.py` — new. Inspects bytes
+  (not extension) to classify JSON vs flat-file, then disambiguates
+  to one of 7 content types: `parser_lineage` for JSON or one of the
+  6 dict views for `.dat`. Filename is used as a tiebreaker only.
+- `backend/app/metadata/dict_batch_validator.py` — new. Enforces
+  that all files in a batch share the same `source_system_name` and
+  `extract_run_id` (Rahul's per-run UUID). Raises a clear error
+  diff when files disagree, preventing silent snapshot corruption
+  from mixing two extraction runs.
+- `backend/app/metadata/dict_persister.py` — new. Persists a
+  validated batch as one SCION snapshot keyed by `extract_run_id`.
+  Idempotent: re-importing the same batch is a no-op (lookup by
+  `extract_run_id` substring in `snapshot.description`).
+- `backend/app/api/v1/dict_import.py` — new endpoint
+  `POST /api/v1/dict-import`. Multipart upload of 1–6 files, any
+  order. Each file is auto-routed by content-type detection. Returns
+  per-category counts in the response for UI feedback.
+- `backend/tests/metadata/test_dict_real_sample.py` — 5 integration
+  tests pinned to `Parser/Data extract 2/Sample 1/`. All readers,
+  detector, validator, persister, idempotency. Skip-if-missing so
+  CI without the sample stays green.
+- `python-multipart==0.0.27` added to `backend/requirements/base.txt`
+  (required by FastAPI for multipart/form-data uploads).
+
+**Architecture decision**
+
+A single ingest endpoint is intentionally avoided: the parser
+pipeline (`POST /api/v1/parser-import`) and dict pipeline
+(`POST /api/v1/dict-import`) stay separate because they consume
+different content and follow different schemas. The `format_detector`
+exists to be **reused** if/when Rahul standardises both pipelines on
+one wire format (his choice — see Meeting #8 follow-up email
+sent 2026-04-29). Until then, two endpoints, one shared detector.
+
+**Known follow-ups (deferred to v1.13+)**
+
+- UI page for drag-and-drop dict upload — backend is ready, frontend
+  not yet wired.
+- Indices, partitioning, tabletext are parsed and counted but not
+  yet persisted to dedicated tables (tabletext DDL is recoverable
+  via `assemble_ddl()` if a consumer wants it). Adding tables for
+  them is a Phase-2 schema migration.
+- `extract_run_id` lookup by description LIKE works but is fragile
+  to description-format changes; a dedicated column on `snapshot`
+  is cleaner long-term (one-line Alembic migration when needed).
 
 ### v1.11.02 (2026-04-23) — Doc-only: TAISA branding sweep
 
