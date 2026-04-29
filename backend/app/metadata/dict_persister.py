@@ -88,15 +88,21 @@ def persist_batch(
         PersistResult with counts and the new snapshot_id.
     """
     # ──── Idempotency check ────
-    # We embed `extract_run_id=...` in the snapshot description so we
-    # can detect re-imports without adding a new column to the model.
-    # Cheap LIKE query; the alternative (extract_run_id column +
-    # migration) is overkill until we have many customers.
+    # Primary signal: the dedicated `extract_run_id` column (v1.13+).
+    # Fallback: the description-LIKE pattern from v1.12.00 — kept for
+    # one release so DBs migrated from v1.12 still recognise their
+    # existing dict-import snapshots without a re-scan. Drop the
+    # fallback in v1.14.
     if not force:
         existing = (
             session.query(Snapshot)
             .filter(Snapshot.source_system == identity.source_system_name)
-            .filter(Snapshot.description.like(f"%extract_run_id={identity.extract_run_id}%"))
+            .filter(
+                (Snapshot.extract_run_id == identity.extract_run_id)
+                | Snapshot.description.like(
+                    f"%extract_run_id={identity.extract_run_id}%"
+                )
+            )
             .one_or_none()
         )
         if existing is not None:
@@ -122,6 +128,7 @@ def persist_batch(
         ),
         is_baseline=False,
         object_count=len(tables),  # tables/views/procs — the headline count
+        extract_run_id=identity.extract_run_id,
     )
     session.add(snap)
     session.flush()  # populate snap.snapshot_id without committing

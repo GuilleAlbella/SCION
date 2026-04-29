@@ -25,6 +25,10 @@ class Snapshot(Base):
     is_baseline: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     structural_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     object_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Populated by the dict-import pipeline (v1.12+); NULL for parser-import
+    # and demo-seed snapshots which don't have a per-run identifier.
+    # Indexed (see migration a72b8c4f9d31) for fast idempotency lookups.
+    extract_run_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
 
     schemas: Mapped[List["SchemaSnapshot"]] = relationship(
         back_populates="snapshot",
