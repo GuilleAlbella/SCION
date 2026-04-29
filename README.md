@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.00
+**Version:** BETA v1.13.01
 
 ---
 
@@ -390,6 +390,36 @@ Supported object types: Database, Table, View, Stored Procedure, Macro, Function
 ---
 
 ## Changelog
+
+### v1.13.01 (2026-04-29) — Batch validator: stricter temporal checks
+
+Defence-in-depth for `dict_batch_validator`. We were trusting the
+`extract_run_id` alone as proof that 6 files belonged to one
+extraction run. That's correct in 99.9% of cases (Rahul generates
+run_id once per orchestration as `timestamp_UUID`), but doesn't
+catch the edge case where someone hand-stitches files from a
+paused or partially re-run extraction that happens to share a
+run_id.
+
+Two new checks, both within a single `extract_run_id`:
+
+1. **Same `snapshot_date`** across all files. Catches "files cross
+   midnight" — a coherent run finishes within hours, never spans a
+   day boundary.
+2. **`extracted_at_utc` drift ≤ 2 hours.** Catches paused
+   orchestrations and concatenated batches. The 2-hour window is
+   generous for Lloyds-scale customers running multi-million-row
+   TPT exports back-to-back, while still rejecting anything that
+   crossed a meaningful time gap.
+
+Both errors emit the offending filenames and timestamps so the user
+knows immediately which file to investigate. Unparseable timestamps
+silently skip the check rather than blocking — the reader's arity
+validation would have caught a truly malformed record before this
+code runs.
+
+9 new tests in `test_batch_temporal_coherence.py`. All 41 metadata
+tests pass.
 
 ### v1.13.00 (2026-04-29) — Dict ingest UI + handover + hardening
 

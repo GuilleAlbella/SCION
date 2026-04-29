@@ -25,12 +25,27 @@ What this module does NOT do
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Set, Tuple
 
 from .dict_flat_file_reader import (
     DatabaseRecord, TableRecord, ColumnRecord, IndexRecord,
     PartitioningRecord, TableTextRecord, TechFields,
 )
+
+
+# ──── Timestamp drift policy ────
+# Within a single extract_run_id, the 6 SQL queries run sequentially —
+# they SHOULD finish within minutes. We accept up to 2 hours to give
+# Lloyds-scale customers (500M+ relationships, TPT high-volume mode)
+# room to run multi-million-row exports back-to-back. Anything beyond
+# that almost certainly means the orchestration was paused or files
+# were assembled from a partial / re-run.
+#
+# Tightening this is cheap; loosening it requires a fresh discussion
+# because the whole point of the check is "files are temporally
+# coherent within a single run".
+MAX_TIMESTAMP_DRIFT_WITHIN_BATCH = timedelta(hours=2)
 
 
 # Anything with a `.tech: TechFields` attribute. Using a Protocol would
@@ -86,6 +101,98 @@ def collect_identities(
     return seen
 
 
+def _parse_extracted_at(s: str) -> Optional[datetime]:
+    """Parse Rahul's `extracted_at_utc` field into a tz-aware datetime.
+
+    The wire format is `YYYY-MM-DD HH:MM:SS.ffffff±HH:MM` (e.g.
+    `2026-04-29 09:52:32.600000-04:00`). Python 3.11+'s
+    `datetime.fromisoformat` handles this directly even with the
+    space separator. We wrap to None on parse failure so the
+    timestamp check degrades to a warning-equivalent (skipped)
+    instead of crashing the whole ingest — record-level corruption
+    is the file reader's job to surface, not ours.
+    """
+    try:
+        return datetime.fromisoformat(s.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _check_temporal_coherence(
+    files: List[Tuple[str, List[DictRecord]]],
+) -> None:
+    """Verify the 6 files were extracted as part of one orchestration.
+
+    Two checks:
+      1. Every file shares the same `snapshot_date` — fast, catches
+         the easy "files cross midnight" case.
+      2. Every file's `extracted_at_utc` is within
+         `MAX_TIMESTAMP_DRIFT_WITHIN_BATCH` of the others — catches
+         pauses, partial re-runs, or someone hand-stitching files
+         from different runs that happen to share a run_id.
+
+    Both checks rely on Rahul's contract: every record in a file
+    has identical tech fields (because they're all from the same
+    SQL query). We sample the first record per file rather than
+    walking everything — O(n_files) instead of O(n_records).
+    """
+    # Sample one tech-field set per file. Empty files contribute nothing.
+    samples: List[Tuple[str, TechFields]] = []
+    for name, records in files:
+        if records:
+            samples.append((name, records[0].tech))
+    if len(samples) < 2:
+        # Single-file batch — nothing to cross-check temporally.
+        return
+
+    # ──── Check 1: same snapshot_date everywhere ────
+    dates_by_file: dict[str, str] = {n: t.snapshot_date for n, t in samples}
+    distinct_dates = set(dates_by_file.values())
+    if len(distinct_dates) > 1:
+        lines = [
+            "Inconsistent batch: files were extracted on different dates "
+            f"({len(distinct_dates)} distinct snapshot_date values):"
+        ]
+        for name, date in dates_by_file.items():
+            lines.append(f"  - {name}: snapshot_date={date}")
+        lines.append(
+            "All 6 files of one extraction run should share the same "
+            "`snapshot_date`. Re-extract from a single orchestration run."
+        )
+        raise BatchConsistencyError("\n".join(lines))
+
+    # ──── Check 2: extracted_at_utc within drift window ────
+    # Files run sequentially, so the timestamps differ — but only by
+    # the time it took to run each query. A drift larger than the
+    # configured window means the run wasn't continuous.
+    parsed: List[Tuple[str, datetime]] = []
+    for name, t in samples:
+        ts = _parse_extracted_at(t.extracted_at_utc)
+        if ts is not None:
+            parsed.append((name, ts))
+    if len(parsed) < 2:
+        # Couldn't parse enough timestamps to compare — don't block on
+        # what's effectively a soft signal. The reader would have
+        # already failed on a malformed record.
+        return
+
+    earliest_name, earliest = min(parsed, key=lambda p: p[1])
+    latest_name, latest = max(parsed, key=lambda p: p[1])
+    drift = latest - earliest
+    if drift > MAX_TIMESTAMP_DRIFT_WITHIN_BATCH:
+        lines = [
+            f"Inconsistent batch: files span {drift} of wall time "
+            f"(max allowed: {MAX_TIMESTAMP_DRIFT_WITHIN_BATCH}):",
+            f"  - earliest: {earliest_name} at {earliest.isoformat()}",
+            f"  - latest:   {latest_name} at {latest.isoformat()}",
+            "A normal extraction run completes in minutes (hours at most "
+            "for very large customers). Drift this large suggests the "
+            "orchestration was paused, partially re-run, or files were "
+            "assembled from separate runs. Re-extract.",
+        ]
+        raise BatchConsistencyError("\n".join(lines))
+
+
 def validate_batch(
     files: List[Tuple[str, List[DictRecord]]],
 ) -> BatchIdentity:
@@ -101,7 +208,10 @@ def validate_batch(
         The single BatchIdentity that all files agree on.
 
     Raises:
-        BatchConsistencyError: if files disagree, or all files are empty.
+        BatchConsistencyError: if files disagree on identity, span
+        different snapshot_dates, or have extracted_at_utc drift
+        beyond `MAX_TIMESTAMP_DRIFT_WITHIN_BATCH`. Each path emits a
+        message describing exactly which files broke which rule.
     """
     if not files:
         raise BatchConsistencyError("Empty batch: no files provided.")
@@ -152,5 +262,11 @@ def validate_batch(
             "`extract_run_id` (generated once per orchestration run)."
         )
         raise BatchConsistencyError("\n".join(lines))
+
+    # Defence-in-depth: even with matching identity, verify the files
+    # were extracted within a reasonable wall-clock window. Catches
+    # paused orchestrations and hand-stitched batches that happen to
+    # share a run_id. See `_check_temporal_coherence` for the policy.
+    _check_temporal_coherence(files)
 
     return next(iter(distinct_ids))
