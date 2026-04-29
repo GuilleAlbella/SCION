@@ -8,21 +8,29 @@ indices, partitioning, tabletext) that have already been parsed by
 `dict_batch_validator`.
 
 Output: one new row in `snapshot` plus the corresponding rows in
-`schema_snapshot` / `table_snapshot` / `column_snapshot`. Indices,
-partitioning and tabletext are summarised in the description for now —
-they're useful but don't fit the existing 3-table snapshot schema, and
-adding tables for them is a Phase-2 migration we defer until the graph
-side actually consumes them.
+`schema_snapshot` / `table_snapshot` / `column_snapshot`, AND the
+post-ingest analytical pipeline runs against the new snapshot so
+the rest of SCION (graph, metrics, criticality, snapshot stats)
+sees the data immediately. Without that pipeline, the snapshot
+appears in /snapshots but every other page reports empty — which
+is exactly what users hit in v1.13.02 (see Issue: "imported but
+no data in graph/metrics/usage").
 
-Idempotency: an `extract_run_id` is unique per Rahul's orchestration
-run, so re-importing the same batch should be a no-op (we detect by
-looking at `snapshot.description`, which embeds the run_id). The
+Indices, partitioning and tabletext are parsed and counted but not
+yet persisted to dedicated tables — that's a Phase-2 schema
+migration deferred until the graph side actually consumes them.
+
+Idempotency: `extract_run_id` is unique per Rahul's orchestration
+run, so re-importing the same batch is a no-op. We detect via the
+indexed `extract_run_id` column on `snapshot` (v1.13.01+) with a
+fallback to the description-LIKE pattern for v1.12-era rows. The
 caller can override with `force=True` to create a duplicate snapshot
 for testing.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -41,6 +49,9 @@ from .dict_flat_file_reader import (
     PartitioningRecord, TableTextRecord,
 )
 from .dict_batch_validator import BatchIdentity
+
+
+logger = logging.getLogger(__name__)
 
 
 # ──── Result type ────
@@ -205,6 +216,89 @@ def persist_batch(
         skipped_existing=False,
         identity=identity,
     )
+
+
+def run_post_ingest_pipeline(snapshot_id: int) -> None:
+    """Run the analytical pipeline that fills graph + metrics tables.
+
+    **Call this AFTER `persist_batch` and AFTER the caller has committed
+    its transaction.** Each step opens its own session against the
+    global engine, so the snapshot rows must be visible there before
+    the helpers run.
+
+    Without this, /graph, /metrics, /usage, /intelligence, /lineage and
+    /impact all show empty for a freshly-imported snapshot. Order matters:
+      1. structural_hash — fingerprint for de-duplication
+      2. snapshot_metrics — counts (databases, tables, columns)
+      3. build_graph_for_snapshot — graph_node + graph_edge from FK
+         heuristics (works on dict snapshots, though edges may be
+         sparse without explicit FK metadata)
+      4. persist_node_metrics — fragility, in/out degree, hub flag
+      5. compute_criticality(usage_available=False) — graph-only
+         criticality scores; usage will be re-computed when pipeline 3
+         lands. Without this, /usage and /intelligence show empty.
+
+    Errors are logged and swallowed per step. We'd rather have a
+    snapshot with partial analytical metadata than reject the whole
+    import because one downstream metric blew up on edge-case data.
+    """
+    # Late imports: these modules pull in graph/usage/snapshot
+    # subsystems and the import graph would be unnecessarily heavy if
+    # we hoisted them to module top. Late binding also dodges potential
+    # circular-import issues when the package grows.
+    from app.snapshot.structural_hash import compute_structural_hash
+    from app.snapshot.snapshot_metrics import compute_snapshot_metrics
+    from app.graph.graph_builder import build_graph_for_snapshot
+    from app.graph.graph_metrics import persist_node_metrics
+    from app.usage.criticality_engine import compute_criticality
+    from app.db.engine import engine
+    from sqlalchemy.orm import Session as ORMSession
+
+    # Step 1+2: structural hash + snapshot metrics.
+    # `compute_structural_hash` returns the hash; we persist it on the
+    # snapshot row so the diff engine can short-circuit identical
+    # snapshots without re-walking everything.
+    try:
+        h = compute_structural_hash(snapshot_id)
+        with ORMSession(bind=engine) as sess:
+            snap = sess.get(Snapshot, snapshot_id)
+            if snap is not None:
+                snap.structural_hash = h
+                sess.commit()
+    except Exception as e:
+        logger.warning("post-ingest: structural_hash failed for %s: %s", snapshot_id, e)
+
+    try:
+        compute_snapshot_metrics(snapshot_id)
+    except Exception as e:
+        logger.warning("post-ingest: snapshot_metrics failed for %s: %s", snapshot_id, e)
+
+    # Step 3+4: build the technical graph and node metrics.
+    # The FK heuristic in build_graph_for_snapshot looks for column
+    # naming conventions (`*_id`, `id`) to infer FEEDS edges. Dict
+    # snapshots have column names but no explicit FK metadata, so
+    # edges may be sparse. That's fine — nodes alone unblock /graph
+    # and /lineage.
+    try:
+        build_graph_for_snapshot(snapshot_id)
+    except Exception as e:
+        logger.warning("post-ingest: build_graph failed for %s: %s", snapshot_id, e)
+
+    try:
+        persist_node_metrics(snapshot_id)
+    except Exception as e:
+        logger.warning("post-ingest: persist_node_metrics failed for %s: %s", snapshot_id, e)
+
+    # Step 5: criticality (graph-only fallback).
+    # `usage_available=False` switches off the usage-aggregation branch
+    # so we don't need a usage feed to populate /usage and
+    # /intelligence. The combined score becomes the graph score alone;
+    # HIGH/MEDIUM/LOW thresholds stay at 0.6 / 0.3 (so banding looks
+    # consistent across snapshots that do or don't have usage data).
+    try:
+        compute_criticality(snapshot_id, usage_available=False)
+    except Exception as e:
+        logger.warning("post-ingest: compute_criticality failed for %s: %s", snapshot_id, e)
 
 
 # ──── Helpers ────

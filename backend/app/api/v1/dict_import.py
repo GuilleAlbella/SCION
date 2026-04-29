@@ -221,6 +221,13 @@ async def import_dict_batch(
                 detail=f"Failed to persist snapshot: {e}",
             )
 
+    # Run the post-ingest analytical pipeline so the new snapshot
+    # shows up in /graph, /metrics, /usage, /intelligence, /lineage
+    # and /impact. Skipped on idempotent re-imports — the prior run
+    # already populated everything, re-running would be wasted work.
+    if not result.skipped_existing:
+        dict_persister.run_post_ingest_pipeline(result.snapshot_id)
+
     return DictImportResponse(
         snapshot_id=result.snapshot_id,
         skipped_existing=result.skipped_existing,
