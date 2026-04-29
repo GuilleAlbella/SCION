@@ -16,6 +16,11 @@ import app.db.models.snapshot  # noqa: F401
 import app.db.models.schema_snapshot  # noqa: F401
 import app.db.models.table_snapshot  # noqa: F401
 import app.db.models.column_snapshot  # noqa: F401
+# Dict-ingest sub-tables (v1.14.02+). Loaded after table_snapshot so
+# their FK target is registered first.
+import app.db.models.index_snapshot  # noqa: F401
+import app.db.models.partitioning_snapshot  # noqa: F401
+import app.db.models.ddl_text_snapshot  # noqa: F401
 # Parser-integration tables (introduced in v1.04 for DataDNA parser feed).
 # Ordered so Process is loaded before Step (Step has a FK to Process).
 import app.db.models.process  # noqa: F401

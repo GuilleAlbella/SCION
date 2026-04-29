@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.00
+**Version:** BETA v1.14.02
 
 ---
 
@@ -400,6 +400,46 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.14.02 (2026-04-29) — Persist indices, partitioning, and DDL text
+
+The dict ingest pipeline parsed all 6 files but only persisted 3 of
+them (databases / tables / columns) into dedicated tables. Indices,
+partitioning and DDL text were "seen but not persisted" — counted in
+the response and discarded.
+
+This release wires up the missing 3:
+
+- **New tables** (Alembic migration `b83c9d5e6f12`):
+  - `index_snapshot` — one row per (index, column) pair from
+    `DBC.IndicesV`. Multi-column indexes appear as multiple rows
+    with same `index_number` and ascending `column_position`.
+  - `partitioning_snapshot` — one row per partitioning constraint.
+    `ConstraintText` stored verbatim (no parsing — Teradata's grammar
+    is variable across versions and customers want to see exactly
+    what the catalog reported).
+  - `ddl_text_snapshot` — one row per object with the full
+    reconstructed CREATE statement (assembled from `DBC.TableTextV`
+    fragments). Single row per `table_id` (unique) so re-imports
+    overwrite cleanly. `request_text_fragments` keeps the original
+    chunk count for diagnostics.
+
+- **Persister updated** — `dict_persister.py` now populates all 3
+  sub-tables alongside databases/tables/columns. Records that
+  reference parents we didn't ingest (e.g. an index on a system
+  table) are skipped silently with a counter, never aborting the
+  ingest.
+
+- **Endpoint response** gains 3 new fields:
+  `indices_created`, `partitioning_created`, `ddl_text_created`
+  alongside the existing `*_seen` counts. Drift between `_created`
+  and `_seen` indicates the parent-not-found case.
+
+All 3 sub-tables FK to `table_snapshot` so they participate in the
+existing snapshot-deletion cascade. No FK to `snapshot` directly —
+going through `table_snapshot.schema_id → schema_snapshot.snapshot_id`
+keeps a single source of truth for "which snapshot does this row
+belong to."
 
 ### v1.14.00 (2026-04-29) — Liveness / readiness probe endpoints
 

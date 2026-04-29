@@ -46,7 +46,13 @@ router = APIRouter(prefix="/dict-import", tags=["dict-import"])
 # ──── Response shape ────
 
 class DictImportResponse(BaseModel):
-    """What we send back after a successful (or no-op) import."""
+    """What we send back after a successful (or no-op) import.
+
+    `_seen` fields are the raw counts in Rahul's batch; `_created`
+    are how many landed in SCION's DB. Drift between the two means
+    records referenced parents we didn't ingest (typical for system
+    tables in DBC.* that aren't in `tables.dat`).
+    """
     snapshot_id: int
     skipped_existing: bool
     source_system_name: str
@@ -54,6 +60,9 @@ class DictImportResponse(BaseModel):
     schemas_created: int
     tables_created: int
     columns_created: int
+    indices_created: int
+    partitioning_created: int
+    ddl_text_created: int
     indices_seen: int
     partitioning_seen: int
     tabletext_seen: int
@@ -236,6 +245,9 @@ async def import_dict_batch(
         schemas_created=result.schemas_created,
         tables_created=result.tables_created,
         columns_created=result.columns_created,
+        indices_created=result.indices_created,
+        partitioning_created=result.partitioning_created,
+        ddl_text_created=result.ddl_text_created,
         indices_seen=result.indices_seen,
         partitioning_seen=result.partitioning_seen,
         tabletext_seen=result.tabletext_seen,
