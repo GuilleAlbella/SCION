@@ -10,26 +10,25 @@ SCION is a proprietary platform that replaces Kalido within Teradata DNA. It mon
 
 ## Architecture
 
-SCION is built on **7 independent engines** orchestrated through a REST API with a modern web UI, plus a **parser ingest subsystem** that consumes external lineage feeds.
+SCION is built on **7 independent engines** orchestrated through a REST API with a modern web UI. **All inputs come from offline extractor files** — SCION never connects to a customer database directly (committee decision).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  External sources                                                   │
-│  ┌──────────────────┐    ┌──────────────────┐                        │
-│  │  Live DB         │    │  DataDNA Parser  │                        │
-│  │  (SQLite/Postgres│    │  (lineage JSON)  │                        │
-│  │   /Teradata)     │    │                  │                        │
-│  └────────┬─────────┘    └────────┬─────────┘                        │
-│           │ extract                │ ingest                          │
+│  External extractors (owned by the parser/dict team)                │
+│  ┌──────────────────┐    ┌──────────────────────┐                    │
+│  │  DataDNA Parser  │    │  Data Dictionary     │                    │
+│  │  (lineage JSON)  │    │  Extractor (6 .dat)  │                    │
+│  └────────┬─────────┘    └────────┬─────────────┘                    │
+│           │ POST /parser-import    │ POST /dict-import                │
 └───────────┼────────────────────────┼──────────────────────────────────┘
             ▼                        ▼
-       ┌────────────┐          ┌──────────────┐
-       │  Metadata  │          │   Parser     │
-       │  Ingestion │          │   Ingest     │
-       │  Adapters  │          │  subsystem   │
-       └─────┬──────┘          └──────┬───────┘
-             └────────┬────────────────┘
-                      ▼
+       ┌──────────────┐         ┌──────────────┐
+       │   Parser     │         │  Dict batch  │
+       │   Ingest     │         │  validator + │
+       │  subsystem   │         │  persister   │
+       └──────┬───────┘         └──────┬───────┘
+              └─────────┬───────────────┘
+                        ▼
 Snapshot → Diff → Graph & Impact → TAISA Reasoning
                               ↗
         Usage & Criticality → Intelligence Metrics
@@ -37,8 +36,8 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 
 | Engine | Purpose |
 |--------|---------|
-| **Metadata Ingestion** | Multi-engine adapters (SQLite, PostgreSQL, Teradata), template-based extraction |
 | **Parser Ingest** | Consumes DataDNA parser JSON feeds (Tier 1/2/3 lineage), with noise filter + dry-run |
+| **Data Dictionary Ingest** | Consumes 6-file `.dat` batch from the dict extractor, validates source + run_id + temporal coherence, persists as one snapshot keyed by `extract_run_id` |
 | **Snapshot Engine** | Full EDW state capture, structural SHA-256 hashing, historical versioning |
 | **Diff Engine** | 10+ change types, severity scoring, breaking-vs-compatibility classification |
 | **Graph & Impact** | SQL-native dependency graph, blast radius, fragility, query-count integration |
@@ -52,7 +51,7 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2.0, Alembic |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy 2.0, Alembic |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
 | Database | SQLite (demo), PostgreSQL-ready |
 | Charts | Recharts |
@@ -67,18 +66,26 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 ```
 backend/
   app/
-    api/v1/              # REST API endpoints (28+)
+    api/v1/              # REST API endpoints
+      parser_import.py   #   POST /parser-import (JSON pipeline, v1.04+)
+      dict_import.py     #   POST /dict-import (.dat batch pipeline, v1.12+)
+      ...                #   snapshots, diff, graph, impact, …
     db/                  # ORM models (SQLAlchemy) — 14 tables
       models/            #   snapshot, schema_snapshot, table_snapshot,
-                         #   column_snapshot, process, step, attribute_lineage
+                         #   column_snapshot, process, step, attribute_lineage, …
     ddl/                 # DDL generator engine
     diff/                # Diff engine + rules + models
     graph/               # Graph builder, impact analyzer, blast radius
     llm/                 # LLM provider abstraction (mock + real backend)
-    metadata/            # Adapters (SQLite/Postgres/Teradata) — extract
+    metadata/            # Data-dictionary readers + validators + persisters
+      dict_flat_file_reader.py   #   §-delimited / ENDREC reader
+      format_detector.py         #   Content-based JSON vs .dat dispatch
+      dict_batch_validator.py    #   Same source + run_id + temporal coherence
+      dict_persister.py          #   Snapshot keyed by extract_run_id
+      teradata_type_formatter.py #   2-char TD codes → canonical types
     metrics/             # Intelligence metrics engine
-    parser_ingest/       # NEW in v1.04 — DataDNA parser integration
-      parser_models.py   #   Internal dataclasses (ParsedLineagePayload, ...)
+    parser_ingest/       # DataDNA parser JSON integration (v1.04)
+      parser_models.py   #   Internal dataclasses (ParsedLineagePayload, …)
       teradata_parser.py #   Raw JSON → internal payload
       noise_filter.py    #   Drop NOT APPLICABLE / UNKNOWN / literals
       ingestor.py        #   Persist payload into SCION tables
@@ -86,29 +93,31 @@ backend/
     snapshot/            # Snapshot engine, structural hash, metrics
     taisa/               # TAISA client, prompts, algorithm knowledge base
     usage/               # Usage ingestor, criticality engine
-  tests/
-  tools/                 # Bootstrap + rich seed scripts
+  tests/                 # pytest — metadata, graph, diff, taisa, api
+  tools/                 # bootstrap_sqlite_db.py, rich_seed.py, fixtures
 
 frontend/
   src/
-    app/                 # Next.js App Router (18 pages)
-    components/          # Shared UI components (18+)
-    lib/                 # API client, hooks, context, terminology, constants
+    app/                 # Next.js App Router (14 pages)
+    components/          # Shared UI components (Sidebar, GuidedSection, …)
+    lib/                 # API clients, hooks, context, terminology, constants
 
-parser/                  # Sample payloads from the DataDNA parser team
-  README.md              # DBQL / PDCR export spec from Rahul
-  lineage-mvp.json       # Parser v1 output sample
-  lineage-sample.xlsx    # Tabular view of the same
+Parser/                  # Sample payloads from the extractor team
+  lineage-mvp.json       # Parser v1 JSON sample
+  Data extract 2/        # Data dictionary spec + first real .dat sample
+    README.md            #   16-col layout spec
+    Sample 1/            #   6 rendered .dat files (Transcend-DevTest)
 ```
 
 ---
 
-## UI Pages (18)
+## UI Pages (14)
 
 | Page | Description |
 |------|-------------|
 | **Dashboard** | Mission control: animated KPIs, engine status, processing pipeline, breaking changes ticker, recent activity |
-| **Snapshots** | List, capture live snapshot, **import from parser (JSON)**, **protected delete** with typed-ID confirmation |
+| **Import** | Drag-and-drop multipart upload for the 6-file dict batch. Coverage indicator, per-file remove, server errors rendered verbatim. Format detection is server-side |
+| **Snapshots** | List snapshots, **protected delete** with typed-ID confirmation |
 | **Changes** | Compare snapshots, filters, expandable before/after, **DDL Generator**, **Visual Diff**, **quick links** to Lineage/Timeline/Impact/Usage, **CSV export** |
 | **Impact Analysis** | Batch blast radius, donut charts, per-change table with **queries/users affected**, **Export Report** (HTML), **CSV export**, confetti on LOW risk |
 | **What-If Simulation** | Preview a hypothetical change's impact without applying it |
@@ -144,10 +153,11 @@ parser/                  # Sample payloads from the DataDNA parser team
 | GET | `/api/v1/snapshots` | List all snapshots |
 | DELETE | `/api/v1/snapshots/{id}?confirm_id=X` | Delete latest snapshot (protected, cascade) |
 
-### Parser Ingest (NEW in v1.04)
+### Ingest pipelines
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/parser-import/lineage?dry_run=true\|false` | Import DataDNA parser JSON. Dry-run returns preview; real run persists snapshot + process + step + attribute_lineage |
+| POST | `/api/v1/dict-import` | Multipart upload of 1–6 dict `.dat` files. Auto-detects content type per file, validates batch consistency (source + run_id + temporal coherence), persists as one snapshot keyed by `extract_run_id`. Idempotent re-import |
 
 ### Diff & Changes
 | Method | Path | Description |
@@ -164,8 +174,25 @@ parser/                  # Sample payloads from the DataDNA parser team
 | POST | `/api/v1/impact/batch` | Batch impact + queries affected |
 | POST | `/api/v1/simulation` | What-If hypothetical change impact |
 
-### Reasoning, Reports, Export, Timeline, Search, Alerts
-(same as v1.03 — see previous release)
+### Reasoning, Intelligence & Usage
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/reasoning/diff/{from}/{to}` | TAISA batch reasoning over a diff |
+| POST | `/api/v1/reasoning/change/{change_id}` | Single-change deep-dive |
+| GET | `/api/v1/intelligence/{snapshot_id}` | Governance scorecard, volatility trend |
+| GET | `/api/v1/usage` | Usage events + criticality |
+
+### Reports, Export, Timeline, Search, Alerts, DDL, Control, Schema-tree
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/report/{from}/{to}` | HTML impact report |
+| GET | `/api/v1/export/{kind}/{params}` | CSV exports for changes / impact / intelligence / usage |
+| GET | `/api/v1/timeline/{object}` | Object evolution across snapshots |
+| GET | `/api/v1/search?q=...` | Cross-cutting search over graph nodes + change events |
+| GET | `/api/v1/alerts` | Breaking, high-severity, broken-lineage, hub, orphan alerts |
+| POST | `/api/v1/ddl/generate` | DDL generator for selected change events |
+| POST | `/api/v1/control/{engine}/stop\|restart` | Engine lifecycle control |
+| GET | `/api/v1/schema-tree/{snapshot_id}` | Hierarchical view: database → table → column |
 
 ---
 
@@ -173,7 +200,7 @@ parser/                  # Sample payloads from the DataDNA parser team
 
 | Table | Purpose |
 |-------|---------|
-| `snapshot` | EDW state versions |
+| `snapshot` | EDW state versions (now with indexed `extract_run_id` column for dict-import idempotency, v1.13.01) |
 | `schema_snapshot` | Databases within a snapshot |
 | `table_snapshot` | Tables/views within a database |
 | `column_snapshot` | Columns with types and positions |
@@ -190,11 +217,15 @@ parser/                  # Sample payloads from the DataDNA parser team
 
 ---
 
-## Parser Integration (NEW in v1.04 — Day 1 complete)
+## Ingest Pipelines
 
-SCION consumes the DataDNA parser's lineage JSON output. The parser team (led by Rahul Kulkarni) produces a feed with 7 entity types (platform, containers, datasets, attributes, processGroups, processes, steps) plus 3 tiers of lineage edges (Tier 1 query-block-level, Tier 2 statement-level, Tier 3 dataset-level) and a consolidated `lineageFactAttribute` fact table.
+SCION accepts data from offline extractors only — never connects directly to a customer database (committee decision). Two pipelines are live today; two are planned. Architecture details in `docs/ingestion_pipelines.md`.
 
-### Pipeline
+### Pipeline 1 — Parser BTEQ/SQL (live since v1.04)
+
+Consumes a JSON parse-tree of CREATE / INSERT / view DDLs. The producer emits 7 entity types (platform, containers, datasets, attributes, processGroups, processes, steps) plus 3 tiers of lineage edges (Tier 1 query-block-level, Tier 2 statement-level, Tier 3 dataset-level) and a consolidated `lineageFactAttribute` fact table.
+
+**Internal flow:**
 
 ```
 raw JSON
@@ -213,37 +244,33 @@ ingestor.ingest()          → persists Snapshot + schema/table/column +
 (or) dry_run.analyze()     → returns stats without persisting
 ```
 
-### Tested end-to-end with `parser/lineage-mvp.json`
+### Pipeline 2 — Data dictionary (live since v1.12)
 
-With the sample JSON from the parser team, the pipeline processes:
+Consumes a 6-file `.dat` batch from `DBC.DatabasesV` / `TablesV` / `ColumnsV` / `IndicesV` / `PartitioningConstraintsV` / `TableTextV`. The wire format is `§`-delimited, `ENDREC`-terminated for tabletext, with a fixed 16-column layout for the rest (spec in `Parser/Data extract 2/README.md`).
 
-| Stage | Entity | Input | Kept | Dropped |
-|-------|--------|-------|------|---------|
-| Parse | containers | 3 | — | — |
-| | datasets | 3 | — | — |
-| | attributes | 15 | — | — |
-| | processes | 1 | — | — |
-| | steps | 2 | — | — |
-| | dataset_lineage | 2 | — | — |
-| | attribute_lineage | 8 | — | — |
-| Noise filter | containers | 3 | 1 (DBC) | 2 (NOT APPLICABLE, UNKNOWN) |
-| | datasets | 3 | 1 | 2 (placeholder + TEMPTABLE) |
-| | attributes | 15 | 2 | 13 literals |
-| | dataset_lineage | 2 | 0 | 2 (endpoints filtered) |
-| | attribute_lineage | 8 | 1 | 7 (involve literals) |
-| Persisted | databases | | 1 | |
-| | tables | | 1 (object_type=UNKNOWN) | |
-| | columns | | 2 (data_type=UNKNOWN) | |
-| | processes | | 1 | |
-| | steps | | 2 | |
-| | attribute_lineage | | 1 (with expression + transformationType) | |
+**Internal flow:**
 
-### Known gaps (awaiting parser v2)
+```
+1–6 .dat files
+    │
+    ▼
+format_detector.detect()      → classify each file by content (filename is tiebreaker)
+    │
+    ▼
+dict_flat_file_reader.*       → §-split, validate arity, build typed records
+    │
+    ▼
+dict_batch_validator.*        → enforce same source + run_id + temporal coherence
+    │
+    ▼
+dict_persister.persist_batch()→ one snapshot keyed by extract_run_id (idempotent)
+```
 
-- `datasetType` (TABLE/VIEW/SP/...) not in v1 — stored as `UNKNOWN` until Rahul's team adds it. Schema-change detection blocked on this.
-- `dataType`, `nullable`, `ordinalPosition` not in v1 — same situation for columns.
-- Literals (`'D'`, `NULL`, etc.) modelled as pseudo-attributes — handled by heuristic noise filter. Will switch to direct classifier if parser adds `attributeClass` field.
-- Usage data (query counts, user counts) not yet in parser feed — pending separate feed per Phase 3 of the rollout plan.
+Tested end-to-end against the real sample at `Parser/Data extract 2/Sample 1/` (`Transcend-DevTest`, 6 files × 10 records = 60 records). 41 metadata tests pass, including 9 edge-case temporal-coherence tests added in v1.13.01.
+
+### Pipelines 3 & 4 — Usage and raw code (planned)
+
+Out of scope for the current build. Same architecture: offline extractor produces files, SCION consumes. See `docs/ingestion_pipelines.md` for the full 4-pipeline picture.
 
 ---
 
@@ -300,37 +327,29 @@ python tools/rich_seed.py
 
 Opens at **http://localhost:3000**
 
-### Try the parser ingestion (v1.04)
+### Try an ingest
 
-```python
-# From a Python REPL inside backend/
-import app.db.base  # pre-load models
-import json
-from app.parser_ingest import teradata_parser, noise_filter, ingestor, dry_run
-
-with open('../parser/lineage-mvp.json') as f:
-    payload = json.load(f)
-
-parsed = teradata_parser.parse(payload)
-noise_filter.apply(parsed)
-
-# Option A: dry-run (no DB writes)
-report = dry_run.analyze(parsed)
-print(report.persisted_counts)
-print(report.warnings)
-
-# Option B: real ingestion
-report = ingestor.ingest(parsed, description='Test run')
-print(f"snapshot_id: {report.snapshot_id}")
-```
-
-Or via HTTP:
+**Pipeline 1 (parser JSON)** — via HTTP:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/parser-import/lineage?dry_run=true \
+curl -X POST "http://localhost:8000/api/v1/parser-import/lineage?dry_run=true" \
      -H "Content-Type: application/json" \
-     -d @parser/lineage-mvp.json
+     -d @Parser/lineage-mvp.json
 ```
+
+**Pipeline 2 (dict `.dat` batch)** — via the UI: open http://localhost:3000/import and drag the 6 files from `Parser/Data extract 2/Sample 1/` onto the drop zone. Or via curl:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/dict-import \
+  -F "files=@Parser/Data extract 2/Sample 1/databasesv_full_export.rendered.dat" \
+  -F "files=@Parser/Data extract 2/Sample 1/tablesv_full_export.rendered.dat" \
+  -F "files=@Parser/Data extract 2/Sample 1/columnsv_full_export.rendered.dat" \
+  -F "files=@Parser/Data extract 2/Sample 1/indicesv_full_export.rendered.dat" \
+  -F "files=@Parser/Data extract 2/Sample 1/partitioningconstraintsv_full_export.rendered.dat" \
+  -F "files=@Parser/Data extract 2/Sample 1/tabletextv_full_export.rendered.dat"
+```
+
+Returns a JSON response with the new `snapshot_id` plus per-category counts (schemas / tables / columns / indices / partitioning / tabletext). Re-running with the same files is idempotent.
 
 ---
 
@@ -363,29 +382,21 @@ Supported object types: Database, Table, View, Stored Procedure, Macro, Function
 
 ---
 
-## What Remains
+## Roadmap
 
-### Blocked on parser team (open email with Rahul)
-| Item | Status |
-|------|--------|
-| `datasetType` on each dataset | Asked — waiting |
-| `dataType`, `nullable`, `ordinalPosition` on each attribute | Asked — waiting |
-| `attributeClass` classifier to distinguish literals from columns | Asked — waiting |
-| Usage aggregates (per-object queryCount, userCount, lastAccessed) | Asked — waiting |
-| Parse cadence (full vs incremental, daily vs triggered) | Asked — waiting |
+The engineering roadmap (phases, gates, owners, decision log) lives in **`docs/internal_roadmap.md`** — the canonical place to look for "what's next, who owns it, and what's blocking what".
 
-### Next on our side (Day 3+)
-- Propagate `UNCLASSIFIED` styling beyond the graph (Metrics, Usage, Criticality still classify by literal `TABLE`/`VIEW`)
-- Fold `datasetType`/`dataType` into ingestor as soon as Rahul ships parser v2 — remove the UNKNOWN fallback path
-- Diff engine coverage for attribute-level lineage changes (new `attribute_lineage` table is persisted but diff rules don't read it yet)
+Top-level phases at a glance:
 
-### Other (configuration only)
-| Item | Effort |
-|------|--------|
-| Connect to Teradata directly | Low (TeradataAdapter exists) |
-| PostgreSQL | Low |
-| Docker | Low |
-| Tests | Medium |
+| Phase | Status | Highlights |
+|-------|--------|------------|
+| **0 · Foundations** | ✅ Done | 7 engines, 14 UI pages, parser + dict ingest, narrative UX |
+| **1 · Pipelines 2 & 3** | 🟡 In flight | Pipeline 2 (dict) live; Pipeline 3 (usage) format pending |
+| **2 · Scale & hardening** | 🔵 Planned | Benchmark on real data, SQLite→Postgres decision, Docker packaging |
+| **3 · First customer pilot** | 🔴 Future | Auth, infosec, release discipline (`docs/release_policy.md`) |
+| **4 · v1.0 GA** | 🔴 Future | Flip `APP_STAGE` from `BETA` once GA criteria are satisfied |
+
+Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets), `docs/handover.md` (first-day setup for new maintainers), `docs/release_policy.md` (versioning + rollback), `docs/ingestion_pipelines.md` (architecture of the 4 input pipelines).
 
 ---
 
