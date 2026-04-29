@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.13.04
+**Version:** BETA v1.13.05
 
 ---
 
@@ -400,6 +400,46 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ---
 
 ## Changelog
+
+### v1.13.05 (2026-04-29) — Test isolation: stop wiping the developer's DB
+
+**Critical bug fix.** Most tests under `backend/tests/` (diff/, snapshot/,
+graph/, api/, taisa/) imported the global engine from `app.db.engine`
+and called `Base.metadata.drop_all/create_all` against it. Without
+redirection, those tests wiped the developer's working `kalido_lite.db`
+on every `pytest` run — including the rich-seed demo data and any
+imported customer snapshots. We hit this for real on this branch:
+a routine `pytest backend/tests/` torched the demo DB.
+
+Fix in `backend/tests/conftest.py`:
+
+- **Engine redirection** — `_ensure_test_database_url()` sets
+  `DATABASE_URL` to a per-PID file under `tempfile.gettempdir()`
+  *before* any `app.db.engine` import. Since the engine reads the
+  env var at module import time, this must happen in `conftest.py`
+  (loaded by pytest before any `test_*.py`); a fixture would be
+  too late.
+- **Sanity guard** — `pytest_configure` aborts the run with a clear
+  error if the engine ends up pointed at a path that looks like the
+  developer's working DB (`<root>/kalido_lite.db` or
+  `<root>/backend/kalido_lite.db`). Defence in depth — if a future
+  refactor breaks the env redirection, the next run fails loudly
+  instead of silently destroying data.
+- **CI compatibility** — if `DATABASE_URL` is already set by the
+  caller (CI injecting a test DB), we respect it. We only intervene
+  when nothing's been configured, which is the dangerous default
+  on a developer machine.
+
+19 test files use the global engine destructively; rather than
+refactor each one to use `tmp_path`, the conftest fix is one place,
+no behaviour change inside the tests, no risk of missing one. The
+test count regressed 44→46 fails because two tests that were
+"passing by luck" (depending on whichever data the developer's DB
+happened to have) now correctly fail against a clean DB. Those are
+tracked as a separate cleanup task — they need per-test fixtures.
+
+Verified end-to-end: demo DB had 10 snapshots before pytest, has 10
+snapshots after pytest. Bomb defused.
 
 ### v1.13.04 (2026-04-29) — Usage page scoped to selected snapshot
 
