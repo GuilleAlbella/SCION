@@ -8,6 +8,33 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.08 (2026-05-04) — Backfill missing Alembic migration for usage tables
+
+`usage_event` and `object_criticality` are runtime-required tables
+(populated by the post-ingest pipeline since v1.07) but never had an
+Alembic migration. The dev DB worked because `tools/bootstrap_sqlite_db.py`
+calls `Base.metadata.create_all()`, which creates everything registered
+on `Base` regardless of migration history. A fresh `alembic upgrade head`
+from an empty DB produced a partially functional schema — `rich_seed.py`
+then crashed on `DELETE FROM object_criticality`.
+
+This was reported by Helton on his first day setting up his local
+environment. The workaround was to use the bootstrap script instead of
+Alembic; this migration removes the workaround.
+
+The new revision `c94d0e6a7b23` (after `b83c9d5e6f12`) creates both
+tables exactly as defined in `app/usage/usage_models.py`, plus a
+composite index `(snapshot_id, combined_score)` on `object_criticality`
+that matches the engine + TAISA + export query patterns. Verified end
+to end: `alembic upgrade head` against an empty DB produces the full
+18-table schema; downgrade `-1` cleanly removes both tables.
+
+This also unblocks the Docker work — the entrypoint can now rely on
+`alembic upgrade head` and we don't need to ship `bootstrap_sqlite_db.py`
+inside the container image.
+
+---
+
 ### v1.14.07 (2026-04-29) — Auto-diff dict snapshots against the previous one
 
 When a new dict batch is ingested, the post-ingest pipeline now
