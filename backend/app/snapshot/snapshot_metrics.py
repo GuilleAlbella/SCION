@@ -47,22 +47,38 @@ class GrowthMetrics:
 
 
 def compute_snapshot_metrics(snapshot_id: int) -> SnapshotMetrics:
-    """Count schemas, tables, views, and columns for a snapshot."""
+    """Count schemas, tables, views, and columns for a snapshot.
+
+    All counts are computed via JOIN-based aggregates rather than by
+    materialising id lists and feeding them into `IN (?, ?, ?, ...)`.
+    The latter approach blew up at production scale: the
+    Transcend-DevTest extract has 239k tables, and SQLite caps host
+    parameters per statement at 32 766 (3.32+) or 999 (older), so an
+    `IN (...)` over every table_id was either a hard error or a
+    badly-fragmented plan. JOINs keep the work entirely server-side
+    and let the query planner pick a sane index strategy.
+    """
 
     with Session(engine) as session:
-        schema_ids = session.scalars(
-            select(SchemaSnapshot.schema_id)
+        schema_count = session.scalar(
+            select(func.count())
+            .select_from(SchemaSnapshot)
             .where(SchemaSnapshot.snapshot_id == snapshot_id)
-        ).all()
+        ) or 0
 
-        schema_count = len(schema_ids)
-
-        if not schema_ids:
+        if schema_count == 0:
             return SnapshotMetrics(snapshot_id=snapshot_id)
 
+        # Tables grouped by object_type — JOIN to SchemaSnapshot so the
+        # filter stays at the snapshot level without materialising
+        # schema_ids first.
         table_rows = session.execute(
             select(TableSnapshot.object_type, func.count())
-            .where(TableSnapshot.schema_id.in_(schema_ids))
+            .join(
+                SchemaSnapshot,
+                TableSnapshot.schema_id == SchemaSnapshot.schema_id,
+            )
+            .where(SchemaSnapshot.snapshot_id == snapshot_id)
             .group_by(TableSnapshot.object_type)
         ).all()
 
@@ -78,17 +94,24 @@ def compute_snapshot_metrics(snapshot_id: int) -> SnapshotMetrics:
             else:
                 table_count += cnt
 
-        table_ids = session.scalars(
-            select(TableSnapshot.table_id)
-            .where(TableSnapshot.schema_id.in_(schema_ids))
-        ).all()
-
-        column_count = 0
-        if table_ids:
-            column_count = session.scalar(
-                select(func.count())
-                .where(ColumnSnapshot.table_id.in_(table_ids))
-            ) or 0
+        # Columns counted by JOIN-ing through table_snapshot →
+        # schema_snapshot. SQLite picks the indexed
+        # column_snapshot.table_id and walks the join in O(rows). For
+        # 9.8M columns this is in the seconds range, vs the previous
+        # approach which couldn't even compile the SQL.
+        column_count = session.scalar(
+            select(func.count())
+            .select_from(ColumnSnapshot)
+            .join(
+                TableSnapshot,
+                ColumnSnapshot.table_id == TableSnapshot.table_id,
+            )
+            .join(
+                SchemaSnapshot,
+                TableSnapshot.schema_id == SchemaSnapshot.schema_id,
+            )
+            .where(SchemaSnapshot.snapshot_id == snapshot_id)
+        ) or 0
 
     total = schema_count + table_count + view_count + column_count
 

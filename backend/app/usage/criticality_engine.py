@@ -133,50 +133,74 @@ def compute_criticality(
 
     results: List[Dict[str, Any]] = []
 
-    # ──── Step 5: Score each object and persist ────
+    # ──── Step 5: Score each object and persist (bulk path) ────
     # Core formula (usage_available=True):
     #   combined = 0.6 * usage_score + 0.4 * graph_score
     # Fallback formula (usage_available=False, v1.08):
     #   combined = graph_score
-    #   — used when usage data is out-of-scope for Phase 1. Rankings reflect
-    #     pure structural centrality (graph fragility). Same 0.6 / 0.3 bands
-    #     so the Criticality page doesn't need UI changes.
-    # The 60/40 default split favors usage because a table nobody queries
-    # is rarely business-critical even if the graph says it's central.
-    with Session(engine) as session:
-        with session.begin():
-            for obj_name in sorted(all_objects):
-                queries = usage_map.get(obj_name, 0)
-                usage_score = round(queries / max_queries, 4) if max_queries > 0 else 0.0
-                graph_score = round(snapshot_objects.get(obj_name, 0.0), 4)
-                if usage_available:
-                    combined = round(0.6 * usage_score + 0.4 * graph_score, 4)
-                else:
-                    combined = graph_score
+    #   — used when usage data is out-of-scope for Phase 1. Rankings
+    #     reflect pure structural centrality (graph fragility). Same
+    #     0.6 / 0.3 bands so the Criticality page doesn't need UI
+    #     changes.
+    # The 60/40 default split favors usage because a table nobody
+    # queries is rarely business-critical even if the graph says it's
+    # central.
+    #
+    # Scale note: at production scale this loop runs ~240k times. The
+    # original code did `session.add(ObjectCriticality(...))` per
+    # iteration, which grows the SQLAlchemy identity map linearly and
+    # makes the trailing flush proportional to N². We now collect plain
+    # dicts and ship them in batches with `bulk_insert_mappings` —
+    # constant-time per row, identity map stays empty, ~5-10× faster
+    # on SQLite for our row shape.
+    rows_to_insert: list[dict] = []
+    for obj_name in sorted(all_objects):
+        queries = usage_map.get(obj_name, 0)
+        usage_score = round(queries / max_queries, 4) if max_queries > 0 else 0.0
+        graph_score = round(snapshot_objects.get(obj_name, 0.0), 4)
+        if usage_available:
+            combined = round(0.6 * usage_score + 0.4 * graph_score, 4)
+        else:
+            combined = graph_score
 
-                if combined >= 0.6:
-                    level = "HIGH"
-                elif combined >= 0.3:
-                    level = "MEDIUM"
-                else:
-                    level = "LOW"
+        if combined >= 0.6:
+            level = "HIGH"
+        elif combined >= 0.3:
+            level = "MEDIUM"
+        else:
+            level = "LOW"
 
-                session.add(ObjectCriticality(
-                    object_name=obj_name,
-                    snapshot_id=snapshot_id,
-                    usage_score=usage_score,
-                    graph_score=graph_score,
-                    combined_score=combined,
-                    criticality_level=level,
-                ))
+        rows_to_insert.append({
+            "object_name": obj_name,
+            "snapshot_id": snapshot_id,
+            "usage_score": usage_score,
+            "graph_score": graph_score,
+            "combined_score": combined,
+            "criticality_level": level,
+        })
 
-                results.append({
-                    "object_name": obj_name,
-                    "usage_score": usage_score,
-                    "graph_score": graph_score,
-                    "combined_score": combined,
-                    "criticality_level": level,
-                })
+        results.append({
+            "object_name": obj_name,
+            "usage_score": usage_score,
+            "graph_score": graph_score,
+            "combined_score": combined,
+            "criticality_level": level,
+        })
+
+    if rows_to_insert:
+        with Session(engine) as session:
+            with session.begin():
+                for i in range(0, len(rows_to_insert), _BULK_INSERT_BATCH_SIZE):
+                    session.bulk_insert_mappings(
+                        ObjectCriticality,
+                        rows_to_insert[i:i + _BULK_INSERT_BATCH_SIZE],
+                    )
 
     results.sort(key=lambda r: r["combined_score"], reverse=True)
     return results
+
+
+# Same rationale as the bulk-insert helpers in dict_persister and
+# graph_metrics: small enough to stay well under SQLite's 32 766
+# host-parameter cap, big enough to amortise per-statement overhead.
+_BULK_INSERT_BATCH_SIZE = 5000

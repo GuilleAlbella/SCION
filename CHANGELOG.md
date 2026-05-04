@@ -8,6 +8,148 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.13 (2026-05-04) — Post-ingest pipeline made viable at 240k+ table scale
+
+The streaming refactor in v1.14.09 made it possible to *finish* the
+upload + persist for Rahul's full Transcend-DevTest extract (240k
+tables, 9.8M columns). But the moment the post-ingest pipeline kicked
+in, it ran for 30+ minutes without completing. Three of its six steps
+were architecturally unsuited to that scale and one of them
+**crashed outright**.
+
+This release rewrites those three steps with the same `bulk_insert /
+bulk_update` pattern we already use in `dict_persister`, plus fixes
+the crash. End-to-end post-ingest now completes in **~1m 44s** for
+the same dataset (vs. never finishing before).
+
+#### 1. `compute_snapshot_metrics` — crash fix
+
+Previous code did:
+
+```python
+table_ids = session.scalars(select(...).where(snapshot_id == ...)).all()
+column_count = session.scalar(
+    select(func.count())
+    .where(ColumnSnapshot.table_id.in_(table_ids))   # ← 240k IDs
+)
+```
+
+SQLite caps host parameters per statement at 32 766 (newer builds) or
+999 (older), so the `IN (?, ?, ...)` over every table_id was either a
+hard error (`OperationalError: too many SQL variables`) or a badly
+fragmented plan. Rewrote both queries (tables + columns counts) as
+JOIN-based aggregates so the work stays server-side and the parameter
+count stays at 1.
+
+Verified: 9.8M-column snapshot metrics now compute in **~1.2 s** (vs
+the previous "didn't compile the SQL"). Regression test in
+`tests/metadata/test_snapshot_metrics_scale.py` synthesises a
+1500-table snapshot to pin the fix.
+
+#### 2. `build_graph_for_snapshot` — bulk insert + idempotency seed
+
+Previous code created nodes one at a time:
+
+```python
+session.add(GraphNode(...))
+session.flush()                       # round-trip per node
+node_id = node.node_id
+```
+
+…and verified each edge with a SELECT before insert:
+
+```python
+def _ensure_edge(...):
+    exists = session.query(GraphEdge).filter(...).first()  # round-trip per edge
+    if exists is None:
+        session.add(GraphEdge(...))
+```
+
+For 240k tables that's ~500 000 DB round-trips before the FEEDS-edge
+heuristic even starts. Wall time on Transcend-DevTest: 30+ min, never
+completed.
+
+Rewrote to:
+
+- Pre-load existing nodes + edges into Python sets / dicts (2 SELECTs
+  total). Every "does row X already exist" check is now an O(1) hash
+  lookup instead of a DB round-trip.
+- Collect new nodes / edges into lists of dicts and ship them via
+  `bulk_insert_mappings` in batches of 5 000 — same pattern as
+  `dict_persister`.
+- Re-fetch the snapshot's nodes once after insert to recover
+  `node_id` values for downstream edge planning.
+
+Same correctness contract (idempotent at the natural-key level for
+both nodes and edges), three orders of magnitude fewer round-trips.
+
+**Wall time: 30+ min → 33.5 s.**
+
+#### 3. `persist_node_metrics` — bulk update + transaction fix
+
+Previous code did `session.get(GraphNode, nid)` + ORM update per node
+= 1 SELECT + 1 UPDATE per row. For 240k nodes that's ~480 000
+round-trips and the operation never finished.
+
+Rewrote to:
+
+- Pre-load existing `node_metadata` for the whole snapshot in one
+  SELECT.
+- Compute the merged JSON in Python.
+- Ship updates via `bulk_update_mappings` in batches of 5 000 — one
+  UPDATE statement per batch via `executemany`.
+
+A first attempt opened a transaction implicitly via the SELECT and
+then tried to nest a `with session.begin()` for the writes, which
+SQLAlchemy 2.0 rejects with "A transaction is already begun on this
+Session". Fixed by wrapping read + write in a single
+`with session.begin()` block.
+
+**Wall time: never finished → 12.2 s.**
+
+#### 4. `compute_criticality` — bulk insert + force-recompute from pipeline
+
+Step 5 of the engine added one ObjectCriticality row at a time via
+`session.add` inside a single transaction. At 240k objects the
+identity map grew linearly and the trailing flush was effectively
+quadratic. Rewrote to collect dicts and call `bulk_insert_mappings`
+in batches of 5 000.
+
+Also fixed a stale-cache bug surfaced during testing: the engine's
+"if any rows already exist for this snapshot, return them as cache"
+short-circuit silently skipped recomputation when a previous post-
+ingest run had written rows that were later orphaned (failed
+mid-pipeline, demo seeder leftovers, etc.). The post-ingest pipeline
+now passes `force=True` so a fresh run always recomputes against the
+just-rebuilt graph.
+
+**Wall time: never finished → 6.95 s.**
+
+#### Final post-ingest breakdown on the full Transcend-DevTest extract
+
+```
+[post-ingest] structural_hash   in 50.14s
+[post-ingest] snapshot_metrics  in  1.18s
+[post-ingest] build_graph       in 33.51s
+[post-ingest] node_metrics      in 12.19s
+[post-ingest] criticality       in  6.95s
+[post-ingest] auto_diff         in     3 ms
+COMPLETED in 104.06s
+```
+
+```
+snapshot 11 final state:
+  graph nodes:          250 092
+  graph edges:          426 243
+  nodes with metrics:   250 092   ← every node populated
+  criticality rows:     250 092   ← every object scored
+```
+
+74/74 metadata + diff tests passing. No behaviour change in the
+public API; only pipeline internals changed.
+
+---
+
 ### v1.14.12 (2026-05-04) — Per-phase timing logs for the dict-import pipeline
 
 Now that the streaming refactor lets us actually finish a 2.4 GB

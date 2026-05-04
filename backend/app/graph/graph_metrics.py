@@ -73,19 +73,72 @@ def compute_node_metrics(snapshot_id: int) -> Dict[int, NodeMetrics]:
 
 
 def persist_node_metrics(snapshot_id: int) -> int:
-    """Compute metrics and store them in node_metadata JSON. Returns count updated."""
+    """Compute metrics and store them in node_metadata JSON.
+
+    Returns the number of nodes whose metadata was updated.
+
+    Scale note: the previous implementation called `session.get(GraphNode,
+    nid)` per node and updated each one through the ORM, which translates
+    to one SELECT + one UPDATE per node = ~2N round-trips. For 240k nodes
+    that's nearly half a million round-trips and the operation never
+    finished within an hour. The current implementation:
+
+      1. Loads the *existing* `node_metadata` for every node in this
+         snapshot in a single SELECT — needed to merge fresh metric
+         values on top of whatever else lives there (e.g. legacy
+         enrichment fields a future pass may have added).
+      2. Computes the merged JSON in Python.
+      3. Ships the updates with `bulk_update_mappings` in batches of
+         5 000 rows. SQLAlchemy emits one UPDATE statement per batch
+         using `executemany`, which is what we need at this scale.
+    """
 
     metrics = compute_node_metrics(snapshot_id)
+    if not metrics:
+        return 0
 
+    # Pre-load existing metadata so we merge instead of overwrite.
+    # `node_metadata` is JSON; the ORM hands us either `None` or a
+    # plain dict per row. Using a single SELECT here is what makes
+    # the rest O(1) per node.
+    #
+    # Single transaction for both the read and the writes — SQLAlchemy
+    # 2.0 autobegins on the first `session.execute(...)` call, so a
+    # nested `with session.begin()` would raise "A transaction is
+    # already begun on this Session". Wrapping read + write in one
+    # `with session.begin()` block sidesteps that.
     with Session(engine) as session:
         with session.begin():
-            count = 0
+            existing_meta: Dict[int, dict] = {
+                node_id: (meta or {})
+                for node_id, meta in session.execute(
+                    select(GraphNode.node_id, GraphNode.node_metadata)
+                    .where(GraphNode.snapshot_id == snapshot_id)
+                ).all()
+            }
+
+            updates: list[dict] = []
             for node_id, m in metrics.items():
-                node = session.get(GraphNode, node_id)
-                if node is None:
+                if node_id not in existing_meta:
+                    # Metric refers to a node that's not in this snapshot —
+                    # skip rather than insert a phantom row.
                     continue
-                existing = node.node_metadata or {}
-                existing.update(asdict(m))
-                node.node_metadata = existing
-                count += 1
-    return count
+                merged = dict(existing_meta[node_id])
+                merged.update(asdict(m))
+                updates.append({"node_id": node_id, "node_metadata": merged})
+
+            if not updates:
+                return 0
+
+            for i in range(0, len(updates), _BULK_UPDATE_BATCH_SIZE):
+                session.bulk_update_mappings(
+                    GraphNode, updates[i:i + _BULK_UPDATE_BATCH_SIZE]
+                )
+    return len(updates)
+
+
+# Same rationale as the dict_persister batch size: small enough to keep
+# any single SQL statement well under SQLite's 32 766 host-parameter
+# cap, big enough to amortise the per-statement overhead. Tuned for
+# 240k+ node updates on the Transcend-DevTest extract.
+_BULK_UPDATE_BATCH_SIZE = 5000
