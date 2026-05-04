@@ -31,6 +31,7 @@ for testing.
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import time
 from typing import Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -68,6 +69,16 @@ _BULK_INSERT_BATCH_SIZE = 5000
 
 
 logger = logging.getLogger(__name__)
+
+
+def _fmt_time(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    if seconds < 60:
+        return f"{seconds:.2f}s"
+    m = int(seconds // 60)
+    s = seconds - m * 60
+    return f"{m}m {s:05.2f}s"
 
 
 # ──── Result type ────
@@ -199,6 +210,7 @@ def persist_batch(
     # databases. We can't trust just `databases.dat` because some
     # `tables.dat` rows reference databases that aren't in the dict
     # extract (system DBs like DBC). Always use the superset.
+    t_phase = time.perf_counter()
     schema_names: set[str] = set()
     schema_names.update(d.database_name for d in databases if d.database_name)
     schema_names.update(t.database_name for t in tables if t.database_name)
@@ -208,8 +220,11 @@ def persist_batch(
         session.add(s)
         session.flush()
         schema_id_by_name[name] = s.schema_id
+    logger.info("[persist] schemas    %9d rows in %s",
+                len(schema_id_by_name), _fmt_time(time.perf_counter() - t_phase))
 
     # ──── Table rows ────
+    t_phase = time.perf_counter()
     # Key by (database_name, table_name) so the column loop can FK to
     # the right table_id. TableKind → object_type via the existing
     # mapper so the graph engine consumes the same enum it already does.
@@ -230,6 +245,8 @@ def persist_batch(
         session.add(ts)
         session.flush()
         table_id_by_qname[(t.database_name, t.table_name)] = ts.table_id
+    logger.info("[persist] tables     %9d rows in %s",
+                len(table_id_by_qname), _fmt_time(time.perf_counter() - t_phase))
 
     # ──── Column rows (streaming bulk-insert) ────
     # We accept `columns` as an Iterable so the route handler can hand
@@ -238,11 +255,18 @@ def persist_batch(
     # and flushed with `session.bulk_insert_mappings`, which bypasses
     # ORM object construction and identity-map insertion (the killer
     # for 9.8M-row inserts). Memory stays bounded at ~1 MB per batch.
+    t_phase = time.perf_counter()
     columns_created, columns_seen = _bulk_insert_columns_streaming(
         session, columns, table_id_by_qname,
     )
+    logger.info(
+        "[persist] columns    %9d rows in %s  (%d seen, %d skipped → orphan parent)",
+        columns_created, _fmt_time(time.perf_counter() - t_phase),
+        columns_seen, columns_seen - columns_created,
+    )
 
     # ──── Index rows (streaming bulk-insert) ────
+    t_phase = time.perf_counter()
     # Same pattern as columns. Indices is smaller (~340k rows for
     # Transcend-DevTest) but the contract is identical so we route it
     # through the same helper for consistency and to avoid per-row
@@ -252,10 +276,16 @@ def persist_batch(
     indices_created, indices_seen = _bulk_insert_indices_streaming(
         session, indices, table_id_by_qname,
     )
+    logger.info(
+        "[persist] indices    %9d rows in %s  (%d seen, %d skipped)",
+        indices_created, _fmt_time(time.perf_counter() - t_phase),
+        indices_seen, indices_seen - indices_created,
+    )
 
     # ──── Partitioning rows (v1.14.02) ────
     # One row per partitioning constraint. ConstraintText stored
     # verbatim — see model docstring for why we don't parse it.
+    t_phase = time.perf_counter()
     partitioning_created = 0
     for p in partitioning:
         table_id = table_id_by_qname.get((p.database_name, p.table_name))
@@ -268,8 +298,11 @@ def persist_batch(
             create_timestamp=p.create_timestamp,
         ))
         partitioning_created += 1
+    logger.info("[persist] partition  %9d rows in %s",
+                partitioning_created, _fmt_time(time.perf_counter() - t_phase))
 
     # ──── DDL text rows (v1.14.02) ────
+    t_phase = time.perf_counter()
     # Tabletext arrives as fragments ordered by `request_text_seq`;
     # `assemble_ddl` concatenates them per (database, table) into the
     # full CREATE statement. We persist one row per object regardless
@@ -290,6 +323,8 @@ def persist_batch(
             request_text_fragments=fragment_counts.get((db_name, tbl_name), 1),
         ))
         ddl_text_created += 1
+    logger.info("[persist] ddl_text   %9d rows in %s",
+                ddl_text_created, _fmt_time(time.perf_counter() - t_phase))
 
     return PersistResult(
         snapshot_id=snap.snapshot_id,
@@ -347,6 +382,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # `compute_structural_hash` returns the hash; we persist it on the
     # snapshot row so the diff engine can short-circuit identical
     # snapshots without re-walking everything.
+    t_step = time.perf_counter()
     try:
         h = compute_structural_hash(snapshot_id)
         with ORMSession(bind=engine) as sess:
@@ -356,11 +392,14 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
                 sess.commit()
     except Exception as e:
         logger.warning("post-ingest: structural_hash failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] structural_hash   in %s", _fmt_time(time.perf_counter() - t_step))
 
+    t_step = time.perf_counter()
     try:
         compute_snapshot_metrics(snapshot_id)
     except Exception as e:
         logger.warning("post-ingest: snapshot_metrics failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] snapshot_metrics  in %s", _fmt_time(time.perf_counter() - t_step))
 
     # Step 3+4: build the technical graph and node metrics.
     # The FK heuristic in build_graph_for_snapshot looks for column
@@ -368,15 +407,19 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # snapshots have column names but no explicit FK metadata, so
     # edges may be sparse. That's fine — nodes alone unblock /graph
     # and /lineage.
+    t_step = time.perf_counter()
     try:
         build_graph_for_snapshot(snapshot_id)
     except Exception as e:
         logger.warning("post-ingest: build_graph failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] build_graph       in %s", _fmt_time(time.perf_counter() - t_step))
 
+    t_step = time.perf_counter()
     try:
         persist_node_metrics(snapshot_id)
     except Exception as e:
         logger.warning("post-ingest: persist_node_metrics failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] node_metrics      in %s", _fmt_time(time.perf_counter() - t_step))
 
     # Step 5: criticality (graph-only fallback).
     # `usage_available=False` switches off the usage-aggregation branch
@@ -384,10 +427,12 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # /intelligence. The combined score becomes the graph score alone;
     # HIGH/MEDIUM/LOW thresholds stay at 0.6 / 0.3 (so banding looks
     # consistent across snapshots that do or don't have usage data).
+    t_step = time.perf_counter()
     try:
         compute_criticality(snapshot_id, usage_available=False)
     except Exception as e:
         logger.warning("post-ingest: compute_criticality failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] criticality       in %s", _fmt_time(time.perf_counter() - t_step))
 
     # Step 6: auto-diff vs the previous snapshot of the same source.
     # Without this, the user has to go to /changes and click Run Diff
@@ -401,10 +446,12 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # it's a "naked" snapshot that hasn't been through this pipeline.
     # The diff engine itself is idempotent (skips re-inserting
     # change_event rows for the same pair), so a re-run is a no-op.
+    t_step = time.perf_counter()
     try:
         _auto_diff_against_previous(snapshot_id)
     except Exception as e:
         logger.warning("post-ingest: auto-diff failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] auto_diff         in %s", _fmt_time(time.perf_counter() - t_step))
 
 
 def _auto_diff_against_previous(snapshot_id: int) -> None:
