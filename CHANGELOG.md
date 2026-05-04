@@ -8,6 +8,46 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.11 (2026-05-04) — Tolerate non-UTF-8 bytes in dict extracts
+
+The full Transcend-DevTest extract has a stray `0xA0` byte (CP1252
+non-breaking space) inside one of the table comments — almost certainly
+a comment that was originally pasted into Teradata from Word or
+Outlook. Rahul's contract says UTF-8 but the Windows-side TPT exporter
+doesn't actually re-encode existing comment text, so whatever encoding
+the data was stored in survives end-to-end. Strict UTF-8 decoding
+crashed the entire 2.4 GB import on a single byte.
+
+Fix: open the file with `errors="replace"`. Bad bytes become U+FFFD
+(replacement char) instead of raising `UnicodeDecodeError`. Same
+treatment for the `tabletext` reader's `path.read_text` call, since
+DDL fragments routinely contain text pasted from external sources.
+
+We lose at most a couple of glyphs per affected comment — strictly
+better than aborting a multi-million-row ingest. Genuinely
+catastrophic encoding mismatches (e.g. UTF-16 misdetected as UTF-8)
+will still surface downstream as an arity error since nothing useful
+will split on `§`.
+
+End-to-end smoke test against the full Transcend-DevTest extract on
+this machine:
+
+| view         | rows         | wall time |
+|--------------|--------------|-----------|
+| databases    | 10 712       | 0.31 s    |
+| tables       | 239 380      | 5.83 s    |
+| partitioning | 17 140       | 0.64 s    |
+| indices      | 337 817      | 5.85 s    |
+| columns      | 9 858 099    | 3 min 6 s |
+| tabletext    | 12 428       | 19.20 s   |
+
+All 6 files detected at high confidence. Zero exceptions.
+
+New regression test in `test_multiline_records.py` covers the bad-byte
+case explicitly.
+
+---
+
 ### v1.14.10 (2026-05-04) — Tolerate multi-line CommentString in dict tables.dat
 
 The 16-col reader assumed every record was exactly one physical line.

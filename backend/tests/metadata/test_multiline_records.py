@@ -102,6 +102,41 @@ def test_read_tables_rejects_truly_corrupt_record_too_many_fields(
     assert "tablesv_bad.dat" in msg
 
 
+def test_read_tables_tolerates_non_utf8_byte_in_field(tmp_path: Path) -> None:
+    """The Windows-CP1252-leakage case from Rahul's full extract.
+
+    A stray `\\xA0` byte (CP1252 non-breaking space) was crashing the
+    UTF-8 strict decoder mid-read. We open with `errors="replace"` so
+    a single bad byte becomes U+FFFD instead of taking down the whole
+    2.4 GB import.
+    """
+    # Build a record by hand at the byte level so we can inject the
+    # bad byte exactly where it appeared in production: inside the
+    # CommentString field.
+    p = tmp_path / "tablesv_bad_byte.dat"
+    record_with_bad_byte = (
+        b"Transcend-DevTest\xc2\xa7RUN1\xc2\xa7"
+        b"2026-05-04 08:20:40.000000-04:00\xc2\xa72026-05-04\xc2\xa7"
+        b"DBC\xc2\xa7AccLogRule\xc2\xa7M\xc2\xa7DBC\xc2\xa7"
+        b"2026-04-11 12:55:20\xc2\xa7DBC\xc2\xa72026-04-11 12:55:20\xc2\xa7"
+        # Comment with a stray 0xA0 mid-string. This is what kills
+        # strict UTF-8 (0xA0 alone is not a valid leading byte).
+        b"Comment\xa0with\xa0nbsp\xc2\xa7F\xc2\xa7NN\xc2\xa7Y\xc2\xa7\n"
+    )
+    p.write_bytes(record_with_bad_byte)
+
+    # Should not raise — bad bytes get replaced, the record is parsed.
+    rows = read_tables(p)
+    assert len(rows) == 1
+    assert rows[0].database_name == "DBC"
+    assert rows[0].table_name == "AccLogRule"
+    # The 0xA0 bytes survived as Unicode replacement chars (U+FFFD).
+    # Caller doesn't care about exact bytes — they care that the
+    # parser didn't crash and the record made it through.
+    assert rows[0].comment_string is not None
+    assert "Comment" in rows[0].comment_string and "nbsp" in rows[0].comment_string
+
+
 def test_read_tables_rejects_truncated_final_record(tmp_path: Path) -> None:
     """A short final record (file truncated) surfaces clearly, not silently."""
     # Only 8 fields, no trailing newline.

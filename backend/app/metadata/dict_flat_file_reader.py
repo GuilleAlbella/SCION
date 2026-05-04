@@ -381,8 +381,21 @@ def _parse_standard(
     for the columns view at production scale (Transcend-DevTest's
     full extract is 1.9 GB / 9.8M rows — `read_text()` would
     allocate ~4 GB before we even start parsing).
+
+    Encoding: Rahul's contract says UTF-8 but the exporter runs on a
+    Windows host and at least one record in the full
+    Transcend-DevTest extract has a stray `0xA0` byte (CP1252
+    non-breaking space, almost certainly from a comment that was
+    copy-pasted out of Word/Outlook). Opening with strict UTF-8
+    crashes the whole 2.4 GB import on a single bad byte. We use
+    `errors="replace"` instead so a malformed byte becomes U+FFFD
+    and we keep going — losing at most a couple of glyphs in a
+    comment field is a strictly better outcome than aborting the
+    ingest. Genuinely catastrophic encoding mismatches (e.g. UTF-16)
+    will still surface as a parser arity error downstream, since
+    nothing useful would split on `§`.
     """
-    with path.open("r", encoding="utf-8") as fh:
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
         buf = ""
         record_idx = 0
         for raw_line in fh:
@@ -641,7 +654,12 @@ def read_tabletext(
     """
     out: List[TableTextRecord] = []
     expected = len(_TABLETEXT_FIELDS)
-    raw = path.read_text(encoding="utf-8")
+    # `errors="replace"` for the same reason as `_parse_standard`:
+    # the Windows-side exporter occasionally produces stray non-UTF-8
+    # bytes inside RequestText (DDL fragments copy-pasted from
+    # external sources). Replacing with U+FFFD beats aborting the
+    # whole batch on one bad byte.
+    raw = path.read_text(encoding="utf-8", errors="replace")
     for idx, record in enumerate(_split_records(raw, terminator), start=1):
         fields = _split_fields(record, delimiter, escape)
         if len(fields) != expected:
