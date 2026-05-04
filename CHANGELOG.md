@@ -8,6 +8,65 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.12 (2026-05-04) — Per-phase timing logs for the dict-import pipeline
+
+Now that the streaming refactor lets us actually finish a 2.4 GB
+import, the obvious next question is "where's the time going". This
+release adds INFO-level timing instrumentation at every phase of the
+ingest so we can answer that without guessing — and so any future
+optimisation has a concrete baseline to beat.
+
+What gets logged (all at INFO, prefix `[ingest]` / `[persist]` /
+`[post-ingest]`):
+
+```
+[ingest] ───────────── dict-import started — 6 file(s) ─────────────
+[ingest] uploaded databases       2.7 MB in 0.4s  (databasesv_full_export.rendered.dat)
+[ingest] uploaded tables         55.2 MB in 1.8s  (tablesv_full_export.rendered.dat)
+[ingest] uploaded columns        1.9 GB in 33.4s  (columnsv_full_export.rendered.dat)
+... etc
+[ingest] parsed databases     10712 rows in 0.31s
+[ingest] parsed tables       239380 rows in 5.83s
+[ingest] parsed partitioning  17140 rows in 0.64s
+[ingest] parsed tabletext     12428 rows in 19.20s
+[ingest] identity validation passed in 5 ms — Transcend-DevTest @ 20260504T...
+[persist] schemas       8543 rows in 12.30s
+[persist] tables      239380 rows in 1m 07.40s
+[persist] columns    9858099 rows in 4m 12.30s  (9858099 seen, 0 skipped → orphan parent)
+[persist] indices     337817 rows in 14.20s     (337817 seen, 0 skipped)
+[persist] partition    17140 rows in 1.20s
+[persist] ddl_text     12428 rows in 0.80s
+[ingest] session.commit() took 8.40s
+[ingest] persist (...)  6m 57.40s
+[post-ingest] structural_hash   in 1.20s
+[post-ingest] snapshot_metrics  in 0.40s
+[post-ingest] build_graph       in 45.20s
+[post-ingest] node_metrics      in 12.30s
+[post-ingest] criticality       in 8.40s
+[post-ingest] auto_diff         in 22.10s
+[ingest] post-ingest pipeline 1m 29.60s
+[ingest] ───────────── summary ─────────────
+[ingest]   snapshot_id=42  source=Transcend-DevTest  run=20260504T122005Z_65dde0...
+[ingest]   persisted: schemas=8543 tables=239380 columns=9858099 ...
+[ingest]   1_upload                  35.40s  ( 7.4%)
+[ingest]   2_parse_small_files       26.00s  ( 5.4%)
+[ingest]   3_validate_identity        5 ms  ( 0.0%)
+[ingest]   4_persist_total          6m 57.40s  (87.0%)
+[ingest]   5_post_ingest            1m 29.60s  (-)
+[ingest]   TOTAL                    7m 58.00s
+[ingest] ────────────────────────────────────
+```
+
+The summary line is the headline number — the rest is the breakdown
+to know where to optimise next. Numbers above are illustrative; real
+ones depend on the machine + extract size.
+
+No production-affecting change beyond the new log lines. Levels are
+INFO so they show up in the existing `dev.ps1` console without any
+configuration change.
+
+---
+
 ### v1.14.11 (2026-05-04) — Tolerate non-UTF-8 bytes in dict extracts
 
 The full Transcend-DevTest extract has a stray `0xA0` byte (CP1252

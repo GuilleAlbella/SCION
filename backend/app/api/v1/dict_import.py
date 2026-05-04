@@ -28,8 +28,10 @@ Validation order (fail fast on the cheapest check):
   4. Persist as one snapshot. Returns counts in the response.
 """
 
+import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -48,6 +50,27 @@ from app.metadata.format_detector import ContentType, Format
 
 
 router = APIRouter(prefix="/dict-import", tags=["dict-import"])
+logger = logging.getLogger(__name__)
+
+
+def _fmt_time(seconds: float) -> str:
+    """Pretty-print a duration: <1s as ms, <60s as 'X.XXs', else 'Xm YYs'."""
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    if seconds < 60:
+        return f"{seconds:.2f}s"
+    m = int(seconds // 60)
+    s = seconds - m * 60
+    return f"{m}m {s:05.2f}s"
+
+
+def _fmt_bytes(n: int) -> str:
+    """Pretty-print a byte count."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
+        n /= 1024
+    return f"{n:.1f} GB"
 
 
 # ──── Streaming knobs ────
@@ -179,6 +202,15 @@ async def import_dict_batch(
             detail="No files uploaded. Send at least one dict extract file.",
         )
 
+    # Stage timings collected as we go. We log each stage individually
+    # at INFO and then emit a single summary table at the end. Keys are
+    # ordered semantically (the same order the user perceives the
+    # work happening) — the dict preserves insertion order in 3.7+.
+    timings: Dict[str, float] = {}
+    sizes_by_category: Dict[str, int] = {}
+    t_overall = time.perf_counter()
+    logger.info("[ingest] ───────────── dict-import started — %d file(s) ─────────────", len(files))
+
     # ──── Step 1: stream every upload to disk + classify by content ────
     # Paths are kept by category so multiple files of the same view
     # would overwrite each other deliberately (only one
@@ -189,8 +221,11 @@ async def import_dict_batch(
     filenames_by_category: Dict[str, str] = {}
 
     try:
+        t_upload = time.perf_counter()
         for upload in files:
+            t_one = time.perf_counter()
             tmp_path = await _stream_upload_to_disk(upload)
+            size = tmp_path.stat().st_size
             temp_paths.append(tmp_path)
 
             verdict = _detect_path(tmp_path, upload.filename or "")
@@ -225,6 +260,14 @@ async def import_dict_batch(
 
             paths_by_category[category] = tmp_path
             filenames_by_category[category] = upload.filename or category
+            sizes_by_category[category] = size
+            logger.info(
+                "[ingest] uploaded %-13s %10s in %s  (%s)",
+                category, _fmt_bytes(size),
+                _fmt_time(time.perf_counter() - t_one),
+                upload.filename or "?",
+            )
+        timings["1_upload"] = time.perf_counter() - t_upload
 
         # ──── Step 2: parse the small views eagerly (fits in memory) ────
         # databases ≤ 50k rows, tables ≤ 500k, partitioning ≤ 50k —
@@ -232,32 +275,50 @@ async def import_dict_batch(
         # MB for a large EDW but its 9-field ENDREC layout doesn't
         # have a streaming reader yet (see tabletext TODO in reader);
         # in practice it's still small relative to columns.
+        t_parse_small = time.perf_counter()
         try:
+            t_phase = time.perf_counter()
             databases = (
                 dict_flat_file_reader.read_databases(paths_by_category["databases"])
                 if "databases" in paths_by_category else []
             )
+            logger.info("[ingest] parsed databases    %9d rows in %s",
+                        len(databases), _fmt_time(time.perf_counter() - t_phase))
+
+            t_phase = time.perf_counter()
             tables = (
                 dict_flat_file_reader.read_tables(paths_by_category["tables"])
                 if "tables" in paths_by_category else []
             )
+            logger.info("[ingest] parsed tables       %9d rows in %s",
+                        len(tables), _fmt_time(time.perf_counter() - t_phase))
+
+            t_phase = time.perf_counter()
             partitioning = (
                 dict_flat_file_reader.read_partitioning(
                     paths_by_category["partitioning"]
                 )
                 if "partitioning" in paths_by_category else []
             )
+            logger.info("[ingest] parsed partitioning %9d rows in %s",
+                        len(partitioning), _fmt_time(time.perf_counter() - t_phase))
+
+            t_phase = time.perf_counter()
             tabletext = (
                 dict_flat_file_reader.read_tabletext(paths_by_category["tabletext"])
                 if "tabletext" in paths_by_category else []
             )
+            logger.info("[ingest] parsed tabletext    %9d rows in %s",
+                        len(tabletext), _fmt_time(time.perf_counter() - t_phase))
         except dict_flat_file_reader.DictFlatFileError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Parse error: {e}",
             )
+        timings["2_parse_small_files"] = time.perf_counter() - t_parse_small
 
         # ──── Step 3: identity validation ────
+        t_validate = time.perf_counter()
         # Walk the in-memory lists for the small views, plus peek the
         # first record of the streamed views (columns, indices). This
         # keeps the temporal/identity checks O(small files) without
@@ -301,6 +362,10 @@ async def import_dict_batch(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),
             )
+        timings["3_validate_identity"] = time.perf_counter() - t_validate
+        logger.info("[ingest] identity validation passed in %s — %s",
+                    _fmt_time(timings["3_validate_identity"]),
+                    identity.snapshot_label)
 
         # ──── Step 4: persist (streaming columns + indices) ────
         # We pass the generators directly to `persist_batch`. The
@@ -316,6 +381,7 @@ async def import_dict_batch(
             if "indices" in paths_by_category else iter(())
         )
 
+        t_persist = time.perf_counter()
         with Session(bind=engine) as session:
             try:
                 result = dict_persister.persist_batch(
@@ -329,7 +395,10 @@ async def import_dict_batch(
                     tabletext=tabletext,
                     force=force,
                 )
+                t_commit = time.perf_counter()
                 session.commit()
+                logger.info("[ingest] session.commit() took %s",
+                            _fmt_time(time.perf_counter() - t_commit))
             except dict_flat_file_reader.DictFlatFileError as e:
                 # Mid-stream parse error from the generators surfaces
                 # as a clean 400 rather than a 500.
@@ -345,11 +414,36 @@ async def import_dict_batch(
                     detail=f"Failed to persist snapshot: {e}",
                 )
 
+        timings["4_persist_total"] = time.perf_counter() - t_persist
+        logger.info("[ingest] persist (parse+stream columns/indices + bulk insert + commit) %s",
+                    _fmt_time(timings["4_persist_total"]))
+
         # ──── Step 5: post-ingest analytical pipeline ────
         # Skipped on idempotent re-imports — the prior run already
         # populated everything, re-running would be wasted work.
         if not result.skipped_existing:
+            t_post = time.perf_counter()
             dict_persister.run_post_ingest_pipeline(result.snapshot_id)
+            timings["5_post_ingest"] = time.perf_counter() - t_post
+            logger.info("[ingest] post-ingest pipeline %s",
+                        _fmt_time(timings["5_post_ingest"]))
+
+        # Final summary table — easy to grep for and to copy/paste
+        # when comparing two runs to see where time went.
+        total = time.perf_counter() - t_overall
+        logger.info("[ingest] ───────────── summary ─────────────")
+        logger.info("[ingest]   snapshot_id=%s  source=%s  run=%s",
+                    result.snapshot_id, identity.source_system_name,
+                    identity.extract_run_id[:24] + ("…" if len(identity.extract_run_id) > 24 else ""))
+        logger.info("[ingest]   persisted: schemas=%d tables=%d columns=%d indices=%d partitioning=%d ddl=%d",
+                    result.schemas_created, result.tables_created,
+                    result.columns_created, result.indices_created,
+                    result.partitioning_created, result.ddl_text_created)
+        for stage, elapsed in timings.items():
+            pct = (elapsed / total * 100) if total > 0 else 0
+            logger.info("[ingest]   %-25s %12s  (%4.1f%%)", stage, _fmt_time(elapsed), pct)
+        logger.info("[ingest]   %-25s %12s", "TOTAL", _fmt_time(total))
+        logger.info("[ingest] ────────────────────────────────────")
 
         return DictImportResponse(
             snapshot_id=result.snapshot_id,
