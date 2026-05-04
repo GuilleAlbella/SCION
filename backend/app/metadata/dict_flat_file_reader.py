@@ -355,29 +355,98 @@ def _parse_standard(
 ) -> Iterator[List[str]]:
     """Yield validated 16-field rows for a standard export file.
 
-    Validation: every record MUST have exactly 16 fields. Anything
-    else means Rahul changed the layout (or the file is corrupt) and
-    we'd rather fail loudly than silently miscolumn the data.
+    Validation: every emitted record has exactly 16 fields.
 
-    Streaming: opens the file with a line-iterator instead of
+    Multi-line records: Rahul's standard export uses `\n` as the
+    record terminator and `§` as the field delimiter, but **does not
+    escape literal newlines inside field values**. That works in
+    practice for `databases/columns/indices/partitioning` because
+    those views' fields don't contain free-form text — but
+    `tables.CommentString` is free-form, and at least one record in
+    the full Transcend-DevTest extract (`DBC.AccLogRule`, a system
+    macro) has a multi-line comment. The single-line assumption used
+    to crash the parser at record #15125 with "got 12 fields".
+
+    To handle this without forcing Rahul to change the export, we
+    accumulate raw lines into a buffer and only emit a record once
+    its parsed field count hits exactly `_STANDARD_FIELD_COUNT`. A
+    line that's truly malformed (e.g. corrupt, > 16 fields) still
+    raises immediately. This is the same record-recovery pattern
+    RFC-4180 CSV parsers use for quoted multi-line fields, except
+    here our delimiter for "where does this record end" is field
+    count rather than a closing quote.
+
+    Streaming: opens the file with a line iterator instead of
     `read_text()` so we never hold the whole file in memory. Critical
     for the columns view at production scale (Transcend-DevTest's
     full extract is 1.9 GB / 9.8M rows — `read_text()` would
     allocate ~4 GB before we even start parsing).
     """
     with path.open("r", encoding="utf-8") as fh:
-        for idx, raw_line in enumerate(fh, start=1):
-            stripped = raw_line.strip("\r\n\t ")
+        buf = ""
+        record_idx = 0
+        for raw_line in fh:
+            # Append the raw line including its trailing newline. If
+            # the record turns out to span multiple lines, we want the
+            # `\n` preserved inside the comment field — that's what
+            # the data actually contained.
+            buf += raw_line
+
+            # Cheap fast-path: if buf is just blank lines, reset and
+            # move on. Catches empty-line padding that Rahul's
+            # exporter occasionally leaves at the end of the file.
+            stripped = buf.strip("\r\n\t ")
             if not stripped:
+                buf = ""
                 continue
+
             fields = _split_fields(stripped, delimiter, escape)
-            if len(fields) != _STANDARD_FIELD_COUNT:
+            n = len(fields)
+
+            if n < _STANDARD_FIELD_COUNT:
+                # Record continues on the next line — keep buffering.
+                # No yield yet.
+                continue
+
+            if n > _STANDARD_FIELD_COUNT:
+                # We overshot 16 fields. Either Rahul changed the
+                # layout (real schema drift) or the previous record
+                # was missing a delimiter and we merged it with this
+                # one. Either way it's not safely recoverable —
+                # better to fail loudly with a precise locator than
+                # silently miscolumn data.
+                record_idx += 1
                 raise DictFlatFileError(
-                    f"{path.name}:record#{idx}: expected "
-                    f"{_STANDARD_FIELD_COUNT} fields (16-col layout), got "
-                    f"{len(fields)}. First 200 chars: {stripped[:200]!r}"
+                    f"{path.name}:record#{record_idx}: expected "
+                    f"{_STANDARD_FIELD_COUNT} fields (16-col layout), "
+                    f"got {n} — too many fields, likely a delimiter "
+                    f"escape issue or layout drift. First 200 chars: "
+                    f"{stripped[:200]!r}"
                 )
+
+            # Exactly 16. Emit and reset the buffer for the next
+            # record.
+            record_idx += 1
             yield fields
+            buf = ""
+
+        # End of file: anything left in the buffer means the last
+        # record is incomplete. Don't silently drop it.
+        leftover = buf.strip("\r\n\t ")
+        if leftover:
+            fields = _split_fields(leftover, delimiter, escape)
+            n = len(fields)
+            if n == _STANDARD_FIELD_COUNT:
+                # Final record without a trailing newline — valid.
+                record_idx += 1
+                yield fields
+            else:
+                raise DictFlatFileError(
+                    f"{path.name}:record#{record_idx + 1}: incomplete "
+                    f"final record ({n} fields, expected "
+                    f"{_STANDARD_FIELD_COUNT}). File may have been "
+                    f"truncated. First 200 chars: {leftover[:200]!r}"
+                )
 
 
 def _get(fields: List[str], col_idx_1based: int) -> Optional[str]:

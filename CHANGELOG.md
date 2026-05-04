@@ -8,6 +8,34 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.10 (2026-05-04) — Tolerate multi-line CommentString in dict tables.dat
+
+The 16-col reader assumed every record was exactly one physical line.
+That held in Sample 1 but not in Rahul's first full Transcend-DevTest
+extract: record #15125 (`DBC.AccLogRule`, a system macro) has a
+`CommentString` with an embedded `\n`. The exporter terminates records
+with `\n` and does not escape literal newlines inside fields, so what
+should be one record gets read as two — the first short by 4 fields,
+the second corrupt — and the import bombed out with
+"got 12 fields (16-col layout)".
+
+Fix: `_parse_standard` now accumulates raw lines into a buffer and
+emits a record only when its parsed field count hits exactly 16. Lines
+that take the buffer over 16 fields (real corruption / layout drift)
+still fail loudly with a precise locator. Lines that leave the file
+ending mid-record surface as a clear "incomplete final record" error
+rather than silently dropping data. Same record-recovery pattern
+RFC-4180 CSV uses for quoted multi-line fields, except our boundary
+discriminator is field count rather than a closing quote.
+
+New regression tests in `tests/metadata/test_multiline_records.py`:
+embedded-newline comment, > 16 fields, truncated final record.
+
+No format change required from Rahul's side — this was an SCION-side
+assumption that didn't survive contact with system tables.
+
+---
+
 ### v1.14.09 (2026-05-04) — Streaming dict import for production-scale extracts
 
 The dict-import pipeline used to read every uploaded file into memory
