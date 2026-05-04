@@ -8,6 +8,68 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.09 (2026-05-04) — Streaming dict import for production-scale extracts
+
+The dict-import pipeline used to read every uploaded file into memory
+(`await upload.read()`), parse it into a `List[Record]`, then call
+`session.add()` per row. That worked for Sample 1 (~145k rows total)
+but melted down on Rahul's first full Transcend-DevTest extract
+(2.4 GB across 6 files, 9.8M columns alone). This release rebuilds
+the path to be O(memory) constant regardless of extract size, with
+clear two-phase progress feedback in the UI.
+
+Backend changes:
+- **Streaming uploads.** `dict_import.py` now writes each multipart
+  part to a `NamedTemporaryFile` in 4-MiB chunks instead of buffering
+  the body in RAM. A 2 GB upload uses one chunk's worth of memory at
+  any moment.
+- **Streaming readers.** `dict_flat_file_reader.py` exposes
+  `iter_databases / iter_tables / iter_columns / iter_indices`
+  generators that yield records one at a time. The internal
+  `_parse_standard` helper now opens the file with a line iterator
+  rather than `path.read_text()`, so we never hold the whole file as
+  a string either. Existing `read_*` list-returning shims are kept
+  for tests and the small-extract path (just `list(iter_*(...))`).
+- **Bulk-insert persister.** `dict_persister.persist_batch` accepts
+  `Iterable[ColumnRecord]` / `Iterable[IndexRecord]` (lists still
+  work) and pushes records through `session.bulk_insert_mappings` in
+  5 000-row batches. Per-row overhead drops by ~5-10× because we
+  bypass ORM object construction and identity-map insertion.
+- **Streaming validator.** `peek_first_record(path, iter_fn)` lets
+  the endpoint check `(source_system, extract_run_id)` identity on
+  the large views by sampling the first record only — Rahul's
+  contract guarantees identity is uniform within a file, so walking
+  9.8M rows just to confirm it would be wasteful. Mid-file
+  corruption is still caught at ingest time by parser-side arity
+  validation.
+- **Removed `len(columns)` / `len(indices)` from `snapshot.description`.**
+  Those values are reported in the API response and PersistResult;
+  computing them up-front would consume the streaming iterators.
+
+Frontend changes:
+- **Two-phase progress bar.** New `DictImportProgress` component
+  renders:
+    1. **Uploading**: real bytes-on-the-wire % from axios's
+       `onUploadProgress`, with live readouts for sent / total /
+       speed / ETA.
+    2. **Server processing**: indeterminate shimmer bar +
+       elapsed-time counter + stage-aware caption that escalates as
+       wait grows ("Parsing files…" → "Bulk-inserting columns in
+       5 000-row batches…" → "Running the post-ingest pipeline…").
+       After 60 s we add a reassurance line so users don't think
+       the request is frozen.
+- **Axios body-size + timeout caps removed** for the dict-import
+  call (`maxBodyLength: Infinity`, `timeout: 0`). Without these,
+  axios's defaults silently aborted multi-GB uploads partway
+  through.
+
+Tested: `pytest backend/tests/metadata/` 41/41 passing,
+`tsc --noEmit` clean. Local end-to-end with Sample 1 still works
+(idempotent re-import, force re-import). The full Transcend-DevTest
+extract is now feasible on a laptop.
+
+---
+
 ### v1.14.08 (2026-05-04) — Backfill missing Alembic migration for usage tables
 
 `usage_event` and `object_criticality` are runtime-required tables

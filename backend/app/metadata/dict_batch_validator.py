@@ -26,11 +26,13 @@ What this module does NOT do
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Iterable, List, Optional, Set, Tuple
 
 from .dict_flat_file_reader import (
     DatabaseRecord, TableRecord, ColumnRecord, IndexRecord,
     PartitioningRecord, TableTextRecord, TechFields,
+    iter_columns, iter_indices,
 )
 
 
@@ -191,6 +193,36 @@ def _check_temporal_coherence(
             "assembled from separate runs. Re-extract.",
         ]
         raise BatchConsistencyError("\n".join(lines))
+
+
+def peek_first_record(
+    path: Path,
+    iter_fn,
+) -> Optional[DictRecord]:
+    """Pull a single record from a streaming reader without consuming all.
+
+    Used so the validator can check identity (source_system_name +
+    extract_run_id) on a multi-GB file without parsing every row.
+    Rahul's contract guarantees identity is constant within a file —
+    one sample is sufficient. We rely on parser-side validation (16-
+    field arity, etc.) to catch corruption mid-file at ingest time.
+
+    Returns None if the file has zero records (empty file).
+    """
+    gen = iter_fn(path)
+    try:
+        return next(gen)
+    except StopIteration:
+        return None
+    finally:
+        # Generators wrapping `with path.open()` close cleanly when
+        # garbage-collected, but explicit close avoids holding the
+        # file handle until the next GC pass — important on Windows
+        # where open files are exclusive.
+        try:
+            gen.close()
+        except Exception:
+            pass
 
 
 def validate_batch(

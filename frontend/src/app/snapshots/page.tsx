@@ -14,6 +14,7 @@ import { importDictBatch, type DictImportResponse } from "@/lib/api/dict_import"
 import type { ParserImportResponse } from "@/lib/api/types";
 import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/shared/ToastProvider";
+import { DictImportProgress, type ImportPhase } from "@/components/shared/DictImportProgress";
 
 export default function SnapshotsPage() {
   const { data, error, isLoading } = useSnapshots();
@@ -59,6 +60,16 @@ export default function SnapshotsPage() {
   const [dictUploading, setDictUploading] = useState(false);
   const [dictResult, setDictResult] = useState<DictImportResponse | null>(null);
   const [dictError, setDictError] = useState<string | null>(null);
+
+  // Two-phase progress UI for the dict batch upload. `phase` drives which
+  // bar (real % during uploading, indeterminate during processing) the
+  // DictImportProgress component renders. Bytes counters are only
+  // meaningful while phase === "uploading"; we keep them in state so
+  // the readout stays consistent across re-renders without prop drilling.
+  const [dictPhase, setDictPhase] = useState<ImportPhase>("idle");
+  const [dictUploadedBytes, setDictUploadedBytes] = useState(0);
+  const [dictTotalBytes, setDictTotalBytes] = useState<number | undefined>(undefined);
+  const [dictPhaseStartedAt, setDictPhaseStartedAt] = useState<number | undefined>(undefined);
 
   async function handleCreate() {
     setCreating(true);
@@ -180,17 +191,54 @@ export default function SnapshotsPage() {
     setDictResult(null);
     setDictError(null);
     setDictPanelOpen(false);
+    setDictPhase("idle");
+    setDictUploadedBytes(0);
+    setDictTotalBytes(undefined);
+    setDictPhaseStartedAt(undefined);
     if (dictInputRef.current) dictInputRef.current.value = "";
   }
 
   async function handleDictUpload() {
     if (dictFiles.length === 0) return;
+
+    // Sum file sizes up-front so the progress bar has a denominator
+    // even before axios negotiates the request — otherwise the bar
+    // sits at 0% with "—/—" for the first few hundred ms which feels
+    // broken to the user. The browser will fill in the precise value
+    // once the upload starts.
+    const totalHint = dictFiles.reduce((s, f) => s + f.size, 0);
+
     setDictUploading(true);
     setDictError(null);
     setDictResult(null);
+    setDictPhase("uploading");
+    setDictUploadedBytes(0);
+    setDictTotalBytes(totalHint);
+    setDictPhaseStartedAt(Date.now());
+
     try {
-      const r = await importDictBatch(dictFiles);
+      const r = await importDictBatch(dictFiles, false, (e) => {
+        // axios fires this on every chunk. We update the bytes counters
+        // and, the moment the body is fully sent, switch the phase to
+        // "processing" so the UI swaps from a determinate to an
+        // indeterminate bar. The processing phase is what dominates
+        // the wall time on multi-GB extracts (server doing parse +
+        // bulk-insert + post-ingest), so getting the transition right
+        // is what makes the overall UX feel responsive.
+        setDictUploadedBytes(e.loaded);
+        if (e.total !== undefined) setDictTotalBytes(e.total);
+        if (e.uploadComplete) {
+          setDictPhase((prev) => {
+            if (prev === "uploading") {
+              setDictPhaseStartedAt(Date.now());
+              return "processing";
+            }
+            return prev;
+          });
+        }
+      });
       setDictResult(r);
+      setDictPhase("done");
       // Refresh snapshot list so the new snapshot shows up below.
       // Keep panel open so user sees the success card with counts.
       await mutate("snapshots");
@@ -217,6 +265,7 @@ export default function SnapshotsPage() {
         else if (ax.message) msg = ax.message;
       }
       setDictError(msg);
+      setDictPhase("error");
     } finally {
       setDictUploading(false);
     }
@@ -444,22 +493,42 @@ export default function SnapshotsPage() {
 
           {/* Upload button + result */}
           {!dictResult && (
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                onClick={handleDictUpload}
-                disabled={dictFiles.length === 0 || dictUploading}
-                className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                <Upload size={14} />
-                {dictUploading ? "Uploading…" : "Upload batch"}
-              </button>
-              {dictFiles.length > 0 && !dictUploading && (
-                <span className="text-[11px] text-td-gray-dark">
-                  {(dictFiles.reduce((s, f) => s + f.size, 0) / 1024).toFixed(1)} KB across{" "}
-                  {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
+            <>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={handleDictUpload}
+                  disabled={dictFiles.length === 0 || dictUploading}
+                  className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Upload size={14} />
+                  {dictUploading
+                    ? dictPhase === "processing"
+                      ? "Processing on server…"
+                      : "Uploading…"
+                    : "Upload batch"}
+                </button>
+                {dictFiles.length > 0 && !dictUploading && (
+                  <span className="text-[11px] text-td-gray-dark">
+                    {(dictFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB across{" "}
+                    {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+
+              {/* Two-phase progress: real bytes during upload, then an
+                  indeterminate shimmer + elapsed timer + stage-aware
+                  caption while the server parses/persists. Critical UX
+                  for multi-GB extracts where the server-processing phase
+                  dominates the total wait — without this the request
+                  looks frozen for several minutes. */}
+              <DictImportProgress
+                phase={dictPhase}
+                loaded={dictUploadedBytes}
+                total={dictTotalBytes}
+                phaseStartedAt={dictPhaseStartedAt}
+                totalBytesHint={dictFiles.reduce((s, f) => s + f.size, 0)}
+              />
+            </>
           )}
 
           {/* Success card */}

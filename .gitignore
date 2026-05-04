@@ -61,3 +61,11 @@ backend/alembic/versions/__pycache__/
 # Local secrets backup
 *.bak
 *.swp
+
+# Parser / dict raw extracts — customer data, never commit. Each
+# extract folder can be multiple GB. Keep the Parser/ folder itself
+# tracked (so the directory exists in fresh checkouts) but exclude
+# every .dat and .log file inside it.
+Parser/**/*.dat
+Parser/**/*.log
+Parser/**/*.json
