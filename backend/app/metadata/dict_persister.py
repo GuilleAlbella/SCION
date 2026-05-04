@@ -429,7 +429,13 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # consistent across snapshots that do or don't have usage data).
     t_step = time.perf_counter()
     try:
-        compute_criticality(snapshot_id, usage_available=False)
+        # `force=True` is critical here: without it, `compute_criticality`
+        # short-circuits if any rows already exist for this snapshot_id —
+        # which silently happens when a previous post-ingest run got far
+        # enough to write criticality before failing later, or when the
+        # demo seeder created stale rows. From the post-ingest pipeline
+        # we always want a fresh recompute against the just-rebuilt graph.
+        compute_criticality(snapshot_id, force=True, usage_available=False)
     except Exception as e:
         logger.warning("post-ingest: compute_criticality failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] criticality       in %s", _fmt_time(time.perf_counter() - t_step))
