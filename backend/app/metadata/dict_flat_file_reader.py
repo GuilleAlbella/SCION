@@ -358,17 +358,26 @@ def _parse_standard(
     Validation: every record MUST have exactly 16 fields. Anything
     else means Rahul changed the layout (or the file is corrupt) and
     we'd rather fail loudly than silently miscolumn the data.
+
+    Streaming: opens the file with a line-iterator instead of
+    `read_text()` so we never hold the whole file in memory. Critical
+    for the columns view at production scale (Transcend-DevTest's
+    full extract is 1.9 GB / 9.8M rows — `read_text()` would
+    allocate ~4 GB before we even start parsing).
     """
-    raw = path.read_text(encoding="utf-8")
-    for idx, record in enumerate(_split_records(raw, "\n"), start=1):
-        fields = _split_fields(record, delimiter, escape)
-        if len(fields) != _STANDARD_FIELD_COUNT:
-            raise DictFlatFileError(
-                f"{path.name}:record#{idx}: expected "
-                f"{_STANDARD_FIELD_COUNT} fields (16-col layout), got "
-                f"{len(fields)}. First 200 chars: {record[:200]!r}"
-            )
-        yield fields
+    with path.open("r", encoding="utf-8") as fh:
+        for idx, raw_line in enumerate(fh, start=1):
+            stripped = raw_line.strip("\r\n\t ")
+            if not stripped:
+                continue
+            fields = _split_fields(stripped, delimiter, escape)
+            if len(fields) != _STANDARD_FIELD_COUNT:
+                raise DictFlatFileError(
+                    f"{path.name}:record#{idx}: expected "
+                    f"{_STANDARD_FIELD_COUNT} fields (16-col layout), got "
+                    f"{len(fields)}. First 200 chars: {stripped[:200]!r}"
+                )
+            yield fields
 
 
 def _get(fields: List[str], col_idx_1based: int) -> Optional[str]:
@@ -379,16 +388,22 @@ def _get(fields: List[str], col_idx_1based: int) -> Optional[str]:
 
 
 # ──── Public readers ────
+# Each view exposes both a streaming `iter_*` generator and a
+# materialising `read_*` (which is just `list(iter_*(...))`). The
+# persister uses `iter_*` for the large views (columns, indices) so we
+# never hold a full ColumnRecord list in memory; small views still use
+# `read_*` because the simpler list semantics make the persist code
+# easier to reason about. The dataclass shape is identical either way.
 
-def read_databases(
+
+def iter_databases(
     path: Path,
     delimiter: str = DEFAULT_FIELD_DELIMITER,
     escape: str = DEFAULT_ESCAPE_CHARACTER,
-) -> List[DatabaseRecord]:
-    """Parse a `databasesv_*_export.rendered.dat` file."""
-    out: List[DatabaseRecord] = []
+) -> Iterator[DatabaseRecord]:
+    """Stream `databasesv_*_export.rendered.dat` records one at a time."""
     for f in _parse_standard(path, delimiter, escape):
-        out.append(DatabaseRecord(
+        yield DatabaseRecord(
             tech=_tech_from_standard(f),
             database_name=f[4],   # col_05 — required, even if "blank"
             owner_name=_get(f, 6),
@@ -400,19 +415,26 @@ def read_databases(
             perm_space=_get(f, 12),
             spool_space=_get(f, 13),
             temp_space=_get(f, 14),
-        ))
-    return out
+        )
 
 
-def read_tables(
+def read_databases(
     path: Path,
     delimiter: str = DEFAULT_FIELD_DELIMITER,
     escape: str = DEFAULT_ESCAPE_CHARACTER,
-) -> List[TableRecord]:
-    """Parse a `tablesv_*_export.rendered.dat` file."""
-    out: List[TableRecord] = []
+) -> List[DatabaseRecord]:
+    """Parse a `databasesv_*_export.rendered.dat` file."""
+    return list(iter_databases(path, delimiter, escape))
+
+
+def iter_tables(
+    path: Path,
+    delimiter: str = DEFAULT_FIELD_DELIMITER,
+    escape: str = DEFAULT_ESCAPE_CHARACTER,
+) -> Iterator[TableRecord]:
+    """Stream `tablesv_*_export.rendered.dat` records one at a time."""
     for f in _parse_standard(path, delimiter, escape):
-        out.append(TableRecord(
+        yield TableRecord(
             tech=_tech_from_standard(f),
             database_name=f[4],
             table_name=f[5],
@@ -425,19 +447,33 @@ def read_tables(
             protection_type=_get(f, 13),
             journal_flag=_get(f, 14),
             check_opt=_get(f, 15),
-        ))
-    return out
+        )
 
 
-def read_columns(
+def read_tables(
     path: Path,
     delimiter: str = DEFAULT_FIELD_DELIMITER,
     escape: str = DEFAULT_ESCAPE_CHARACTER,
-) -> List[ColumnRecord]:
-    """Parse a `columnsv_*_export.rendered.dat` file."""
-    out: List[ColumnRecord] = []
+) -> List[TableRecord]:
+    """Parse a `tablesv_*_export.rendered.dat` file."""
+    return list(iter_tables(path, delimiter, escape))
+
+
+def iter_columns(
+    path: Path,
+    delimiter: str = DEFAULT_FIELD_DELIMITER,
+    escape: str = DEFAULT_ESCAPE_CHARACTER,
+) -> Iterator[ColumnRecord]:
+    """Stream `columnsv_*_export.rendered.dat` records one at a time.
+
+    This is the hot path at production scale — Transcend-DevTest's
+    full extract is 9.8M columns / 1.9 GB. The persister consumes
+    this iterator in batches and feeds them to
+    `bulk_insert_mappings` so neither parsed-record list nor ORM
+    identity-map grow unbounded.
+    """
     for f in _parse_standard(path, delimiter, escape):
-        out.append(ColumnRecord(
+        yield ColumnRecord(
             tech=_tech_from_standard(f),
             database_name=f[4],
             table_name=f[5],
@@ -451,24 +487,36 @@ def read_columns(
             default_value=_get(f, 14),
             char_type=_parse_int(f[14]),
             uppercase_flag=_get(f, 16),
-        ))
-    return out
+        )
 
 
-def read_indices(
+def read_columns(
     path: Path,
     delimiter: str = DEFAULT_FIELD_DELIMITER,
     escape: str = DEFAULT_ESCAPE_CHARACTER,
-) -> List[IndexRecord]:
-    """Parse an `indicesv_*_export.rendered.dat` file.
+) -> List[ColumnRecord]:
+    """Parse a `columnsv_*_export.rendered.dat` file.
+
+    NOTE: materialises the full list — only safe for small extracts.
+    Production callers should use `iter_columns()` instead. Kept as
+    a convenience for tests and the smoke-test script.
+    """
+    return list(iter_columns(path, delimiter, escape))
+
+
+def iter_indices(
+    path: Path,
+    delimiter: str = DEFAULT_FIELD_DELIMITER,
+    escape: str = DEFAULT_ESCAPE_CHARACTER,
+) -> Iterator[IndexRecord]:
+    """Stream `indicesv_*_export.rendered.dat` records one at a time.
 
     Each row is one (index, column) pair. Multi-column indexes appear
     as multiple rows with the same `index_name` / `index_number` and
     increasing `column_position`.
     """
-    out: List[IndexRecord] = []
     for f in _parse_standard(path, delimiter, escape):
-        out.append(IndexRecord(
+        yield IndexRecord(
             tech=_tech_from_standard(f),
             database_name=f[4],
             table_name=f[5],
@@ -478,8 +526,16 @@ def read_indices(
             unique_flag=_get(f, 10),
             column_name=f[10],
             column_position=_parse_int(f[11]),
-        ))
-    return out
+        )
+
+
+def read_indices(
+    path: Path,
+    delimiter: str = DEFAULT_FIELD_DELIMITER,
+    escape: str = DEFAULT_ESCAPE_CHARACTER,
+) -> List[IndexRecord]:
+    """Parse an `indicesv_*_export.rendered.dat` file."""
+    return list(iter_indices(path, delimiter, escape))
 
 
 def read_partitioning(

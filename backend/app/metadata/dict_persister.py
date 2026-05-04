@@ -31,7 +31,7 @@ for testing.
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -52,6 +52,19 @@ from .dict_flat_file_reader import (
     PartitioningRecord, TableTextRecord, assemble_ddl,
 )
 from .dict_batch_validator import BatchIdentity
+
+
+# ──── Streaming bulk-insert tuning ────
+# Trade-off:
+#  - Too small: more SQL round-trips, more session bookkeeping per row.
+#  - Too large: each batch holds N dicts in memory plus SQLite has to
+#    parse a single huge INSERT statement.
+# 5 000 rows × ~200 bytes/dict ≈ ~1 MB per batch — well under any
+# memory pressure threshold but still big enough that SQLite amortises
+# the per-statement overhead. Tuned with the Transcend-DevTest 9.8M-row
+# columns file (1.9 GB) on a laptop-class machine. Don't change without
+# re-benchmarking via `tools/benchmark_ingest.py`.
+_BULK_INSERT_BATCH_SIZE = 5000
 
 
 logger = logging.getLogger(__name__)
@@ -95,8 +108,8 @@ def persist_batch(
     identity: BatchIdentity,
     databases: List[DatabaseRecord],
     tables: List[TableRecord],
-    columns: List[ColumnRecord],
-    indices: List[IndexRecord],
+    columns: Iterable[ColumnRecord],
+    indices: Iterable[IndexRecord],
     partitioning: List[PartitioningRecord],
     tabletext: List[TableTextRecord],
     force: bool = False,
@@ -106,7 +119,14 @@ def persist_batch(
     Args:
         session: open SQLAlchemy session; caller owns commit/rollback.
         identity: validated by `dict_batch_validator.validate_batch`.
-        databases/tables/columns/...: parsed records from each file.
+        databases / tables / partitioning / tabletext: parsed records
+            (materialised — small enough to hold in memory).
+        columns / indices: parsed records, accepted as `Iterable` so
+            the route handler can stream them straight from the
+            `iter_*` generators without materialising. Critical for
+            production-scale extracts where columns alone is 9.8M+ rows
+            (Transcend-DevTest full = 1.9 GB on disk). Lists still work
+            (used by tests + the small-extract path).
         force: if True, ignore an existing snapshot with the same run_id
                and create a new one anyway. Useful for testing the
                pipeline end-to-end without manually deleting rows.
@@ -133,6 +153,12 @@ def persist_batch(
             .one_or_none()
         )
         if existing is not None:
+            # Idempotent re-import: we don't drain the columns/indices
+            # iterators because there's nothing to do — the prior run
+            # already persisted everything. Streaming-friendly seen
+            # counts are reported as 0 here on purpose (we can't count
+            # what we don't read). The response field `skipped_existing`
+            # tells the caller why the other counts are zero.
             return PersistResult(
                 snapshot_id=existing.snapshot_id,
                 schemas_created=0,
@@ -141,7 +167,7 @@ def persist_batch(
                 indices_created=0,
                 partitioning_created=0,
                 ddl_text_created=0,
-                indices_seen=len(indices),
+                indices_seen=0,
                 partitioning_seen=len(partitioning),
                 tabletext_seen=len(tabletext),
                 skipped_existing=True,
@@ -149,12 +175,17 @@ def persist_batch(
             )
 
     # ──── Snapshot row ────
+    # Description is built from the materialised lists only (databases,
+    # tables, partitioning, tabletext). Columns and indices are
+    # iterators at this point — we'd consume them just to count, which
+    # defeats the streaming. Their final counts are reported back via
+    # PersistResult / DictImportResponse instead, which is the more
+    # authoritative source anyway.
     snap = Snapshot(
         snapshot_time=datetime.utcnow(),
         source_system=identity.source_system_name,
         description=_build_description(
-            identity, databases, tables, columns,
-            indices, partitioning, tabletext,
+            identity, databases, tables, partitioning, tabletext,
         ),
         is_baseline=False,
         object_count=len(tables),  # tables/views/procs — the headline count
@@ -200,49 +231,27 @@ def persist_batch(
         session.flush()
         table_id_by_qname[(t.database_name, t.table_name)] = ts.table_id
 
-    # ──── Column rows ────
-    columns_created = 0
-    for c in columns:
-        table_id = table_id_by_qname.get((c.database_name, c.table_name))
-        if table_id is None:
-            # Column referencing a table we didn't ingest. Common for
-            # views over system tables; safe to skip with a count for
-            # diagnostics rather than abort.
-            continue
-        try:
-            data_type = format_column_type(_column_type_input(c))
-        except Exception:
-            # Don't let one weird type code abort the whole ingest.
-            data_type = c.column_type or "UNKNOWN"
-        cs = ColumnSnapshot(
-            table_id=table_id,
-            column_name=c.column_name,
-            data_type=data_type,
-            nullable=is_nullable(c.nullable),
-            ordinal_position=c.column_id or 0,
-        )
-        session.add(cs)
-        columns_created += 1
+    # ──── Column rows (streaming bulk-insert) ────
+    # We accept `columns` as an Iterable so the route handler can hand
+    # us the reader's generator directly — no list materialisation.
+    # Records are accumulated into batches of `_BULK_INSERT_BATCH_SIZE`
+    # and flushed with `session.bulk_insert_mappings`, which bypasses
+    # ORM object construction and identity-map insertion (the killer
+    # for 9.8M-row inserts). Memory stays bounded at ~1 MB per batch.
+    columns_created, columns_seen = _bulk_insert_columns_streaming(
+        session, columns, table_id_by_qname,
+    )
 
-    # ──── Index rows (v1.14.02) ────
-    # One row per (index, column) pair, mirroring DBC.IndicesV. Skip
-    # any record whose target table isn't in our snapshot — same
-    # philosophy as columns: drop silently with a counter, don't abort.
-    indices_created = 0
-    for idx in indices:
-        table_id = table_id_by_qname.get((idx.database_name, idx.table_name))
-        if table_id is None:
-            continue
-        session.add(IndexSnapshot(
-            table_id=table_id,
-            index_name=idx.index_name,
-            index_number=idx.index_number,
-            index_type=idx.index_type,
-            unique_flag=idx.unique_flag,
-            column_name=idx.column_name,
-            column_position=idx.column_position,
-        ))
-        indices_created += 1
+    # ──── Index rows (streaming bulk-insert) ────
+    # Same pattern as columns. Indices is smaller (~340k rows for
+    # Transcend-DevTest) but the contract is identical so we route it
+    # through the same helper for consistency and to avoid per-row
+    # ORM overhead. Skip any record whose target table isn't in our
+    # snapshot — same philosophy as columns: drop silently, don't
+    # abort.
+    indices_created, indices_seen = _bulk_insert_indices_streaming(
+        session, indices, table_id_by_qname,
+    )
 
     # ──── Partitioning rows (v1.14.02) ────
     # One row per partitioning constraint. ConstraintText stored
@@ -290,7 +299,7 @@ def persist_batch(
         indices_created=indices_created,
         partitioning_created=partitioning_created,
         ddl_text_created=ddl_text_created,
-        indices_seen=len(indices),
+        indices_seen=indices_seen,
         partitioning_seen=len(partitioning),
         tabletext_seen=len(tabletext),
         skipped_existing=False,
@@ -441,6 +450,94 @@ def _auto_diff_against_previous(snapshot_id: int) -> None:
     )
 
 
+# ──── Streaming bulk-insert helpers ────
+
+
+def _bulk_insert_columns_streaming(
+    session: Session,
+    columns: Iterable[ColumnRecord],
+    table_id_by_qname: dict[Tuple[str, str], int],
+) -> Tuple[int, int]:
+    """Persist column records via batched `bulk_insert_mappings`.
+
+    Returns `(created, seen)`. `seen` is the number of records pulled
+    from the iterator (i.e. file rows); `created` is the subset whose
+    parent table was in this snapshot. The gap is normal — extracts
+    routinely include columns of system tables (DBC.*) we don't ingest.
+
+    Why bulk_insert_mappings (not session.add):
+      - Bypasses ORM object construction and identity-map insertion.
+        9.8M `session.add` calls grow the session linearly and slow
+        SQLAlchemy to a crawl long before the inserts themselves
+        become the bottleneck.
+      - Insert path is ~5-10× faster on SQLite for our row shape.
+      - We never need the assigned PKs back, so the trade-off is free.
+    """
+    created = 0
+    seen = 0
+    batch: list[dict] = []
+    for c in columns:
+        seen += 1
+        table_id = table_id_by_qname.get((c.database_name, c.table_name))
+        if table_id is None:
+            continue
+        try:
+            data_type = format_column_type(_column_type_input(c))
+        except Exception:
+            # Don't let one weird type code abort the whole ingest.
+            data_type = c.column_type or "UNKNOWN"
+        batch.append({
+            "table_id": table_id,
+            "column_name": c.column_name,
+            "data_type": data_type,
+            "nullable": is_nullable(c.nullable),
+            "ordinal_position": c.column_id or 0,
+        })
+        created += 1
+        if len(batch) >= _BULK_INSERT_BATCH_SIZE:
+            session.bulk_insert_mappings(ColumnSnapshot, batch)
+            batch.clear()
+    if batch:
+        session.bulk_insert_mappings(ColumnSnapshot, batch)
+    return created, seen
+
+
+def _bulk_insert_indices_streaming(
+    session: Session,
+    indices: Iterable[IndexRecord],
+    table_id_by_qname: dict[Tuple[str, str], int],
+) -> Tuple[int, int]:
+    """Persist index records via batched `bulk_insert_mappings`.
+
+    Same pattern as `_bulk_insert_columns_streaming` — see that
+    function's docstring for the rationale.
+    """
+    created = 0
+    seen = 0
+    batch: list[dict] = []
+    for idx in indices:
+        seen += 1
+        table_id = table_id_by_qname.get((idx.database_name, idx.table_name))
+        if table_id is None:
+            continue
+        batch.append({
+            "table_id": table_id,
+            "index_name": idx.index_name,
+            "index_number": idx.index_number,
+            "index_type": idx.index_type,
+            "unique_flag": idx.unique_flag,
+            "column_name": idx.column_name,
+            "column_position": idx.column_position,
+        })
+        created += 1
+        if len(batch) >= _BULK_INSERT_BATCH_SIZE:
+            session.bulk_insert_mappings(IndexSnapshot, batch)
+            batch.clear()
+    if batch:
+        session.bulk_insert_mappings(IndexSnapshot, batch)
+    return created, seen
+
+
 # ──── Helpers ────
 
 def _column_type_input(c: ColumnRecord) -> ColumnTypeInput:
@@ -461,8 +558,6 @@ def _build_description(
     identity: BatchIdentity,
     databases: List[DatabaseRecord],
     tables: List[TableRecord],
-    columns: List[ColumnRecord],
-    indices: List[IndexRecord],
     partitioning: List[PartitioningRecord],
     tabletext: List[TableTextRecord],
 ) -> str:
@@ -474,9 +569,16 @@ def _build_description(
       2. **Human inspection** — counts surfaced in the Sidebar /
          snapshot list without having to drill into each table.
 
+    The columns/indices counts are deliberately omitted: those records
+    are streamed (Iterable, not List) so we can't `len()` them at
+    description time without consuming the iterator. Their final
+    counts live in PersistResult and the API response, which is a
+    more reliable source anyway (it reflects actual persisted rows,
+    not raw input).
+
     Format kept stable across releases because the idempotency check
-    uses LIKE matching on it. Don't reorder without thinking about
-    backward compatibility.
+    uses LIKE matching on the `extract_run_id=...` substring. Don't
+    reorder without thinking about backward compatibility.
     """
     return (
         f"Data dictionary import | "
@@ -484,8 +586,6 @@ def _build_description(
         f"extract_run_id={identity.extract_run_id} | "
         f"databases={len(databases)} | "
         f"tables={len(tables)} | "
-        f"columns={len(columns)} | "
-        f"indices={len(indices)} | "
         f"partitioning={len(partitioning)} | "
         f"tabletext_fragments={len(tabletext)}"
     )
