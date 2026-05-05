@@ -62,25 +62,49 @@ logger = logging.getLogger(__name__)
 SUMMARY_MAX_DEPTH = 3
 
 
+# SQLite's default ``SQLITE_MAX_VARIABLE_NUMBER`` is 999. Hitting this
+# limit raises ``sqlite3.OperationalError: too many SQL variables``,
+# which is what crashed ``/impact/batch`` on the first Transcend test.
+# We chunk every ``IN (...)`` query through this cap. Postgres has no
+# equivalent limit but the chunking is cheap there too — round trips
+# scale linearly with chunk count and there are at most ~250 chunks
+# even on a 250k-change Transcend extract.
+_SQL_IN_CHUNK = 900
+
+
+def _chunked(items: Sequence[int], size: int = _SQL_IN_CHUNK) -> Iterable[List[int]]:
+    """Yield slices of ``items`` no larger than ``size``.
+
+    Local helper rather than a `more_itertools` import — the chunking is
+    a one-line generator and the dependency would be the only place
+    we'd need it.
+    """
+    for start in range(0, len(items), size):
+        yield list(items[start : start + size])
+
+
 def filter_uncomputed(change_ids: Iterable[int]) -> List[int]:
     """Return the subset of ``change_ids`` that don't yet have a summary.
 
     Used by the post-ingest hook to avoid recomputing summaries for
-    changes a previous (interrupted) run already finished. Cheap: the
-    ``ix_change_impact_summary_snapshot`` covers ``change_id`` lookups
-    via the primary key.
+    changes a previous (interrupted) run already finished. Cheap thanks
+    to the ``change_id`` primary key, but at production scale (250k
+    changes) we have to chunk the ``IN`` clause around SQLite's
+    999-variable limit — see ``_SQL_IN_CHUNK``.
     """
     ids = list(change_ids)
     if not ids:
         return []
+    existing: set[int] = set()
     with Session(bind=engine) as session:
-        existing = set(
-            session.execute(
-                select(ChangeImpactSummary.change_id).where(
-                    ChangeImpactSummary.change_id.in_(ids)
-                )
-            ).scalars()
-        )
+        for chunk in _chunked(ids):
+            existing.update(
+                session.execute(
+                    select(ChangeImpactSummary.change_id).where(
+                        ChangeImpactSummary.change_id.in_(chunk)
+                    )
+                ).scalars()
+            )
     return [cid for cid in ids if cid not in existing]
 
 
@@ -238,14 +262,16 @@ def persist_summaries_for_pair(
 
     # Persist in a single bulk write. We delete any existing rows for
     # this set of change_ids first to make the operation idempotent
-    # under non-skip_existing usage.
+    # under non-skip_existing usage. The ``IN (...)`` clause is chunked
+    # for the same SQLite-variable-limit reason as ``filter_uncomputed``.
     with Session(bind=engine) as session:
         if not skip_existing:
-            session.execute(
-                delete(ChangeImpactSummary).where(
-                    ChangeImpactSummary.change_id.in_(target_ids)
+            for chunk in _chunked(target_ids):
+                session.execute(
+                    delete(ChangeImpactSummary).where(
+                        ChangeImpactSummary.change_id.in_(chunk)
+                    )
                 )
-            )
         session.bulk_insert_mappings(ChangeImpactSummary, rows_to_insert)
         session.commit()
 

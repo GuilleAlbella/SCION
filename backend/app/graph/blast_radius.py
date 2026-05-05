@@ -248,16 +248,22 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
             )
 
     # ──── Step 3: Read pre-aggregated summaries ────
+    # ``IN (...)`` chunked at 900 for SQLite's 999-variable limit; on a
+    # 250k-change Transcend diff this is ~280 round-trips, each one
+    # primary-key-indexed and sub-millisecond.
+    _SQL_IN_CHUNK = 900
     summary_by_change: Dict[int, _ImpactSummaryRow] = {}
     change_ids_in_range = [c["change_id"] for c in change_list]
     with Session(engine) as session:
-        rows = session.execute(
-            select(_ImpactSummaryRow).where(
-                _ImpactSummaryRow.change_id.in_(change_ids_in_range)
-            )
-        ).scalars().all()
-        for row in rows:
-            summary_by_change[row.change_id] = row
+        for start in range(0, len(change_ids_in_range), _SQL_IN_CHUNK):
+            chunk = change_ids_in_range[start : start + _SQL_IN_CHUNK]
+            rows = session.execute(
+                select(_ImpactSummaryRow).where(
+                    _ImpactSummaryRow.change_id.in_(chunk)
+                )
+            ).scalars().all()
+            for row in rows:
+                summary_by_change[row.change_id] = row
 
     # ──── Step 4: Pre-index node metadata for blast-radius rollups ────
     # We still need names + schemas to populate ``affected_schemas`` and
