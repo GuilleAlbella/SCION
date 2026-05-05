@@ -108,111 +108,70 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # ── Proactive structural alerts (computed on-demand from the latest snapshot) ──
+    # ──── Proactive structural alerts (read from pre-computed table) ────
+    # Until v1.19, this block loaded every graph_node + graph_edge for
+    # the latest snapshot and ran the 3 checks inline on each request —
+    # 337k+ rows + Python walks per click. The work has moved to
+    # ``run_post_ingest_pipeline`` (writes into ``proactive_alert``),
+    # so the endpoint just reads indexed rows. Lazy fallback: if no
+    # rows exist for the latest snapshot (pre-v1.19 imports), compute
+    # on the fly so /alerts isn't empty for legacy data.
     try:
-        from app.graph.graph_models import GraphNode, GraphEdge
         from app.db.models.snapshot import Snapshot
+        from app.graph.impact_models import ProactiveAlert
+
         with Session(bind=engine) as session:
             latest_snap = session.execute(
                 select(Snapshot).order_by(desc(Snapshot.snapshot_id)).limit(1)
             ).scalar_one_or_none()
 
-            if latest_snap:
+            if latest_snap is not None:
                 snap_id = latest_snap.snapshot_id
-                snap_ts = latest_snap.snapshot_time.isoformat() if latest_snap.snapshot_time else ""
+                snap_ts = (
+                    latest_snap.snapshot_time.isoformat()
+                    if latest_snap.snapshot_time
+                    else ""
+                )
 
-                # All nodes and edges in the latest snapshot
-                nodes = session.execute(
-                    select(GraphNode).where(GraphNode.snapshot_id == snap_id)
+                pre_rows = session.execute(
+                    select(ProactiveAlert)
+                    .where(ProactiveAlert.snapshot_id == snap_id)
+                    .order_by(ProactiveAlert.computed_at)
                 ).scalars().all()
-                edges = session.execute(
-                    select(GraphEdge).where(GraphEdge.snapshot_id == snap_id)
-                ).scalars().all()
 
-                node_ids = {n.node_id for n in nodes}
-                node_name_by_id = {n.node_id: f"{n.schema_name}.{n.object_name}" if n.schema_name else n.object_name for n in nodes}
+                # Lazy backfill for snapshots ingested under earlier
+                # versions. We run the computation once and re-read.
+                # Bounded by the same caps the helper applies.
+                if not pre_rows:
+                    try:
+                        from app.graph.proactive_alerts import (
+                            persist_proactive_alerts,
+                        )
+                        persist_proactive_alerts(snap_id)
+                        pre_rows = session.execute(
+                            select(ProactiveAlert)
+                            .where(ProactiveAlert.snapshot_id == snap_id)
+                            .order_by(ProactiveAlert.computed_at)
+                        ).scalars().all()
+                    except Exception:
+                        # Keep the endpoint usable even if backfill
+                        # fails — the change-event-based alerts above
+                        # are independent and already populated.
+                        pre_rows = []
 
-                # ──── Proactive check 1: broken lineage ────
-                # An edge pointing to a node that no longer exists in this
-                # snapshot means something was deleted without cleaning up its
-                # references — a silent data quality problem worth surfacing.
-                broken = []
-                for e in edges:
-                    if e.source_node_id not in node_ids:
-                        broken.append(("source", e.source_node_id, e.target_node_id))
-                    elif e.target_node_id not in node_ids:
-                        broken.append(("target", e.source_node_id, e.target_node_id))
-
-                for side, src, tgt in broken[:15]:
-                    alert_id += 1
-                    missing = src if side == "source" else tgt
-                    alerts.append({
-                        "id": alert_id,
-                        "alert_type": "BROKEN_LINEAGE",
-                        "severity": "HIGH",
-                        "message": f"Broken lineage: edge references missing node (id={missing})",
-                        "object_identifier": node_name_by_id.get(tgt if side == "source" else src, f"node:{missing}"),
-                        "timestamp": snap_ts,
-                        "source": f"Snapshot #{snap_id}",
-                    })
-
-                # ──── Proactive check 2: orphan objects ────
-                # A table with no incoming or outgoing edges is either dead
-                # code or a lineage gap. Schemas/databases are excluded
-                # because they're container nodes that need no direct edges.
-                connected_nodes = set()
-                for e in edges:
-                    connected_nodes.add(e.source_node_id)
-                    connected_nodes.add(e.target_node_id)
-
-                orphans = [
-                    n for n in nodes
-                    if n.node_id not in connected_nodes
-                    and n.object_type not in ("SCHEMA", "DATABASE")
-                ]
-                for n in orphans[:10]:
+                for r in pre_rows:
                     alert_id += 1
                     alerts.append({
                         "id": alert_id,
-                        "alert_type": "ORPHAN_OBJECT",
-                        "severity": "MEDIUM",
-                        "message": f"Orphan object — no upstream or downstream dependencies detected",
-                        "object_identifier": node_name_by_id.get(n.node_id, n.object_name),
-                        "timestamp": snap_ts,
+                        "alert_type": r.alert_type,
+                        "severity": r.severity,
+                        "message": r.message,
+                        "object_identifier": r.object_identifier,
+                        "timestamp": (
+                            r.computed_at.isoformat() if r.computed_at else snap_ts
+                        ),
                         "source": f"Snapshot #{snap_id}",
                     })
-
-                # ──── Proactive check 3: hub-node changes ────
-                # A hub (>=5 total edges) concentrates risk — changing one
-                # propagates everywhere. Cross-referencing recent changes
-                # against the hub list flags these for extra scrutiny.
-                hub_nodes = [
-                    n for n in nodes
-                    if (n.node_metadata or {}).get("is_hub")
-                ]
-                hub_names = {node_name_by_id.get(h.node_id, h.object_name) for h in hub_nodes}
-
-                with Session(bind=engine) as s2:
-                    recent_hub_changes = s2.execute(
-                        select(ChangeEvent)
-                        .where(ChangeEvent.snapshot_to == snap_id)
-                        .order_by(desc(ChangeEvent.detected_at))
-                    ).scalars().all()
-
-                for c in recent_hub_changes:
-                    if c.object_identifier in hub_names:
-                        alert_id += 1
-                        alerts.append({
-                            "id": alert_id,
-                            "alert_type": "HUB_CHANGED",
-                            "severity": "HIGH",
-                            "message": f"Hub node changed — high-connectivity object was modified",
-                            "object_identifier": c.object_identifier,
-                            "timestamp": c.detected_at.isoformat() if c.detected_at else snap_ts,
-                            "source": f"Diff #{c.snapshot_from}→#{c.snapshot_to}",
-                        })
-                        if len([a for a in alerts if a["alert_type"] == "HUB_CHANGED"]) >= 10:
-                            break
     except Exception:
         pass
 

@@ -542,6 +542,32 @@ def run_post_ingest_pipeline(
     # contributions vanish anyway, and capping the recursion bounds
     # the CTE explosion on dense graphs. See
     # ``app/graph/impact_summary.py`` for the full rationale.
+    # Step 8 (v1.19+): pre-compute proactive structural alerts.
+    # Same motivation as Step 7: ``GET /alerts`` used to load every
+    # graph_node + graph_edge for the snapshot on each request. Now
+    # we run the three checks once here and persist into
+    # ``proactive_alert`` so the endpoint becomes an indexed read.
+    _push_caption("computing proactive alerts…")
+    t_step = time.perf_counter()
+    try:
+        from app.graph.proactive_alerts import persist_proactive_alerts
+
+        n_alerts = persist_proactive_alerts(snapshot_id)
+        logger.info(
+            "[post-ingest] proactive alerts: persisted %d row(s)",
+            n_alerts,
+        )
+    except Exception as e:
+        logger.warning(
+            "post-ingest: proactive alerts failed for %s: %s",
+            snapshot_id,
+            e,
+        )
+    logger.info(
+        "[post-ingest] proactive_alerts in %s",
+        _fmt_time(time.perf_counter() - t_step),
+    )
+
     _push_caption("computing impact summaries…")
     t_step = time.perf_counter()
     try:

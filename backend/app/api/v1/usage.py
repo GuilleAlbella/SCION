@@ -118,13 +118,105 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
     "/criticality/{snapshot_id}",
     status_code=status.HTTP_200_OK,
 )
-def get_criticality(snapshot_id: int, force: bool = False) -> Dict[str, Any]:
-    """Compute/retrieve criticality scores for a snapshot."""
+def get_criticality(
+    snapshot_id: int,
+    force: bool = False,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """Compute/retrieve criticality scores for a snapshot.
 
+    Behaviour (v1.19+)
+    ------------------
+    The page only renders the top-N most-critical objects (KPI cards
+    + heatmap), so streaming all 337k rows of a Transcend extract is
+    pointless and freezes the browser on JSON parse. We return:
+
+    - ``items``: top ``limit`` objects sorted by ``combined_score``
+      desc. The ``ix_object_criticality_snapshot_score`` composite
+      index added in v1.15.00 makes this an indexed range scan even
+      on Transcend-scale data.
+    - ``total`` / ``high_count`` / ``medium_count`` / ``low_count``:
+      counts over the FULL set, computed via a single ``GROUP BY``
+      so we don't have to scan all rows to get them.
+
+    Force / cache-miss path: when no rows exist for the snapshot OR
+    ``force=True`` is set, we delegate to ``compute_criticality`` and
+    let it run the full pipeline. New imports always go through the
+    post-ingest hook (which calls ``compute_criticality(force=True,
+    usage_available=False)``) so the cache should be hit on every
+    user-driven request.
+    """
+
+    capped_limit = max(1, min(limit, 500))
+
+    from sqlalchemy import case, func, select
+    from sqlalchemy.orm import Session
+    from app.db.engine import engine
+    from app.usage.usage_models import ObjectCriticality
+
+    if not force:
+        # Cheap pre-flight: does the cache exist for this snapshot?
+        with Session(engine) as session:
+            cached_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(ObjectCriticality)
+                    .where(ObjectCriticality.snapshot_id == snapshot_id)
+                ).scalar_one()
+                or 0
+            )
+
+        if cached_count > 0:
+            with Session(engine) as session:
+                # Single GROUP BY to populate all four counts in one
+                # round-trip — at most 3 buckets returned regardless of
+                # how many rows the snapshot contains.
+                level_rows = session.execute(
+                    select(
+                        ObjectCriticality.criticality_level,
+                        func.count().label("n"),
+                    )
+                    .where(ObjectCriticality.snapshot_id == snapshot_id)
+                    .group_by(ObjectCriticality.criticality_level)
+                ).all()
+
+                # Top-N items via indexed scan; never materialises more
+                # than ``capped_limit`` rows in Python.
+                top_rows = session.execute(
+                    select(ObjectCriticality)
+                    .where(ObjectCriticality.snapshot_id == snapshot_id)
+                    .order_by(ObjectCriticality.combined_score.desc())
+                    .limit(capped_limit)
+                ).scalars().all()
+
+            counts = {lvl: int(n or 0) for lvl, n in level_rows}
+            return {
+                "snapshot_id": snapshot_id,
+                "items": [
+                    {
+                        "object_name": r.object_name,
+                        "usage_score": r.usage_score,
+                        "graph_score": r.graph_score,
+                        "combined_score": r.combined_score,
+                        "criticality_level": r.criticality_level,
+                    }
+                    for r in top_rows
+                ],
+                "total": cached_count,
+                "high_count": counts.get("HIGH", 0),
+                "medium_count": counts.get("MEDIUM", 0),
+                "low_count": counts.get("LOW", 0),
+            }
+
+    # Cache miss or forced — fall back to the full compute path. This
+    # is potentially expensive on Transcend-scale snapshots; future
+    # work could move it to a background task with progress reporting,
+    # but in the v1.19 flow post-ingest always populates the cache so
+    # this branch only fires for legacy data.
     results = compute_criticality(snapshot_id, force=force)
     return {
         "snapshot_id": snapshot_id,
-        "items": results,
+        "items": results[:capped_limit],
         "total": len(results),
         "high_count": sum(1 for r in results if r["criticality_level"] == "HIGH"),
         "medium_count": sum(1 for r in results if r["criticality_level"] == "MEDIUM"),

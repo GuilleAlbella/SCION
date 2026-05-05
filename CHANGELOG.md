@@ -8,6 +8,124 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.19.00 (2026-05-05) — Round-trip scale audit: /impact paginated, /alerts pre-computed, /usage cached, /intelligence windowed, /simulation autocomplete, /lineage route fix
+
+The previous releases (v1.15.00–v1.18.00) closed the headline scale
+bugs one page at a time. This release is the systematic follow-up:
+audit every remaining page that still touched a full snapshot's worth
+of rows, and convert it to the same patterns we proved out in earlier
+PRs — pre-aggregation in post-ingest, server-side bucket counts,
+paginated endpoints, top-N reads with indexed scans, server-backed
+autocomplete.
+
+#### /impact
+
+- **``POST /impact/batch`` is paginated.** Request accepts ``limit``
+  (default 100, max 500) and ``offset``. ``changes`` is now the
+  current page; ``changes_analyzed`` reflects the FULL filtered set;
+  ``has_more`` drives the UI's "Load more" affordance. Mirrors the
+  pattern landed in v1.16.00 for ``/diff/details``.
+
+- **Server-side donut buckets.** ``summary`` now carries
+  ``by_severity``, ``by_change_type``, ``by_schema``, ``by_breaking``,
+  and ``total_query_count`` — all computed during the same per-change
+  loop that already runs, at zero extra cost. The frontend stops
+  iterating ``changes`` to build donut data (which froze the browser
+  at 250k rows on Transcend); donuts read directly from the summary
+  and stay accurate regardless of pagination state.
+
+- **``affected_databases`` pre-grouped.** ``BlastRadius`` now exposes
+  ``[{schema_name, tables: [...]}, ...]`` alongside the legacy flat
+  arrays, so the "Affected objects, by database" section doesn't
+  filter ``affected_tables`` once per schema — at 10k databases that
+  was visibly slow.
+
+- **Frontend rewrite.** Page consumes paginated ``items`` with a Load
+  More button, reads donut buckets directly from ``summary``, and
+  the legacy 4 client-side ``useMemo`` aggregations are gone. The
+  "Touched databases" inline banner is capped at 10 chips with a
+  ``+ N more`` overflow; the detail "Affected objects, by database"
+  section is a search-driven accordion (top 50 by table count, type
+  to filter past the cap, click to expand the per-database table
+  list). The ``By database`` donut is capped at top 12 + an ``Other
+  (N databases)`` slice — donuts past ~15 categories become
+  unreadable.
+
+#### /alerts
+
+- **New ``proactive_alert`` table** (alembic ``a38d4e5f6c7d``). The
+  three structural checks (broken lineage, orphan objects, hub-node
+  changes) used to load every ``graph_node`` + ``graph_edge`` for the
+  latest snapshot on every request — 337k+ rows on Transcend, walked
+  in Python. They now run ONCE during ``run_post_ingest_pipeline``
+  and persist to this table. Endpoint reads indexed rows. Lazy
+  backfill on first request for legacy snapshots that predate the
+  hook.
+
+#### /usage
+
+- **``/criticality/{snapshot_id}`` reads top-N via SQL.** New
+  ``limit`` param (default 100, max 500). The cache-hit fast path
+  now uses an indexed ``LIMIT`` query (the
+  ``ix_object_criticality_snapshot_score`` composite added in
+  v1.15.00) instead of materialising the full 337k-row criticality
+  table. Counts (``total``, ``high_count`` etc.) come from a single
+  ``GROUP BY`` query so KPIs stay accurate without scanning all
+  rows. Cache-miss path falls through to the legacy
+  ``compute_criticality`` (rare in v1.19+ because post-ingest always
+  populates the cache).
+
+#### /intelligence
+
+- **History window caps on cochange and volatility-trend.**
+  ``mine_cochange_pairs`` and ``compute_schema_volatility_trend``
+  used to scan the entire ``change_event`` table on every request —
+  fine on a demo, multi-second on Transcend. Both helpers now
+  accept ``max_history_pairs`` / ``max_history_snapshots`` (default
+  20) and use a pre-flight pair selection + indexed ``IN`` filter
+  to bound the scan. The ``(snapshot_from, snapshot_to)`` index from
+  v1.15.00 makes this cheap.
+
+#### /simulation (formerly /what-if)
+
+- **Server-backed object autocomplete.** Page used to call
+  ``useGraph(snapshot_id)`` to populate the target picker — but
+  ``/graph/{snapshot_id}`` returns ``truncated: true`` with empty
+  nodes/edges above the v1.17 soft cap, so the dropdown was just
+  empty on Transcend. Replaced with ``<ObjectAutocomplete
+  source="graph" objectTypes="TABLE,VIEW">`` — types-restricted
+  server search via the ``/objects/search`` endpoint added in
+  v1.16.00. Picker is instant on any snapshot regardless of size.
+
+- **``/objects/search`` accepts ``object_types``.** New query
+  param, comma-separated, applies only when ``source=graph``.
+  Hooks into the existing
+  ``ix_graph_node_search`` composite index.
+
+#### /lineage (Transcend regression hot-fix)
+
+- **Route order in ``backend/app/api/v1/graph.py`` was wrong.** The
+  ``/{snapshot_id}`` parametrised route was declared before the
+  static ``/focus`` route added in v1.17.00. FastAPI matches in
+  source order, so ``GET /graph/focus`` was being routed to
+  ``get_graph`` which tried to parse the literal string ``"focus"``
+  as ``int snapshot_id`` and rejected it with 422. Worked on the
+  demo because the demo never hit ``/focus`` (small graphs use the
+  full-graph endpoint). The Transcend lineage flow exposed it on
+  the first picker click. Static route now declared first.
+
+#### Caveats
+
+- ``/impact`` numbers (``Impacted objects``, ``Max depth``,
+  ``Weighted score``) are 0 on Transcend dict imports because the
+  graph's edge set is sparse (the FK heuristic in ``graph_builder``
+  needs column-naming conventions to infer ``FEEDS`` edges, and
+  Transcend's dict feed doesn't expose them). This is data-side,
+  not code-side; the parser feed (Tier 3 lineage) will populate
+  them once Rahul's pipeline lands.
+
+---
+
 ### v1.18.00 (2026-05-05) — /impact pre-aggregation: 5-minute hang → instant
 
 Fourth and final leg of the Transcend-scale work. v1.15.00 indexed

@@ -67,6 +67,10 @@ export interface ObjectAutocompleteProps {
   /** Auto-focus on mount. Off by default to avoid stealing focus when
    *  the component is inside a collapsed `<details>`. */
   autoFocus?: boolean;
+  /** Comma-separated GraphNode.object_type whitelist. Only meaningful
+   *  with `source="graph"`. Used by /simulation to restrict the picker
+   *  to TABLE/VIEW (the only types its CHANGE_TYPES catalog supports). */
+  objectTypes?: string;
 }
 
 const DEBOUNCE_MS = 250;
@@ -81,6 +85,7 @@ export default function ObjectAutocomplete({
   className = "",
   disabled = false,
   autoFocus = false,
+  objectTypes,
 }: ObjectAutocompleteProps) {
   // Free-text input — distinct from `value` because the user may be
   // mid-typing, in which case `value` (the resolved selection) is stale.
@@ -143,6 +148,7 @@ export default function ObjectAutocomplete({
           q: q.trim() || undefined,
           snapshot_id: source === "graph" ? snapshotId : undefined,
           source,
+          object_types: source === "graph" ? objectTypes : undefined,
           limit,
         });
         // Discard if a newer fetch has started OR aborted us mid-flight.
@@ -161,7 +167,7 @@ export default function ObjectAutocomplete({
         }
       }
     },
-    [source, snapshotId, limit],
+    [source, snapshotId, limit, objectTypes],
   );
 
   function handleQueryChange(next: string) {

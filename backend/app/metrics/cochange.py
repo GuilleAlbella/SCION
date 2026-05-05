@@ -47,6 +47,14 @@ DEFAULT_MIN_PAIR_SUPPORT = 2
 # likely as chance; > 3.0 = strong coupling.
 DEFAULT_MIN_LIFT = 1.5
 
+# Cap on history depth (most recent N consecutive snapshot pairs scanned).
+# Without this, mining the entire change_event table is O(rows) on every
+# request — a 250k-row Transcend extract turned the Intelligence page
+# into a multi-second wait per click. 20 pairs ≈ a quarter of operational
+# history for a typical weekly-import shop, which is plenty of signal
+# for Apriori-style mining.
+DEFAULT_MAX_HISTORY_PAIRS = 20
+
 
 @dataclass
 class CoChangePair:
@@ -62,15 +70,51 @@ class CoChangePair:
     lift: float            # lift(A, B)
 
 
-def _load_deltas_as_transactions() -> List[Set[str]]:
+def _load_deltas_as_transactions(
+    max_history_pairs: int = DEFAULT_MAX_HISTORY_PAIRS,
+) -> List[Set[str]]:
     """Return one `set[object_identifier]` per snapshot delta.
 
     A "delta" here = one (snapshot_from, snapshot_to) pair. We collapse
     the granular column-level changes up to their parent table, because
     co-change at column level is too sparse to yield useful lift at
     demo data sizes.
+
+    History cap: only the ``max_history_pairs`` most recent consecutive
+    snapshot pairs are scanned. Without this, every cochange request
+    on a 250k-row ``change_event`` table loaded all of them — multi-
+    second latency per click. The cap is on number of *deltas* (pair
+    transactions), not raw change-event rows; one delta usually
+    contains a few hundred to a few thousand changes.
     """
     with Session(bind=engine) as session:
+        # Pre-flight: which pairs are in scope? We pull distinct
+        # (snapshot_from, snapshot_to) tuples sorted descending by the
+        # ending snapshot, take the top N, and filter the bulk fetch
+        # by them. The (snapshot_from, snapshot_to) composite index
+        # added in v1.15.00 makes both the distinct scan and the
+        # filtered fetch indexed.
+        pair_rows = session.execute(
+            select(ChangeEvent.snapshot_from, ChangeEvent.snapshot_to)
+            .distinct()
+            .order_by(ChangeEvent.snapshot_to.desc(), ChangeEvent.snapshot_from.desc())
+            .limit(max_history_pairs)
+        ).all()
+        recent_pairs = [(int(sf), int(st)) for sf, st in pair_rows]
+        if not recent_pairs:
+            return []
+
+        from sqlalchemy import and_, or_
+        pair_filter = or_(
+            *[
+                and_(
+                    ChangeEvent.snapshot_from == sf,
+                    ChangeEvent.snapshot_to == st,
+                )
+                for sf, st in recent_pairs
+            ]
+        )
+
         rows = session.execute(
             select(
                 ChangeEvent.snapshot_from,
@@ -78,6 +122,7 @@ def _load_deltas_as_transactions() -> List[Set[str]]:
                 ChangeEvent.object_identifier,
                 ChangeEvent.object_type,
             )
+            .where(pair_filter)
         ).all()
 
     # Collapse column changes to parent table so the basket level stays
@@ -108,14 +153,16 @@ def mine_cochange_pairs(
     min_pair_support: int = DEFAULT_MIN_PAIR_SUPPORT,
     min_lift: float = DEFAULT_MIN_LIFT,
     top_n: int = 50,
+    max_history_pairs: int = DEFAULT_MAX_HISTORY_PAIRS,
 ) -> List[CoChangePair]:
-    """Mine directional co-change rules from the full change history.
+    """Mine directional co-change rules from the recent change history.
 
-    Returns rules where `lift >= min_lift` and the pair has co-occurred in
-    at least `min_pair_support` deltas. Sorted by lift desc (strongest
-    coupling first), then confidence.
+    Returns rules where ``lift >= min_lift`` and the pair has co-occurred
+    in at least ``min_pair_support`` deltas. Sorted by lift desc
+    (strongest coupling first), then confidence. ``max_history_pairs``
+    bounds the input window — see ``_load_deltas_as_transactions``.
     """
-    transactions = _load_deltas_as_transactions()
+    transactions = _load_deltas_as_transactions(max_history_pairs=max_history_pairs)
     total = len(transactions)
     if total == 0:
         return []

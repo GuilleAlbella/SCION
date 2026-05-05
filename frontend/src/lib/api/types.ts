@@ -187,26 +187,70 @@ export interface BatchChangeImpact {
   user_count: number;
 }
 
+export interface AffectedDatabase {
+  schema_name: string;
+  tables: string[];
+}
+
 export interface BatchBlastRadius {
   total_impacted_nodes: number;
   max_depth: number;
   weighted_score: number;
   affected_schemas: string[];
+  /** Flat union of every grouped table — kept for backward
+   *  compatibility. New UI code should prefer `affected_databases`. */
   affected_tables: string[];
+  /** Pre-grouped tables-per-database (v1.19+). Renders the
+   *  "Affected objects, by database" section without the
+   *  O(databases × tables) client-side filter the page used to do. */
+  affected_databases?: AffectedDatabase[];
+}
+
+/** One bucket on a donut/distribution chart. Server-computed over the
+ *  full filtered set so donut totals match `changes_analyzed` regardless
+ *  of which page of `changes` is currently loaded. */
+export interface BucketCount {
+  name: string;
+  count: number;
+}
+
+export interface BatchImpactRequestParams {
+  /** Page size for the per-change list. Default 100, server-capped at 500. */
+  limit?: number;
+  /** Page offset (0-based row index). */
+  offset?: number;
 }
 
 export interface BatchImpactResponse {
   snapshot_from: number;
   snapshot_to: number;
+  /** Total number of changes in the diff range — independent of pagination.
+   *  KPIs and donuts in the UI should source from this + `summary` so they
+   *  stay accurate as the user pages through `changes`. */
   changes_analyzed: number;
   blast_radius: BatchBlastRadius;
+  /** Current page of per-change rows. Length is at most `limit`. */
   changes: BatchChangeImpact[];
   summary: {
     total_direct: number;
     total_indirect: number;
     breaking_count: number;
     overall_risk: string;
+    /** Pre-computed donut buckets. The UI reads these directly instead
+     *  of iterating `changes` (catastrophic at Transcend scale). */
+    by_severity?: BucketCount[];
+    by_change_type?: BucketCount[];
+    by_schema?: BucketCount[];
+    by_breaking?: BucketCount[];
+    /** Sum of usage query counts across the full diff. Drives the
+     *  "Queries affected" KPI without the page having to reduce
+     *  `changes` client-side. */
+    total_query_count?: number;
   };
+  /** Pagination metadata. */
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
 }
 
 export interface ReasoningResponse {
@@ -348,6 +392,10 @@ export interface ObjectSearchParams {
   q?: string;
   snapshot_id?: number;
   source?: "changes" | "graph";
+  /** Comma-separated whitelist of GraphNode.object_type values (only
+   *  applies when source=graph). E.g. "TABLE,VIEW" for the Simulation
+   *  page picker. */
+  object_types?: string;
   limit?: number;
 }
 
