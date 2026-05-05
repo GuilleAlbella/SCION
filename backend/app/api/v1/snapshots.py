@@ -116,23 +116,54 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
       snapshots on which diffs/impact/reasoning depend.
     - The caller must repeat the `snapshot_id` as `confirm_id` query
       parameter. If they don't match, the request is rejected.
-    - Cascade: deletes related schema_snapshot, table_snapshot,
-      column_snapshot, change_event, graph_node, graph_edge,
-      impact_event, reasoning_event rows linked to this snapshot.
+    - Cascade: deletes every dependent row linked to this snapshot,
+      directly or transitively. The cascade covers the dict ingest
+      sub-tables (column / index / partitioning / ddl_text) added in
+      v1.14.02 and the parser tables (process / step /
+      attribute_lineage) added in v1.13.
+
+    Scale: the previous implementation materialised every table_id of
+    a snapshot into a Python list and fed it to
+    `IN (?, ?, ?, ...)` for the cascade DELETEs. On the full
+    Transcend-DevTest extract (~239k tables) that produced a SQL
+    statement with 239k+ host parameters, which SQLite rejects with
+    "too many SQL variables". We now use scalar subqueries so the
+    parameter count stays at 1 per DELETE regardless of how many rows
+    match.
 
     Returns a summary of what was deleted.
     """
-    from sqlalchemy import select, delete
+    from sqlalchemy import delete, func, select
     from sqlalchemy.orm import Session
 
     from app.db.engine import engine
-    from app.db.models.snapshot import Snapshot
-    from app.db.models.schema_snapshot import SchemaSnapshot
-    from app.db.models.table_snapshot import TableSnapshot
     from app.db.models.column_snapshot import ColumnSnapshot
+    from app.db.models.ddl_text_snapshot import DDLTextSnapshot
+    from app.db.models.index_snapshot import IndexSnapshot
+    from app.db.models.partitioning_snapshot import PartitioningSnapshot
+    from app.db.models.schema_snapshot import SchemaSnapshot
+    from app.db.models.snapshot import Snapshot
+    from app.db.models.table_snapshot import TableSnapshot
     from app.diff.diff_models import ChangeEvent
-    from app.graph.graph_models import GraphNode, GraphEdge
+    from app.graph.graph_models import GraphEdge, GraphNode
     from app.graph.impact_models import ImpactEvent
+    from app.usage.usage_models import ObjectCriticality
+
+    # Optional dependents — present in some checkouts only. We import
+    # defensively so an older branch that hasn't migrated the parser
+    # tables still serves the delete endpoint.
+    try:
+        from app.db.models.attribute_lineage import AttributeLineage
+    except ImportError:
+        AttributeLineage = None  # type: ignore[assignment]
+    try:
+        from app.db.models.process import Process
+    except ImportError:
+        Process = None  # type: ignore[assignment]
+    try:
+        from app.db.models.step import Step
+    except ImportError:
+        Step = None  # type: ignore[assignment]
 
     if confirm_id != snapshot_id:
         raise HTTPException(
@@ -153,9 +184,10 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             )
 
         # ──── 2. Enforce "only the latest can be deleted" invariant ────
-        # Deleting an older snapshot would orphan diffs, impact events and
-        # reasoning events anchored on higher snapshot_ids, silently
-        # corrupting history. Forcing LIFO deletion keeps the timeline sound.
+        # Deleting an older snapshot would orphan diffs, impact events
+        # and reasoning events anchored on higher snapshot_ids, silently
+        # corrupting history. Forcing LIFO deletion keeps the timeline
+        # sound.
         latest = session.execute(
             select(Snapshot).order_by(Snapshot.snapshot_id.desc()).limit(1)
         ).scalar_one()
@@ -170,49 +202,97 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
                 ),
             )
 
-        # ──── 3. Resolve dependent schema/table IDs for cascade ────
-        # We delete manually (rather than rely on DB cascade) to return
-        # accurate row counts to the caller and to support SQLite, which has
-        # partial FK enforcement.
-        schema_ids = [r[0] for r in session.execute(
-            select(SchemaSnapshot.schema_id).where(SchemaSnapshot.snapshot_id == snapshot_id)
-        ).all()]
-        table_ids = []
-        if schema_ids:
-            table_ids = [r[0] for r in session.execute(
-                select(TableSnapshot.table_id).where(TableSnapshot.schema_id.in_(schema_ids))
-            ).all()]
+        # ──── 3. Build cascade subqueries (server-side, never materialised) ────
+        # `schema_id_subq` and `table_id_subq` are SQLAlchemy `select()`
+        # expressions, not Python lists. SQLite re-evaluates them at the
+        # moment each DELETE runs, so as long as we delete children
+        # before parents the cascade stays correct without ever shipping
+        # IDs through the wire.
+        schema_id_subq = select(SchemaSnapshot.schema_id).where(
+            SchemaSnapshot.snapshot_id == snapshot_id
+        )
+        table_id_subq = select(TableSnapshot.table_id).where(
+            TableSnapshot.schema_id.in_(schema_id_subq)
+        )
 
-        counts = {
-            "schemas": len(schema_ids),
-            "tables": len(table_ids),
-            "columns": 0,
+        # ──── 4. Aggregate counts up front (single SQL each) ────
+        # We compute counts before the deletes so the response can
+        # report them without a second pass. `func.count()` runs
+        # entirely server-side; no row materialisation in Python.
+        counts: dict[str, int] = {
+            "schemas": session.scalar(
+                select(func.count())
+                .select_from(SchemaSnapshot)
+                .where(SchemaSnapshot.snapshot_id == snapshot_id)
+            ) or 0,
+            "tables": session.scalar(
+                select(func.count())
+                .select_from(TableSnapshot)
+                .where(TableSnapshot.schema_id.in_(schema_id_subq))
+            ) or 0,
+            "columns": session.scalar(
+                select(func.count())
+                .select_from(ColumnSnapshot)
+                .where(ColumnSnapshot.table_id.in_(table_id_subq))
+            ) or 0,
+            "indices": session.scalar(
+                select(func.count())
+                .select_from(IndexSnapshot)
+                .where(IndexSnapshot.table_id.in_(table_id_subq))
+            ) or 0,
+            "partitioning": session.scalar(
+                select(func.count())
+                .select_from(PartitioningSnapshot)
+                .where(PartitioningSnapshot.table_id.in_(table_id_subq))
+            ) or 0,
+            "ddl_text": session.scalar(
+                select(func.count())
+                .select_from(DDLTextSnapshot)
+                .where(DDLTextSnapshot.table_id.in_(table_id_subq))
+            ) or 0,
             "changes": 0,
             "graph_nodes": 0,
             "graph_edges": 0,
             "impacts": 0,
+            "criticality": 0,
         }
 
-        # ──── 4. Cascade delete in reverse-dependency order ────
-        # Columns -> Tables -> Schemas -> ChangeEvents -> Graph/Impact -> Snapshot.
-        # Order matters: parents cannot be deleted while children reference them.
-        if table_ids:
-            counts["columns"] = session.execute(
-                delete(ColumnSnapshot).where(ColumnSnapshot.table_id.in_(table_ids))
-            ).rowcount or 0
-            session.execute(delete(TableSnapshot).where(TableSnapshot.schema_id.in_(schema_ids)))
+        # ──── 5. Cascade DELETE in reverse-dependency order ────
+        # Children of TableSnapshot first (every table-keyed sub-table),
+        # then TableSnapshot, then SchemaSnapshot, then everything
+        # keyed directly off snapshot_id. Each statement uses the
+        # subqueries above so we never blow past SQLite's host-param
+        # limit.
+        session.execute(
+            delete(IndexSnapshot).where(IndexSnapshot.table_id.in_(table_id_subq))
+        )
+        session.execute(
+            delete(PartitioningSnapshot).where(
+                PartitioningSnapshot.table_id.in_(table_id_subq)
+            )
+        )
+        session.execute(
+            delete(DDLTextSnapshot).where(DDLTextSnapshot.table_id.in_(table_id_subq))
+        )
+        session.execute(
+            delete(ColumnSnapshot).where(ColumnSnapshot.table_id.in_(table_id_subq))
+        )
+        session.execute(
+            delete(TableSnapshot).where(TableSnapshot.schema_id.in_(schema_id_subq))
+        )
+        session.execute(
+            delete(SchemaSnapshot).where(SchemaSnapshot.snapshot_id == snapshot_id)
+        )
 
-        if schema_ids:
-            session.execute(delete(SchemaSnapshot).where(SchemaSnapshot.snapshot_id == snapshot_id))
-
-        # Diffs that reference this snapshot as from/to
+        # Diffs that reference this snapshot as from/to.
         counts["changes"] = session.execute(
             delete(ChangeEvent).where(
-                (ChangeEvent.snapshot_from == snapshot_id) | (ChangeEvent.snapshot_to == snapshot_id)
+                (ChangeEvent.snapshot_from == snapshot_id)
+                | (ChangeEvent.snapshot_to == snapshot_id)
             )
         ).rowcount or 0
 
-        # Graph + impact
+        # Graph + impact.
         counts["graph_nodes"] = session.execute(
             delete(GraphNode).where(GraphNode.snapshot_id == snapshot_id)
         ).rowcount or 0
@@ -223,7 +303,32 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             delete(ImpactEvent).where(ImpactEvent.snapshot_id == snapshot_id)
         ).rowcount or 0
 
-        # Finally, the snapshot itself
+        # Criticality scores keyed by snapshot_id (no FK declared, so
+        # the DB wouldn't cascade them — we have to do it explicitly).
+        counts["criticality"] = session.execute(
+            delete(ObjectCriticality).where(
+                ObjectCriticality.snapshot_id == snapshot_id
+            )
+        ).rowcount or 0
+
+        # Parser-pipeline tables (v1.13+). Process is parent of Step,
+        # so Step deletes first. AttributeLineage is independent.
+        if Step is not None:
+            session.execute(
+                delete(Step).where(Step.snapshot_id == snapshot_id)
+            )
+        if Process is not None:
+            session.execute(
+                delete(Process).where(Process.snapshot_id == snapshot_id)
+            )
+        if AttributeLineage is not None:
+            session.execute(
+                delete(AttributeLineage).where(
+                    AttributeLineage.snapshot_id == snapshot_id
+                )
+            )
+
+        # Finally, the snapshot itself.
         session.execute(delete(Snapshot).where(Snapshot.snapshot_id == snapshot_id))
         session.commit()
 
