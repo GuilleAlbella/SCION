@@ -135,6 +135,7 @@ def persist_batch(
     partitioning: List[PartitioningRecord],
     tabletext: List[TableTextRecord],
     force: bool = False,
+    import_id: Optional[str] = None,
 ) -> PersistResult:
     """Persist one extraction run as one SCION snapshot.
 
@@ -307,7 +308,7 @@ def persist_batch(
     # for 9.8M-row inserts). Memory stays bounded at ~1 MB per batch.
     t_phase = time.perf_counter()
     columns_created, columns_seen = _bulk_insert_columns_streaming(
-        session, columns, table_id_by_qname,
+        session, columns, table_id_by_qname, import_id=import_id,
     )
     logger.info(
         "[persist] columns    %9d rows in %s  (%d seen, %d skipped → orphan parent)",
@@ -324,7 +325,7 @@ def persist_batch(
     # snapshot — same philosophy as columns: drop silently, don't
     # abort.
     indices_created, indices_seen = _bulk_insert_indices_streaming(
-        session, indices, table_id_by_qname,
+        session, indices, table_id_by_qname, import_id=import_id,
     )
     logger.info(
         "[persist] indices    %9d rows in %s  (%d seen, %d skipped)",
@@ -392,7 +393,9 @@ def persist_batch(
     )
 
 
-def run_post_ingest_pipeline(snapshot_id: int) -> None:
+def run_post_ingest_pipeline(
+    snapshot_id: int, import_id: Optional[str] = None,
+) -> None:
     """Run the analytical pipeline that fills graph + metrics tables.
 
     **Call this AFTER `persist_batch` and AFTER the caller has committed
@@ -428,10 +431,21 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     from app.db.engine import engine
     from sqlalchemy.orm import Session as ORMSession
 
+    # Helper to push sub-step captions to the in-memory progress
+    # tracker. Lazy-imported so this module stays usable even if the
+    # API layer isn't loaded (e.g. CLI tools that call the post-ingest
+    # pipeline directly).
+    def _push_caption(caption: str) -> None:
+        if import_id is None:
+            return
+        from app.api.v1 import import_progress as _ip
+        _ip.update_progress(import_id, "post_ingest", caption=caption)
+
     # Step 1+2: structural hash + snapshot metrics.
     # `compute_structural_hash` returns the hash; we persist it on the
     # snapshot row so the diff engine can short-circuit identical
     # snapshots without re-walking everything.
+    _push_caption("hashing snapshot structure…")
     t_step = time.perf_counter()
     try:
         h = compute_structural_hash(snapshot_id)
@@ -444,6 +458,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
         logger.warning("post-ingest: structural_hash failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] structural_hash   in %s", _fmt_time(time.perf_counter() - t_step))
 
+    _push_caption("computing snapshot metrics…")
     t_step = time.perf_counter()
     try:
         compute_snapshot_metrics(snapshot_id)
@@ -457,6 +472,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # snapshots have column names but no explicit FK metadata, so
     # edges may be sparse. That's fine — nodes alone unblock /graph
     # and /lineage.
+    _push_caption("building lineage graph…")
     t_step = time.perf_counter()
     try:
         build_graph_for_snapshot(snapshot_id)
@@ -464,6 +480,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
         logger.warning("post-ingest: build_graph failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] build_graph       in %s", _fmt_time(time.perf_counter() - t_step))
 
+    _push_caption("computing node metrics (fragility, degree)…")
     t_step = time.perf_counter()
     try:
         persist_node_metrics(snapshot_id)
@@ -477,6 +494,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # /intelligence. The combined score becomes the graph score alone;
     # HIGH/MEDIUM/LOW thresholds stay at 0.6 / 0.3 (so banding looks
     # consistent across snapshots that do or don't have usage data).
+    _push_caption("computing criticality scores…")
     t_step = time.perf_counter()
     try:
         # `force=True` is critical here: without it, `compute_criticality`
@@ -502,6 +520,7 @@ def run_post_ingest_pipeline(snapshot_id: int) -> None:
     # it's a "naked" snapshot that hasn't been through this pipeline.
     # The diff engine itself is idempotent (skips re-inserting
     # change_event rows for the same pair), so a re-run is a no-op.
+    _push_caption("comparing against previous snapshot…")
     t_step = time.perf_counter()
     try:
         _auto_diff_against_previous(snapshot_id)
@@ -560,6 +579,7 @@ def _bulk_insert_columns_streaming(
     session: Session,
     columns: Iterable[ColumnRecord],
     table_id_by_qname: dict[Tuple[str, str], int],
+    import_id: Optional[str] = None,
 ) -> Tuple[int, int]:
     """Persist column records via batched `bulk_insert_mappings`.
 
@@ -590,6 +610,7 @@ def _bulk_insert_columns_streaming(
             if seen - last_log_at >= _PROGRESS_LOG_EVERY_ROWS_COLUMNS:
                 _log_persist_progress(
                     "columns", seen, created, time.perf_counter() - t_start,
+                    import_id=import_id,
                 )
                 last_log_at = seen
             continue
@@ -612,8 +633,17 @@ def _bulk_insert_columns_streaming(
         if seen - last_log_at >= _PROGRESS_LOG_EVERY_ROWS_COLUMNS:
             _log_persist_progress(
                 "columns", seen, created, time.perf_counter() - t_start,
+                import_id=import_id,
             )
             last_log_at = seen
+            # Cooperative-cancel checkpoint. We only check on heartbeat
+            # boundaries (every 250k rows) rather than per-row to keep
+            # the hot loop tight. The longest the user waits between
+            # clicking Cancel and the persist actually stopping is one
+            # heartbeat — for our throughput of ~40k rows/s that's
+            # roughly 6 seconds, well below the "feels responsive"
+            # threshold for a destructive multi-minute operation.
+            _maybe_cancel(import_id)
     if batch:
         session.bulk_insert_mappings(ColumnSnapshot, batch)
     return created, seen
@@ -623,6 +653,7 @@ def _bulk_insert_indices_streaming(
     session: Session,
     indices: Iterable[IndexRecord],
     table_id_by_qname: dict[Tuple[str, str], int],
+    import_id: Optional[str] = None,
 ) -> Tuple[int, int]:
     """Persist index records via batched `bulk_insert_mappings`.
 
@@ -641,6 +672,7 @@ def _bulk_insert_indices_streaming(
             if seen - last_log_at >= _PROGRESS_LOG_EVERY_ROWS_INDICES:
                 _log_persist_progress(
                     "indices", seen, created, time.perf_counter() - t_start,
+                    import_id=import_id,
                 )
                 last_log_at = seen
             continue
@@ -660,15 +692,36 @@ def _bulk_insert_indices_streaming(
         if seen - last_log_at >= _PROGRESS_LOG_EVERY_ROWS_INDICES:
             _log_persist_progress(
                 "indices", seen, created, time.perf_counter() - t_start,
+                import_id=import_id,
             )
             last_log_at = seen
+            _maybe_cancel(import_id)
     if batch:
         session.bulk_insert_mappings(IndexSnapshot, batch)
     return created, seen
 
 
+def _maybe_cancel(import_id: Optional[str]) -> None:
+    """Raise `ImportCancelled` if the user pressed Cancel.
+
+    Called from inside the persist-phase hot loops at
+    heartbeat boundaries (every 250k columns / 50k indices) — too
+    cheap to matter at that cadence (~one dict lookup per heartbeat),
+    too coarse to feel sluggish to the user. Lazy-imports the
+    cancellation hook to avoid a circular dep at module load time.
+    """
+    if import_id is None:
+        return
+    from app.api.v1 import import_progress as _ip
+    if _ip.is_cancel_requested(import_id):
+        raise _ip.ImportCancelled(
+            f"Import {import_id} cancelled by user request."
+        )
+
+
 def _log_persist_progress(
     label: str, seen: int, created: int, elapsed_seconds: float,
+    import_id: Optional[str] = None,
 ) -> None:
     """Emit one progress heartbeat from inside a streaming bulk insert.
 
@@ -676,12 +729,28 @@ def _log_persist_progress(
     the per-phase summary uses, plus the live row counter and the
     instantaneous throughput so an operator can eyeball whether the
     persist is making forward progress or has stalled.
+
+    When `import_id` is set, also pushes a caption to the in-memory
+    progress tracker so the UI checklist gets the same number live.
+    No fractional progress is published — we don't know the total
+    row count up front (columns is streamed) — but the caption alone
+    is enough to make the persist step feel alive in the UI.
     """
     rate = seen / elapsed_seconds if elapsed_seconds > 0 else 0.0
     logger.info(
         "[persist] %-9s %9d seen / %9d created (%.0f rows/s, %s elapsed)",
         label, seen, created, rate, _fmt_time(elapsed_seconds),
     )
+    if import_id is not None:
+        # Lazy import to avoid a circular dependency at module load
+        # time (`app.api.v1.import_progress` is loaded by the routers
+        # which transitively load `dict_persister`).
+        from app.api.v1 import import_progress as _ip
+        _ip.update_progress(
+            import_id,
+            "persist_data",
+            caption=f"{label}: {seen:,} rows ({rate:,.0f}/s)",
+        )
 
 
 # ──── Helpers ────

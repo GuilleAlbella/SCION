@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { mutate } from "swr";
 import PageShell from "@/components/layout/PageShell";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
@@ -10,11 +10,25 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useSelection } from "@/lib/SelectionContext";
 import { createSnapshot, deleteSnapshot } from "@/lib/api/snapshots";
 import { previewParserImport, confirmParserImport } from "@/lib/api/parser_import";
-import { importDictBatch, type DictImportResponse } from "@/lib/api/dict_import";
+import {
+  cancelImport,
+  importDictBatch,
+  makeImportId,
+  pollImportProgress,
+  type DictImportResponse,
+  type ImportProgressState,
+} from "@/lib/api/dict_import";
 import type { ParserImportResponse } from "@/lib/api/types";
 import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle } from "lucide-react";
 import { useToast } from "@/components/shared/ToastProvider";
 import { DictImportProgress, type ImportPhase } from "@/components/shared/DictImportProgress";
+import {
+  estimateRowsForAll,
+  formatBytes,
+  formatRowCount,
+  viewLabelForFile,
+  type PreflightEstimate,
+} from "@/lib/dict_preflight";
 
 export default function SnapshotsPage() {
   const { data, error, isLoading } = useSnapshots();
@@ -70,6 +84,33 @@ export default function SnapshotsPage() {
   const [dictUploadedBytes, setDictUploadedBytes] = useState(0);
   const [dictTotalBytes, setDictTotalBytes] = useState<number | undefined>(undefined);
   const [dictPhaseStartedAt, setDictPhaseStartedAt] = useState<number | undefined>(undefined);
+
+  // Pre-flight row estimates per dropped file. Empty until the user
+  // adds files; populated asynchronously by `estimateRowsForAll` so
+  // the panel can show "Columns ≈ 9.8M rows (1.9 GB)" before the
+  // upload starts. Keyed by `${name}::${size}` (same shape as the
+  // dedupe key in `addDictFiles`) so a row can be found in O(1)
+  // when rendering the per-file list.
+  const [dictPreflight, setDictPreflight] = useState<
+    Map<string, PreflightEstimate>
+  >(new Map());
+
+  // Latest server-side per-step state, refreshed by the polling
+  // channel that runs in parallel with the long POST. `null` until
+  // the first poll lands; we render a synthetic upload-only step
+  // until then so the checklist never goes blank.
+  const [dictServerProgress, setDictServerProgress] =
+    useState<ImportProgressState | null>(null);
+
+  // Tracks the in-flight import so the Cancel button can target it.
+  // `null` whenever no import is running; populated for the lifetime
+  // of `handleDictUpload`. We keep it in state (not a ref) so the
+  // Cancel button's enabled/disabled state can re-render as the
+  // upload starts and finishes.
+  const [dictActiveImportId, setDictActiveImportId] = useState<string | null>(
+    null,
+  );
+  const [dictCancelling, setDictCancelling] = useState(false);
 
   async function handleCreate() {
     setCreating(true);
@@ -168,19 +209,72 @@ export default function SnapshotsPage() {
 
   function addDictFiles(incoming: FileList | File[]) {
     const arr = Array.from(incoming);
+    const key = (f: File) => `${f.name}::${f.size}`;
     setDictFiles((prev) => {
       // Dedupe by name+size — dragging the same file twice shouldn't
       // double up. The browser's File API gives a new object on each
       // drag so identity-based dedup wouldn't work.
-      const key = (f: File) => `${f.name}::${f.size}`;
       const seen = new Set(prev.map(key));
-      const merged = [...prev];
-      for (const f of arr) if (!seen.has(key(f))) merged.push(f);
-      return merged;
+      const next = [...prev];
+      for (const f of arr) if (!seen.has(key(f))) next.push(f);
+      return next;
     });
     setDictResult(null);
     setDictError(null);
+    // Estimation is kicked off by the `useEffect` below — driving it
+    // from a dependency on `dictFiles` is more robust than firing
+    // here, where capturing the just-merged file list (vs the stale
+    // current-render value of `dictFiles`) is fiddly.
   }
+
+  // Pre-flight row-count estimation. Whenever `dictFiles` changes,
+  // estimate any file we haven't seen yet. Cleanup via the cancel
+  // flag so a rapid drop-then-clear doesn't leak a stale promise
+  // that overwrites fresh state.
+  useEffect(() => {
+    const filesToEstimate = dictFiles.filter(
+      (f) => !dictPreflight.has(`${f.name}::${f.size}`),
+    );
+    if (filesToEstimate.length === 0) return;
+    // eslint-disable-next-line no-console
+    console.info(
+      `[dict-import] pre-flight estimating ${filesToEstimate.length} file(s)`,
+      filesToEstimate.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`),
+    );
+
+    let cancelled = false;
+    void estimateRowsForAll(filesToEstimate)
+      .then((estimates) => {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.info(
+          `[dict-import] pre-flight resolved ${estimates.length} estimate(s):`,
+          estimates.map((e) => ({
+            file: e.fileName,
+            rows: e.estimatedRows,
+            bytes: e.totalBytes,
+          })),
+        );
+        setDictPreflight((prev) => {
+          const next = new Map(prev);
+          for (const est of estimates) {
+            next.set(`${est.fileName}::${est.totalBytes}`, est);
+          }
+          return next;
+        });
+      })
+      .catch((err) => {
+        // Pre-flight is purely informational — failure should never
+        // block the user from clicking Upload. Log and move on.
+        // eslint-disable-next-line no-console
+        console.warn("[dict-import] pre-flight estimation failed:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dictFiles]);
 
   function removeDictFile(idx: number) {
     setDictFiles((prev) => prev.filter((_, i) => i !== idx));
@@ -195,7 +289,46 @@ export default function SnapshotsPage() {
     setDictUploadedBytes(0);
     setDictTotalBytes(undefined);
     setDictPhaseStartedAt(undefined);
+    setDictPreflight(new Map());
+    setDictServerProgress(null);
+    setDictActiveImportId(null);
+    setDictCancelling(false);
     if (dictInputRef.current) dictInputRef.current.value = "";
+  }
+
+  async function handleDictCancel() {
+    if (dictActiveImportId == null || dictCancelling) return;
+    // eslint-disable-next-line no-console
+    console.info(
+      `[dict-import] Cancel button clicked, requesting cancellation of ${dictActiveImportId}`,
+    );
+    setDictCancelling(true);
+    try {
+      // Tell the server to flag the in-flight import for cancellation.
+      // The persist-phase hot loop polls this flag at heartbeat
+      // boundaries (~6 s) and rolls back when it sees it set. The
+      // POST resolves with HTTP 499 — handled in handleDictUpload's
+      // catch block as a "cancelled" outcome rather than an error.
+      const ok = await cancelImport(dictActiveImportId);
+      if (ok) {
+        toast(
+          "Cancellation requested. The import will roll back at the next checkpoint (within ~6 seconds).",
+          "info",
+        );
+      } else {
+        toast(
+          "Nothing to cancel — the import already finished or hasn't registered yet.",
+          "info",
+        );
+        setDictCancelling(false);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Cancel failed";
+      // eslint-disable-next-line no-console
+      console.error("[dict-import] Cancel POST threw:", e);
+      toast(`Cancel failed: ${msg}`, "error");
+      setDictCancelling(false);
+    }
   }
 
   async function handleDictUpload() {
@@ -208,13 +341,29 @@ export default function SnapshotsPage() {
     // once the upload starts.
     const totalHint = dictFiles.reduce((s, f) => s + f.size, 0);
 
+    // Generate one import_id for this attempt and start polling
+    // server-side progress in parallel with the long POST. The
+    // AbortController lets us cancel the polling cleanly when the
+    // POST resolves (or errors) — without it we'd leak a setTimeout
+    // chain that keeps hitting the server forever.
+    const importId = makeImportId();
+    const pollAbort = new AbortController();
+    pollImportProgress(
+      importId,
+      (state) => setDictServerProgress(state),
+      pollAbort.signal,
+    );
+
     setDictUploading(true);
     setDictError(null);
     setDictResult(null);
+    setDictServerProgress(null);
     setDictPhase("uploading");
     setDictUploadedBytes(0);
     setDictTotalBytes(totalHint);
     setDictPhaseStartedAt(Date.now());
+    setDictActiveImportId(importId);
+    setDictCancelling(false);
 
     try {
       const r = await importDictBatch(dictFiles, false, (e) => {
@@ -236,7 +385,7 @@ export default function SnapshotsPage() {
             return prev;
           });
         }
-      });
+      }, importId);
       setDictResult(r);
       setDictPhase("done");
       // Refresh snapshot list so the new snapshot shows up below.
@@ -258,16 +407,39 @@ export default function SnapshotsPage() {
     } catch (e: unknown) {
       // Backend returns batch-validator messages multi-line; preserve them.
       let msg = "Upload failed.";
+      let httpStatus: number | undefined;
       if (typeof e === "object" && e !== null) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ax = e as any;
+        httpStatus = ax.response?.status;
         if (ax.response?.data?.detail) msg = String(ax.response.data.detail);
         else if (ax.message) msg = ax.message;
       }
-      setDictError(msg);
-      setDictPhase("error");
+      // HTTP 499 is our convention for "client cancelled the import"
+      // (handler raised ImportCancelled, transaction rolled back). We
+      // treat it as a clean exit rather than an error — the toast in
+      // handleDictCancel already told the user what's happening.
+      if (httpStatus === 499) {
+        setDictPhase("idle");
+        toast("Import cancelled. No data was persisted.", "info");
+        // Wipe the panel back to "ready to drop new files" so the
+        // user can retry without any leftover progress UI.
+        setDictFiles([]);
+        setDictPreflight(new Map());
+        setDictServerProgress(null);
+      } else {
+        setDictError(msg);
+        setDictPhase("error");
+      }
     } finally {
+      // Always stop the parallel polling channel — without this the
+      // browser would keep hitting `/progress` long after the import
+      // finished, eventually 404-ing as the entry gets evicted from
+      // the in-memory cache.
+      pollAbort.abort();
       setDictUploading(false);
+      setDictActiveImportId(null);
+      setDictCancelling(false);
     }
   }
 
@@ -294,8 +466,19 @@ export default function SnapshotsPage() {
     setDeleting(true);
     try {
       const res = await deleteSnapshot(deleteTarget);
+      // Build a friendly toast that includes the disk space reclaimed
+      // by the post-delete VACUUM when applicable. Falls back to the
+      // old "X tables, Y changes removed" wording when VACUUM was
+      // skipped or failed.
+      const freed = res.vacuum?.bytes_freed;
+      const freedFragment =
+        freed != null && freed > 0
+          ? ` Freed ${formatBytes(freed)} on disk.`
+          : "";
       toast(
-        `Snapshot #${res.deleted_snapshot_id} deleted. ${res.cascade.tables} tables, ${res.cascade.changes} changes removed.`,
+        `Snapshot #${res.deleted_snapshot_id} deleted. ` +
+          `${res.cascade.tables} tables, ${res.cascade.columns} columns, ` +
+          `${res.cascade.changes} changes removed.${freedFragment}`,
         "success"
       );
       await mutate("snapshots");
@@ -394,7 +577,7 @@ export default function SnapshotsPage() {
           </div>
 
           <p className="text-[11px] text-td-gray-dark mb-3">
-            Drop the <strong>6 .dat files</strong> from one extraction run (any order).
+            Drop the <strong>.dat files</strong> from one extraction run (any order).
             All files must share the same <code className="font-mono">source_system_name</code> and{" "}
             <code className="font-mono">extract_run_id</code>; mixed-batch uploads are rejected
             server-side with a clear diff. Re-uploading the same batch is idempotent.
@@ -412,7 +595,7 @@ export default function SnapshotsPage() {
           >
             <Inbox size={24} className="mx-auto mb-2 text-gray-400" />
             <p className="text-sm font-medium text-td-navy">
-              Drop 1–6 .dat files here, or click to pick
+              Drop .dat files here, or click to pick
             </p>
             <p className="text-[10px] text-td-gray-dark mt-1">
               Content type is detected server-side (filename is a tiebreaker only)
@@ -421,6 +604,14 @@ export default function SnapshotsPage() {
               ref={dictInputRef}
               type="file"
               multiple
+              // `accept=".dat"` filters the OS picker to extraction
+              // outputs only — without it the user can pick any
+              // file (image, PDF, etc) and the server rejection
+              // happens far too late. Drag-drop bypasses this filter
+              // (it's an OS limitation, not ours), so the server-side
+              // format detector remains the source of truth; this
+              // just removes the obvious foot-gun for click-to-pick.
+              accept=".dat"
               onChange={(e) => {
                 if (e.target.files) addDictFiles(e.target.files);
                 e.target.value = "";
@@ -429,67 +620,161 @@ export default function SnapshotsPage() {
             />
           </div>
 
-          {/* File list */}
-          {dictFiles.length > 0 && (
-            <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-[11px] text-td-gray-dark flex items-center justify-between">
-                <span>
-                  {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"} ready
-                </span>
-                <button
-                  onClick={() => setDictFiles([])}
-                  className="text-blue-600 hover:underline text-[11px]"
-                >
-                  Clear all
-                </button>
-              </div>
-              <ul className="divide-y divide-gray-100">
-                {dictFiles.map((f, i) => (
-                  <li key={`${f.name}-${i}`} className="px-3 py-1 flex items-center gap-2 text-[11px]">
-                    <FileText size={11} className="text-gray-400 shrink-0" />
-                    <span className="font-mono truncate flex-1">{f.name}</span>
-                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
-                      {(f.size / 1024).toFixed(1)} KB
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeDictFile(i);
-                      }}
-                      className="text-gray-400 hover:text-red-500"
-                      aria-label={`Remove ${f.name}`}
-                    >
-                      <X size={11} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Coverage hint */}
-          {dictFiles.length > 0 && (
-            <div className="mt-3">
-              <div className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wider mb-1.5">
-                Coverage: {dictMatchedCount} of {DICT_EXPECTED.length} views
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[11px]">
-                {dictCoverage.map((c) => (
-                  <div
-                    key={c.prefix}
-                    className={`flex items-center gap-1.5 ${c.matched ? "text-emerald-700" : "text-gray-400"}`}
-                  >
-                    {c.matched ? (
-                      <CheckCircle2 size={10} className="shrink-0" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full border border-gray-300 shrink-0" />
+          {/* Pre-flight summary — what we're about to import.
+              Shows the view label (Databases / Tables / Columns / …)
+              instead of the raw filename, the file size in human-
+              friendly units, and an estimated row count produced
+              client-side by sampling each file's head. The estimate
+              is shown as "≈ 9.8M" so users don't mistake it for a
+              hard count — the server reports the exact number after
+              the parse phase. */}
+          {dictFiles.length > 0 && (() => {
+            const totalBytes = dictFiles.reduce((s, f) => s + f.size, 0);
+            const estimatedTotalRows = dictFiles.reduce((s, f) => {
+              const est = dictPreflight.get(`${f.name}::${f.size}`);
+              return s + (est?.estimatedRows ?? 0);
+            }, 0);
+            return (
+              <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-[11px] text-td-gray-dark flex items-center justify-between">
+                  <span>
+                    {dictFiles.length} file{dictFiles.length === 1 ? "" : "s"} ready —{" "}
+                    <strong>{formatBytes(totalBytes)}</strong>
+                    {estimatedTotalRows > 0 && (
+                      <>
+                        {" · ≈ "}
+                        <strong>{formatRowCount(estimatedTotalRows)}</strong>
+                        {" rows"}
+                      </>
                     )}
-                    <span className="truncate">{c.label}</span>
-                  </div>
-                ))}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setDictFiles([]);
+                      setDictPreflight(new Map());
+                    }}
+                    className="text-blue-600 hover:underline text-[11px]"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <ul className="divide-y divide-gray-100">
+                  {dictFiles.map((f, i) => {
+                    const est = dictPreflight.get(`${f.name}::${f.size}`);
+                    const label = viewLabelForFile(f.name);
+                    return (
+                      <li
+                        key={`${f.name}-${i}`}
+                        className="px-3 py-1.5 flex items-center gap-2 text-[11px]"
+                      >
+                        <FileText size={11} className="text-gray-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-td-navy truncate">
+                              {label ?? f.name}
+                            </span>
+                            {label && (
+                              <span className="text-[10px] text-gray-400 font-mono truncate">
+                                {f.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-gray-500 whitespace-nowrap font-mono">
+                          {formatBytes(f.size)}
+                        </span>
+                        <span
+                          className="text-[10px] text-gray-500 whitespace-nowrap font-mono w-16 text-right"
+                          title={
+                            est?.estimatedRows != null
+                              ? `Estimated from a ${formatBytes(est.sampleBytesUsed)} sample`
+                              : "Not estimated client-side (counted server-side)"
+                          }
+                        >
+                          {est === undefined
+                            ? "…"
+                            : est.estimatedRows != null
+                              ? `≈ ${formatRowCount(est.estimatedRows)}`
+                              : "—"}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDictFile(i);
+                          }}
+                          className="text-gray-400 hover:text-red-500"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          <X size={11} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-            </div>
-          )}
+            );
+          })()}
+
+          {/* Coverage hint with estimated row counts per view.
+              The COVERAGE block is the user's "what am I about to import"
+              snapshot — it answers "do I have all 6 views" AND "how
+              much data is in each one" at a glance. The estimates
+              come from the same pre-flight pass that fills the file
+              list above; we just look up the matched file by prefix. */}
+          {dictFiles.length > 0 && (() => {
+            // For each expected view, find the dropped file (if any)
+            // and its pre-flight estimate. Built as a flat array so
+            // the JSX below stays linear.
+            const coverageWithRows = dictCoverage.map((c) => {
+              const file = dictFiles.find((f) =>
+                f.name.toLowerCase().startsWith(c.prefix),
+              );
+              const est = file
+                ? dictPreflight.get(`${file.name}::${file.size}`)
+                : undefined;
+              return {
+                ...c,
+                fileSize: file?.size ?? null,
+                estimatedRows: est?.estimatedRows ?? null,
+                estimatePending: c.matched && est === undefined,
+              };
+            });
+            return (
+              <div className="mt-3">
+                <div className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wider mb-1.5">
+                  Coverage: {dictMatchedCount} of {DICT_EXPECTED.length} views
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-1.5 text-[11px]">
+                  {coverageWithRows.map((c) => (
+                    <div
+                      key={c.prefix}
+                      className={`flex items-center gap-1.5 ${
+                        c.matched ? "text-emerald-700" : "text-gray-400"
+                      }`}
+                    >
+                      {c.matched ? (
+                        <CheckCircle2 size={10} className="shrink-0" />
+                      ) : (
+                        <span className="w-2 h-2 rounded-full border border-gray-300 shrink-0" />
+                      )}
+                      <span className="truncate">{c.label}</span>
+                      {c.matched && (
+                        <span className="ml-auto text-[10px] font-mono text-gray-500 whitespace-nowrap">
+                          {c.estimatePending
+                            ? "…"
+                            : c.estimatedRows != null
+                              ? `≈ ${formatRowCount(c.estimatedRows)} rows`
+                              : c.fileSize != null
+                                ? formatBytes(c.fileSize)
+                                : ""}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Upload button + result */}
           {!dictResult && (
@@ -507,6 +792,22 @@ export default function SnapshotsPage() {
                       : "Uploading…"
                     : "Upload batch"}
                 </button>
+                {/* Cancel button: visible only while an import is in
+                    flight. Disabled (with a spinner-ish caption) once
+                    the user has clicked it, so we don't fire multiple
+                    cancel POSTs. The actual rollback happens at the
+                    next persist heartbeat (~6 s) — until then the
+                    button stays in "Cancelling…" state. */}
+                {dictUploading && dictActiveImportId != null && (
+                  <button
+                    onClick={handleDictCancel}
+                    disabled={dictCancelling}
+                    className="flex items-center gap-2 border border-red-300 text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <X size={14} />
+                    {dictCancelling ? "Cancelling…" : "Cancel"}
+                  </button>
+                )}
                 {dictFiles.length > 0 && !dictUploading && (
                   <span className="text-[11px] text-td-gray-dark">
                     {(dictFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)} MB across{" "}
@@ -515,18 +816,18 @@ export default function SnapshotsPage() {
                 )}
               </div>
 
-              {/* Two-phase progress: real bytes during upload, then an
-                  indeterminate shimmer + elapsed timer + stage-aware
-                  caption while the server parses/persists. Critical UX
-                  for multi-GB extracts where the server-processing phase
-                  dominates the total wait — without this the request
-                  looks frozen for several minutes. */}
+              {/* Per-step checklist driven by the server-side progress
+                  poller. While the body is going up the wire, the
+                  upload step renders live bytes-on-the-wire %. After
+                  the server picks it up, every other step (parse,
+                  validate, persist, post-ingest) appears with its
+                  own status + caption + sub-progress where available. */}
               <DictImportProgress
                 phase={dictPhase}
                 loaded={dictUploadedBytes}
                 total={dictTotalBytes}
-                phaseStartedAt={dictPhaseStartedAt}
-                totalBytesHint={dictFiles.reduce((s, f) => s + f.size, 0)}
+                uploadingStartedAt={dictPhaseStartedAt}
+                serverState={dictServerProgress}
               />
             </>
           )}

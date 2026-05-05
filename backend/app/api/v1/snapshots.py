@@ -132,11 +132,27 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
     match.
 
     Returns a summary of what was deleted.
+
+    Disk space: SQLite's default `auto_vacuum = NONE` means a DELETE
+    only marks pages as free, never shrinks the file. For an
+    industrial-scale snapshot (Transcend-DevTest deletes ~11.5M rows)
+    the file would stay at its high-water mark of several GB until
+    a manual VACUUM. Most users don't know that SQLite-internal
+    detail, so the cascade now ends with a VACUUM that physically
+    reclaims the freed space. Reported back in the response so the
+    UI can show "freed 2.4 GB" rather than leave the user wondering
+    why their disk didn't change.
     """
-    from sqlalchemy import delete, func, select
+    import logging
+    import os
+    import time
+
+    from sqlalchemy import delete, func, select, text
     from sqlalchemy.orm import Session
 
     from app.db.engine import engine
+
+    _delete_logger = logging.getLogger(__name__)
     from app.db.models.column_snapshot import ColumnSnapshot
     from app.db.models.ddl_text_snapshot import DDLTextSnapshot
     from app.db.models.index_snapshot import IndexSnapshot
@@ -332,8 +348,83 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         session.execute(delete(Snapshot).where(Snapshot.snapshot_id == snapshot_id))
         session.commit()
 
+    # ──── 6. VACUUM to physically reclaim freed pages ────
+    # SQLite default `auto_vacuum = NONE` keeps deleted pages as free
+    # space inside the file — disk usage doesn't change after a DELETE.
+    # Running VACUUM rebuilds the file without the free pages, returning
+    # the bytes to the filesystem. For a 240k-table cascade this typically
+    # frees several GB.
+    #
+    # VACUUM cannot run inside a transaction, so we open a fresh
+    # connection in AUTOCOMMIT mode (SQLAlchemy 2.0 autobegins on every
+    # `connect()`, which would otherwise wrap the VACUUM in a BEGIN and
+    # SQLite would reject it with "cannot VACUUM from within a
+    # transaction"). The VACUUM holds an exclusive lock on the DB while
+    # it runs — for our 800 MB-class file that's typically 5-15 s,
+    # during which other API calls would 503. Acceptable for a
+    # demo/dev workload; production would either skip it or queue
+    # deletes for off-hours.
+    vacuum_info: dict = {
+        "bytes_before": None,
+        "bytes_after": None,
+        "bytes_freed": None,
+        "elapsed_seconds": None,
+        "skipped_reason": None,
+    }
+
+    db_path = engine.url.database
+    if not db_path or db_path == ":memory:":
+        # Engine isn't backed by a real file (e.g. in-memory test DB).
+        # Nothing to reclaim; report and move on.
+        vacuum_info["skipped_reason"] = "non-file engine"
+    else:
+        try:
+            vacuum_info["bytes_before"] = os.path.getsize(db_path)
+        except OSError as e:
+            _delete_logger.warning(
+                "[delete] could not stat DB before VACUUM: %s", e,
+            )
+
+        t0 = time.perf_counter()
+        try:
+            with engine.connect().execution_options(
+                isolation_level="AUTOCOMMIT",
+            ) as conn:
+                conn.execute(text("VACUUM"))
+            vacuum_info["elapsed_seconds"] = time.perf_counter() - t0
+            try:
+                vacuum_info["bytes_after"] = os.path.getsize(db_path)
+                if (
+                    vacuum_info["bytes_before"] is not None
+                    and vacuum_info["bytes_after"] is not None
+                ):
+                    vacuum_info["bytes_freed"] = (
+                        vacuum_info["bytes_before"] - vacuum_info["bytes_after"]
+                    )
+            except OSError as e:
+                _delete_logger.warning(
+                    "[delete] could not stat DB after VACUUM: %s", e,
+                )
+            _delete_logger.info(
+                "[delete] VACUUM done in %.2fs — before=%s after=%s freed=%s",
+                vacuum_info["elapsed_seconds"],
+                vacuum_info["bytes_before"],
+                vacuum_info["bytes_after"],
+                vacuum_info["bytes_freed"],
+            )
+        except Exception as e:
+            # A failed VACUUM is non-fatal: the snapshot was already
+            # deleted, the user's data is still consistent, the file
+            # just stays at its old size. Report the reason so the UI
+            # can mention it but don't 500 the response.
+            vacuum_info["skipped_reason"] = f"{type(e).__name__}: {e}"
+            _delete_logger.warning(
+                "[delete] VACUUM failed (snapshot delete already succeeded): %s", e,
+            )
+
     return {
         "deleted_snapshot_id": snapshot_id,
         "cascade": counts,
+        "vacuum": vacuum_info,
         "message": f"Snapshot #{snapshot_id} and all dependent data removed.",
     }

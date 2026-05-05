@@ -8,6 +8,125 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.16 (2026-05-05) — Live import UX: per-step progress, cancel, pre-flight summary, VACUUM on delete
+
+This is the big UX round on top of the perf work. The dict-import
+panel went from "drop files, click button, wait 6 minutes for a
+toast" to a real-time checklist with per-step progress, an inline
+cancel button, an up-front "what am I about to import" summary,
+and an auto-VACUUM on delete that reclaims disk space.
+
+#### Backend
+
+- **Sync handler.** `import_dict_batch` was `async def`, which meant
+  its multi-minute synchronous body (parse + persist + post-ingest)
+  blocked the asyncio event loop end-to-end. While it ran, every
+  parallel request — including the new `/progress` polls and the
+  `/cancel` POST — timed out. Made the handler `def` so FastAPI
+  dispatches it to the threadpool; the loop stays free for the
+  small endpoints. `_stream_upload_to_disk` is now sync too
+  (`upload.file.read()` instead of `await upload.read()`); same
+  semantics, no async needed.
+
+- **WAL mode globally.** Added an `event.listens_for(engine,
+  "connect")` hook that sets `journal_mode=WAL` and
+  `synchronous=NORMAL` on every new SQLite connection. With WAL,
+  parallel readers (the polling) don't block the writer (the
+  persist). Without it, polls every second stalled the writer
+  behind their shared locks and the persist phase tripled in wall
+  time (~12 min vs ~4 min). The persist transaction still relaxes
+  to `synchronous=OFF` for max bulk-insert speed;
+  `journal_mode=MEMORY` was REMOVED from the persist's PRAGMAs
+  because it would have re-enabled writer-blocks-readers on this
+  connection.
+
+- **`/dict-import/{id}/progress` + `/cancel` endpoints.** Backed by
+  a thread-safe in-memory dict (`import_progress.py`) that the
+  handler updates at every step transition. The frontend opens the
+  polling channel in parallel with the long POST and, when the user
+  hits Cancel, fires a `POST /cancel` that flips a flag — the
+  persist hot loop checks the flag at heartbeat boundaries (every
+  250 k columns / 50 k indices) and raises `ImportCancelled`,
+  rolling back the partial transaction.
+
+- **Per-step progress captions.** `_log_persist_progress` and the
+  post-ingest steps now also push their captions through to the
+  in-memory state (`columns: 4 250 000 rows (39 k/s)`, `building
+  lineage graph…`, `computing criticality scores…`) so the UI
+  checklist updates live without us having to invent fake progress.
+
+- **VACUUM after snapshot delete.** SQLite default
+  `auto_vacuum = NONE` keeps deleted pages around as free space;
+  the file never shrinks. After a 240 k-table cascade that's
+  several GB stuck on disk. The delete handler now runs a VACUUM
+  in autocommit right after the cascade commit and reports
+  `bytes_freed` in the response so the toast can say "Freed 2.3 GB
+  on disk". A failed VACUUM is non-fatal — the snapshot is already
+  gone, the file just stays at its old size.
+
+- **`.db-wal` / `.db-shm` ignored** in `.gitignore`. WAL mode
+  creates these auxiliary files at runtime; they're not artefacts
+  to commit.
+
+#### Frontend
+
+- **`accept=".dat"`** on the file picker so the OS dialog only
+  shows extraction outputs. Drag-drop bypasses this filter (OS
+  limitation), so the server-side format detector remains the
+  source of truth — this just removes the click-to-pick foot-gun.
+
+- **Pre-flight summary.** When files land in the dropzone, the
+  browser samples the first 5 MB of each, counts newlines, and
+  extrapolates to a total row estimate per view. Shown both in
+  the COVERAGE block and the per-file list before any upload
+  happens — the user knows they're about to import "10 712
+  databases · 239 380 tables · 9.8 M columns" up front, not after
+  six minutes of waiting.
+
+- **Per-step checklist component.** Replaced the previous
+  "indeterminate shimmer + time-based caption" with a real list
+  of named steps (Upload / Parse files / Validate identity /
+  Persist data / Build graph & metrics) that flip from pending →
+  running → done as the server reports progress through the
+  polling channel. Each step shows its own elapsed time and an
+  optional caption — for the persist step that's the live row
+  count rolling at ~6 second cadence.
+
+- **Cancel button** wired through the new endpoint. Visible only
+  while an import is in flight; click sets `cancel_requested`
+  server-side and the persist rolls back at the next checkpoint
+  (~6 s). The POST resolves with HTTP 499, which the frontend
+  treats as a clean exit (toast: "Import cancelled. No data was
+  persisted."). Includes a small retry loop for the 404 race
+  during the upload window — if the user clicks Cancel before
+  the server has registered the import, the helper retries every
+  500 ms for 3 seconds rather than failing immediately.
+
+- **Toast on delete** now includes the bytes freed by VACUUM:
+  "Snapshot #11 deleted. 239 380 tables, 9 858 099 columns,
+  0 changes removed. Freed 2.3 GB on disk."
+
+#### Verified end-to-end
+
+Same machine, same DB, same code, two environments side by side
+(2.4 GB Transcend-DevTest extract):
+
+| Setup                                   | Persist  | Total      |
+|-----------------------------------------|---------:|-----------:|
+| `dev.ps1` + browser open + DevTools     | 14m 18s  | 19m 47s    |
+| Bare `uvicorn` + script poller (no GUI) |  4m 31s  |  6m 38s    |
+
+SCION's code is fine. The dev-mode penalty is `next dev`
+(Turbopack HMR) + browser DevTools competing for CPU/disk with the
+SQLite fsyncs; production (Docker, `next start`, no `--reload`)
+won't pay that overhead.
+
+74/74 metadata + diff tests passing. No public API change beyond
+the new `/progress` and `/cancel` endpoints + the `vacuum` block
+in the delete response.
+
+---
+
 ### v1.14.15 (2026-05-05) — Persist phase 3.5× faster + live progress in console
 
 The 240k+ table import worked end-to-end after v1.14.13/14 but still
