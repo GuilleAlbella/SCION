@@ -48,6 +48,7 @@ from app.metadata import (
     format_detector,
 )
 from app.metadata.format_detector import ContentType, Format
+from app.api.v1 import import_progress
 
 
 router = APIRouter(prefix="/dict-import", tags=["dict-import"])
@@ -114,14 +115,24 @@ class DictImportResponse(BaseModel):
 
 # ──── Streaming helpers ────
 
-async def _stream_upload_to_disk(upload: UploadFile) -> Path:
+def _stream_upload_to_disk(upload: UploadFile) -> Path:
     """Persist an UploadFile to a NamedTemporaryFile in 4-MiB chunks.
 
-    Why not `await upload.read()`: that returns the entire file as a
-    single bytes object. For Rahul's full Transcend-DevTest extract
-    that's 1.9 GB held in Python heap memory before parsing even
-    begins — unworkable on a laptop and silly on a server. Streaming
-    keeps RAM bounded at a single chunk regardless of file size.
+    Why not `upload.file.read()` (no chunks): that returns the entire
+    file as a single bytes object. For Rahul's full Transcend-DevTest
+    extract that's 1.9 GB held in Python heap memory before parsing
+    even begins — unworkable on a laptop and silly on a server.
+    Chunked streaming keeps RAM bounded at a single chunk regardless
+    of file size.
+
+    Why sync (not `async def` + `await upload.read()`): the parent
+    handler is `def`, not `async def`, because the heavy work
+    (parse + persist + post-ingest) is all synchronous and blocking
+    it inside an async handler would freeze the event loop —
+    starving the parallel `/progress` and `/cancel` requests for
+    minutes. Reading from `upload.file` (the underlying
+    `SpooledTemporaryFile`) is the sync equivalent of
+    `await upload.read()` and works identically.
 
     The caller is responsible for unlinking the returned path once
     parsing is done.
@@ -131,7 +142,7 @@ async def _stream_upload_to_disk(upload: UploadFile) -> Path:
     tmp_path = Path(tmp_name)
     with tmp_path.open("wb") as out:
         while True:
-            chunk = await upload.read(_UPLOAD_CHUNK_SIZE)
+            chunk = upload.file.read(_UPLOAD_CHUNK_SIZE)
             if not chunk:
                 break
             out.write(chunk)
@@ -158,13 +169,23 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
     every commit — and `bulk_insert_mappings` commits once per batch.
     For 9.8M-row workloads that's ~2 000 fsyncs serialised by Windows'
     write-through layer, and we measured the disk pegged at ~0.7 MB/s
-    even on local NVMe. Relaxing to `synchronous = OFF` plus
-    `journal_mode = MEMORY` removes the per-batch fsync entirely;
-    we've measured 3-5× speedup on the persist phase with no
-    correctness change.
+    even on local NVMe. Relaxing to `synchronous = OFF` removes the
+    per-batch fsync entirely; we've measured 3-5× speedup on the
+    persist phase with no correctness change.
 
-    Trade-off: an OS-level crash mid-ingest can corrupt the DB. We
-    accept that here because:
+    Why we DON'T also flip `journal_mode = MEMORY` here (we used to,
+    until v1.14.16): switching journal_mode out of WAL on this
+    connection re-enables SQLite's writer-blocks-readers locking. The
+    moment that's enabled, the parallel `/progress` polls and any
+    other reads stall the persist writer instead of running
+    concurrently — we measured a 3× regression in persist wall time
+    on the Transcend-DevTest extract once the polling started
+    actually working. WAL (set globally on the engine connect event)
+    is the right journal mode for our mixed read+write workload.
+
+    Trade-off: an OS-level crash mid-ingest can corrupt the WAL file
+    (so the last commit may not be recoverable). We accept that here
+    because:
       - The endpoint runs the whole import in one logical transaction;
         a crash means "no snapshot was created" semantically, and the
         user re-runs.
@@ -174,22 +195,20 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
 
     Returns a dict of the previous values so callers can restore them
     via `_restore_pragmas` regardless of how the transaction ended.
-    Capturing the originals (instead of hard-coding "FULL"/"DELETE")
-    means we honour whatever the engine was configured with — if a
-    future migration tunes SQLite globally, this helper still
-    round-trips correctly.
+    Capturing the originals (instead of hard-coding "NORMAL") means we
+    honour whatever the engine was configured with — if a future
+    migration tunes SQLite globally, this helper still round-trips
+    correctly.
     """
     previous = {
         "synchronous": str(session.execute(text("PRAGMA synchronous")).scalar()),
-        "journal_mode": str(session.execute(text("PRAGMA journal_mode")).scalar()),
         "cache_size": str(session.execute(text("PRAGMA cache_size")).scalar()),
     }
-    # journal_mode must be set OUTSIDE any transaction to take effect.
-    # SQLAlchemy 2.0 autobegins on the first execute, so we issue a
-    # rollback first to make sure we're in autocommit mode for the
-    # PRAGMA statements. (No-op if no transaction was open.)
+    # We don't change journal_mode anymore — leaving WAL active is what
+    # lets the parallel `/progress` polls run without blocking the
+    # writer. We *do* still need to be outside any active transaction
+    # to set PRAGMAs reliably on SQLite, so issue a rollback first.
     session.rollback()
-    session.execute(text("PRAGMA journal_mode = MEMORY"))
     session.execute(text("PRAGMA synchronous = OFF"))
     # 64 MB page cache. Default is ~2 MB which is starvingly small for
     # a 240k-row table-snapshot batch. With 64 MB SQLite can keep the
@@ -202,10 +221,6 @@ def _restore_pragmas(session: Session, previous: Dict[str, str]) -> None:
     """Best-effort PRAGMA restore. Never raises — diagnostic-only."""
     try:
         session.rollback()
-        # journal_mode value is a string like 'wal' or 'delete';
-        # synchronous and cache_size are ints. Either way, quoting is
-        # safe because we're echoing back what SQLite returned.
-        session.execute(text(f"PRAGMA journal_mode = {previous['journal_mode']}"))
         session.execute(text(f"PRAGMA synchronous = {previous['synchronous']}"))
         session.execute(text(f"PRAGMA cache_size = {previous['cache_size']}"))
     except Exception as exc:
@@ -231,8 +246,60 @@ def _content_type_to_category(ct: ContentType) -> Optional[str]:
 
 # ──── The endpoint ────
 
+@router.get("/{import_id}/progress")
+def get_import_progress(import_id: str) -> dict:
+    """Return live state of an in-flight import.
+
+    Polled by the frontend while the parallel POST is hung on the
+    long persist phase. Returns 404 if the `import_id` isn't
+    registered (either it never started, or it finished and was
+    evicted from the in-memory cache).
+    """
+    state = import_progress.get(import_id)
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No active import with that id. Either it hasn't started yet, "
+                "or it finished and the progress entry has been evicted."
+            ),
+        )
+    return state.to_dict()
+
+
+@router.post("/{import_id}/cancel")
+def cancel_import(import_id: str) -> dict:
+    """Request cooperative cancellation of an in-flight import.
+
+    Sets the `cancel_requested` flag on the in-memory progress
+    record. The handler polls this flag at checkpoints (between
+    bulk-insert batches) and raises `ImportCancelled` when it sees
+    it set, which triggers a rollback of the in-flight transaction
+    so the partial snapshot never lands.
+
+    Returns 200 with `{cancelled: true}` if the flag was set; 404 if
+    the import isn't registered or has already finished. The latter
+    case is intentionally not an error — the cancel button can race
+    with natural completion and we don't want to surface that as a
+    user-visible failure.
+    """
+    flagged = import_progress.request_cancel(import_id)
+    if not flagged:
+        # Either unknown id or already finished. Both are OK from
+        # the user's perspective ("nothing to cancel"), but we
+        # return 404 so callers can distinguish from a real cancel.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No active import with that id, or it already finished. "
+                "Nothing to cancel."
+            ),
+        )
+    return {"import_id": import_id, "cancelled": True}
+
+
 @router.post("", response_model=DictImportResponse)
-async def import_dict_batch(
+def import_dict_batch(
     files: List[UploadFile] = File(
         ...,
         description=(
@@ -250,6 +317,15 @@ async def import_dict_batch(
             "the pipeline; do NOT use in production."
         ),
     ),
+    import_id: Optional[str] = Form(
+        None,
+        description=(
+            "Optional client-generated identifier (UUID) the frontend "
+            "uses to poll progress while the POST is in flight. When "
+            "omitted, the import still runs but no progress tracking "
+            "is registered."
+        ),
+    ),
 ) -> DictImportResponse:
     """Accept up to 6 dict files in one request and persist as a snapshot.
 
@@ -257,6 +333,20 @@ async def import_dict_batch(
     (`source_system_name` + `extract_run_id`). Files can arrive in
     any order; we route by content-type detection, not multipart
     field position.
+
+    Why this is `def` (not `async def`): the heavy phases (parse,
+    persist, post-ingest) are all synchronous and add up to several
+    minutes on a real customer extract. If we ran inside the asyncio
+    event loop, those sync calls would block the loop and starve
+    every other request — including the parallel `/progress` polls
+    and the `/cancel` POST that the frontend relies on for live
+    feedback. Making the handler sync delegates it to FastAPI's
+    threadpool (default 40 workers via anyio), keeping the loop free
+    to dispatch the small endpoints concurrently. We pay nothing for
+    the change because there's no async I/O here anyway —
+    `upload.file.read()` is the sync equivalent of
+    `await upload.read()`, SQLAlchemy is synchronous, and the
+    downstream parsers / persisters are all sync.
     """
     if not files:
         raise HTTPException(
@@ -273,6 +363,31 @@ async def import_dict_batch(
     t_overall = time.perf_counter()
     logger.info("[ingest] ───────────── dict-import started — %d file(s) ─────────────", len(files))
 
+    # Register progress tracking if the client supplied an import_id.
+    # Every subsequent step pushes updates via `import_progress`; the
+    # frontend polls `GET /{import_id}/progress` in parallel to render
+    # the checklist UI. Wrapped in a helper so the rest of the handler
+    # stays readable — `_progress_*` no-ops cleanly when import_id is
+    # None (i.e. for non-UI callers like our pytest TestClient).
+    if import_id is not None:
+        import_progress.init(import_id, import_progress.DICT_IMPORT_STEPS)
+
+    def _progress_start(step: str, caption: Optional[str] = None) -> None:
+        if import_id is not None:
+            import_progress.start_step(import_id, step, caption)
+
+    def _progress_update(
+        step: str,
+        progress: Optional[float] = None,
+        caption: Optional[str] = None,
+    ) -> None:
+        if import_id is not None:
+            import_progress.update_progress(import_id, step, progress, caption)
+
+    def _progress_end(step: str, caption: Optional[str] = None) -> None:
+        if import_id is not None:
+            import_progress.end_step(import_id, step, caption)
+
     # ──── Step 1: stream every upload to disk + classify by content ────
     # Paths are kept by category so multiple files of the same view
     # would overwrite each other deliberately (only one
@@ -284,10 +399,13 @@ async def import_dict_batch(
 
     try:
         t_upload = time.perf_counter()
-        for upload in files:
+        _progress_start("upload", caption=f"0 / {len(files)} files")
+        total_uploaded_bytes = 0
+        for idx, upload in enumerate(files):
             t_one = time.perf_counter()
-            tmp_path = await _stream_upload_to_disk(upload)
+            tmp_path = _stream_upload_to_disk(upload)
             size = tmp_path.stat().st_size
+            total_uploaded_bytes += size
             temp_paths.append(tmp_path)
 
             verdict = _detect_path(tmp_path, upload.filename or "")
@@ -329,7 +447,16 @@ async def import_dict_batch(
                 _fmt_time(time.perf_counter() - t_one),
                 upload.filename or "?",
             )
+            _progress_update(
+                "upload",
+                progress=(idx + 1) / max(len(files), 1),
+                caption=f"{idx + 1} / {len(files)} files · {_fmt_bytes(total_uploaded_bytes)}",
+            )
         timings["1_upload"] = time.perf_counter() - t_upload
+        _progress_end(
+            "upload",
+            caption=f"{len(files)} files · {_fmt_bytes(total_uploaded_bytes)}",
+        )
 
         # ──── Step 2: parse the small views eagerly (fits in memory) ────
         # databases ≤ 50k rows, tables ≤ 500k, partitioning ≤ 50k —
@@ -338,6 +465,7 @@ async def import_dict_batch(
         # have a streaming reader yet (see tabletext TODO in reader);
         # in practice it's still small relative to columns.
         t_parse_small = time.perf_counter()
+        _progress_start("parse_files", caption="reading files…")
         try:
             t_phase = time.perf_counter()
             databases = (
@@ -346,6 +474,7 @@ async def import_dict_batch(
             )
             logger.info("[ingest] parsed databases    %9d rows in %s",
                         len(databases), _fmt_time(time.perf_counter() - t_phase))
+            _progress_update("parse_files", caption=f"{len(databases):,} databases parsed")
 
             t_phase = time.perf_counter()
             tables = (
@@ -354,6 +483,7 @@ async def import_dict_batch(
             )
             logger.info("[ingest] parsed tables       %9d rows in %s",
                         len(tables), _fmt_time(time.perf_counter() - t_phase))
+            _progress_update("parse_files", caption=f"{len(tables):,} tables parsed")
 
             t_phase = time.perf_counter()
             partitioning = (
@@ -364,6 +494,7 @@ async def import_dict_batch(
             )
             logger.info("[ingest] parsed partitioning %9d rows in %s",
                         len(partitioning), _fmt_time(time.perf_counter() - t_phase))
+            _progress_update("parse_files", caption=f"{len(partitioning):,} partitioning rows parsed")
 
             t_phase = time.perf_counter()
             tabletext = (
@@ -373,14 +504,26 @@ async def import_dict_batch(
             logger.info("[ingest] parsed tabletext    %9d rows in %s",
                         len(tabletext), _fmt_time(time.perf_counter() - t_phase))
         except dict_flat_file_reader.DictFlatFileError as e:
+            if import_id is not None:
+                import_progress.mark_finished(
+                    import_id, ok=False, error_message=f"Parse error: {e}",
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Parse error: {e}",
             )
         timings["2_parse_small_files"] = time.perf_counter() - t_parse_small
+        _progress_end(
+            "parse_files",
+            caption=(
+                f"{len(databases):,} databases · {len(tables):,} tables · "
+                f"{len(partitioning):,} partitioning · {len(tabletext):,} ddl fragments"
+            ),
+        )
 
         # ──── Step 3: identity validation ────
         t_validate = time.perf_counter()
+        _progress_start("validate_identity", caption="checking source / run_id consistency…")
         # Walk the in-memory lists for the small views, plus peek the
         # first record of the streamed views (columns, indices). This
         # keeps the temporal/identity checks O(small files) without
@@ -420,6 +563,10 @@ async def import_dict_batch(
         try:
             identity = dict_batch_validator.validate_batch(validator_input)
         except dict_batch_validator.BatchConsistencyError as e:
+            if import_id is not None:
+                import_progress.mark_finished(
+                    import_id, ok=False, error_message=str(e),
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),
@@ -428,6 +575,10 @@ async def import_dict_batch(
         logger.info("[ingest] identity validation passed in %s — %s",
                     _fmt_time(timings["3_validate_identity"]),
                     identity.snapshot_label)
+        _progress_end(
+            "validate_identity",
+            caption=identity.snapshot_label,
+        )
 
         # ──── Step 4: persist (streaming columns + indices) ────
         # We pass the generators directly to `persist_batch`. The
@@ -444,6 +595,7 @@ async def import_dict_batch(
         )
 
         t_persist = time.perf_counter()
+        _progress_start("persist_data", caption="writing rows to database…")
         with Session(bind=engine) as session:
             # Switch SQLite into fast-bulk-insert mode for this session.
             # See `_apply_bulk_insert_pragmas` docstring for the full
@@ -454,7 +606,7 @@ async def import_dict_batch(
             previous_pragmas = _apply_bulk_insert_pragmas(session)
             logger.info(
                 "[ingest] SQLite tuned for bulk insert: "
-                "journal_mode=MEMORY, synchronous=OFF, cache_size=64MB"
+                "synchronous=OFF, cache_size=64MB (journal_mode=WAL kept from engine)"
             )
             try:
                 result = dict_persister.persist_batch(
@@ -467,21 +619,53 @@ async def import_dict_batch(
                     partitioning=partitioning,
                     tabletext=tabletext,
                     force=force,
+                    import_id=import_id,
                 )
                 t_commit = time.perf_counter()
+                _progress_update("persist_data", caption="committing transaction…")
                 session.commit()
                 logger.info("[ingest] session.commit() took %s",
                             _fmt_time(time.perf_counter() - t_commit))
+            except import_progress.ImportCancelled as e:
+                # Cooperative cancellation requested by the client.
+                # Roll back the partial transaction, mark the import
+                # as terminated with status=cancelled, and surface a
+                # clean 499 (the de-facto "client closed request"
+                # status code; FastAPI doesn't define it, so we use
+                # 499 as a custom integer). The frontend treats it as
+                # "the cancel went through" — not an error to toast.
+                session.rollback()
+                if import_id is not None:
+                    state = import_progress.get(import_id)
+                    if state is not None:
+                        state.status = "cancelled"
+                        state.ended_at = time.perf_counter()
+                        state.error_message = str(e)
+                logger.info("[ingest] cancelled by client (%s)", e)
+                raise HTTPException(
+                    status_code=499,
+                    detail=str(e),
+                )
             except dict_flat_file_reader.DictFlatFileError as e:
                 # Mid-stream parse error from the generators surfaces
                 # as a clean 400 rather than a 500.
                 session.rollback()
+                if import_id is not None:
+                    import_progress.mark_finished(
+                        import_id, ok=False,
+                        error_message=f"Parse error during persist: {e}",
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Parse error during persist: {e}",
                 )
             except Exception as e:
                 session.rollback()
+                if import_id is not None:
+                    import_progress.mark_finished(
+                        import_id, ok=False,
+                        error_message=f"Failed to persist snapshot: {e}",
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to persist snapshot: {e}",
@@ -494,6 +678,14 @@ async def import_dict_batch(
                 _restore_pragmas(session, previous_pragmas)
 
         timings["4_persist_total"] = time.perf_counter() - t_persist
+        _progress_end(
+            "persist_data",
+            caption=(
+                f"{result.tables_created:,} tables · "
+                f"{result.columns_created:,} columns · "
+                f"{result.indices_created:,} index rows"
+            ),
+        )
         logger.info("[ingest] persist (parse+stream columns/indices + bulk insert + commit) %s",
                     _fmt_time(timings["4_persist_total"]))
 
@@ -502,10 +694,25 @@ async def import_dict_batch(
         # populated everything, re-running would be wasted work.
         if not result.skipped_existing:
             t_post = time.perf_counter()
-            dict_persister.run_post_ingest_pipeline(result.snapshot_id)
+            _progress_start(
+                "post_ingest",
+                caption="hashing structure, building graph, computing criticality…",
+            )
+            dict_persister.run_post_ingest_pipeline(
+                result.snapshot_id, import_id=import_id,
+            )
             timings["5_post_ingest"] = time.perf_counter() - t_post
             logger.info("[ingest] post-ingest pipeline %s",
                         _fmt_time(timings["5_post_ingest"]))
+            _progress_end("post_ingest", caption="all derived tables populated")
+        else:
+            # Idempotent re-import — mark post-ingest as a no-op rather
+            # than leaving it in "pending" forever, otherwise the UI
+            # checklist would show one step stuck on the spinner.
+            _progress_end("post_ingest", caption="skipped (snapshot already exists)")
+
+        if import_id is not None:
+            import_progress.mark_finished(import_id, ok=True)
 
         # Final summary table — easy to grep for and to copy/paste
         # when comparing two runs to see where time went.

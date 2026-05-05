@@ -13,6 +13,10 @@ frontend/out/
 
 # Database
 *.db
+# SQLite WAL mode auxiliaries — created at runtime, never committed.
+*.db-wal
+*.db-shm
+*.db-journal
 
 # Environment
 .env
