@@ -32,8 +32,8 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useGraph } from "@/lib/hooks/useGraph";
 import { getFocusedGraph } from "@/lib/api/graph";
 import { INTERNAL_OBJECT_NAMES } from "@/lib/constants";
-import type { FocusedGraphResponse, GraphNode as GN } from "@/lib/api/types";
-import { Focus, X as CloseIcon, AlertTriangle } from "lucide-react";
+import type { FocusedGraphResponse, GraphEdge, GraphNode as GN } from "@/lib/api/types";
+import { Focus, X as CloseIcon, AlertTriangle, ArrowUp, ArrowDown, GitFork, Loader2, Eraser } from "lucide-react";
 
 const NODE_WIDTH = 240;
 const NODE_HEIGHT = 70;
@@ -63,7 +63,7 @@ function fragilityColor(f: number): string {
 }
 
 /* ---- Custom Node Component ---- */
-function GraphNodeComponent({ data }: { data: { raw: GN } }) {
+function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean } }) {
   const n = data.raw;
   const s = TYPE_STYLES[n.object_type] ?? DEFAULT_STYLE;
   const frag = n.metrics?.fragility ?? 0;
@@ -72,13 +72,18 @@ function GraphNodeComponent({ data }: { data: { raw: GN } }) {
     : n.object_name;
   const schemaLabel = n.schema_name || "";
   const isUnclassified = n.object_type === "UNKNOWN";
+  const isExpanded = data.isExpanded === true;
 
   return (
     <div
       title={isUnclassified ? UNKNOWN_TOOLTIP : undefined}
       style={{
         background: s.bg,
-        border: `2px ${isUnclassified ? "dashed" : "solid"} ${s.accent}`,
+        // Expanded nodes get a thicker border + matching shadow so the
+        // user remembers which nodes they've already pulled neighbours
+        // for. Unclassified gets the dashed treatment regardless.
+        border: `${isExpanded ? 3 : 2}px ${isUnclassified ? "dashed" : "solid"} ${s.accent}`,
+        boxShadow: isExpanded ? `0 0 0 2px ${s.accent}33` : undefined,
         borderRadius: 10,
         padding: "8px 12px",
         width: NODE_WIDTH,
@@ -97,6 +102,23 @@ function GraphNodeComponent({ data }: { data: { raw: GN } }) {
       }}>
         {s.label.toUpperCase()}
       </div>
+
+      {/* "Expanded" badge — opposite corner to the type badge. Tiny on
+          purpose; the thicker border is the primary visual cue, this
+          is just confirmation for users who hover. */}
+      {isExpanded && (
+        <div
+          style={{
+            position: "absolute", top: -10, right: 12,
+            background: "#16A34A", color: "white",
+            fontSize: 9, fontWeight: 700, padding: "1px 6px",
+            borderRadius: 4, letterSpacing: "0.04em",
+          }}
+          title="Neighbours pulled"
+        >
+          ✓ EXPANDED
+        </div>
+      )}
 
       <div style={{ color: s.text, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
         {displayName}
@@ -164,13 +186,45 @@ export default function GraphPage() {
   const [focusLoading, setFocusLoading] = useState(false);
   const [focusError, setFocusError] = useState<string | null>(null);
 
+  // ──── Click-to-expand state ────
+  // When the user clicks a node and presses one of the "Expand"
+  // buttons in the side panel, we fetch /graph/focus around THAT
+  // node with hops=1 and merge the result into these accumulator
+  // structures. The merged set is what the rendering pipeline
+  // actually consumes — the original `focusData` (or full graphData)
+  // stays untouched so "Clear expansions" can revert in one click.
+  //
+  // Map for nodes (dedupe by node_id) and a flat array for edges
+  // (dedupe by source+target+type at merge time). `expandedRoots`
+  // tracks which nodes we've already pulled neighbours for so the
+  // visual marker on the node stays consistent across re-renders.
+  const [expandedNodes, setExpandedNodes] = useState<Map<string, GN>>(new Map());
+  const [expandedEdges, setExpandedEdges] = useState<GraphEdge[]>([]);
+  const [expandedRoots, setExpandedRoots] = useState<Set<string>>(new Set());
+  const [expandLoading, setExpandLoading] = useState(false);
+  const [expandError, setExpandError] = useState<string | null>(null);
+
   // Reset focus state when the snapshot changes — otherwise an anchor
   // from snapshot 5 could silently 404 against snapshot 7.
   useEffect(() => {
     setFocusObject("");
     setFocusData(null);
     setSelectedNode(null);
+    setExpandedNodes(new Map());
+    setExpandedEdges([]);
+    setExpandedRoots(new Set());
+    setExpandError(null);
   }, [activeSnapshotId]);
+
+  // Same reset when the focus anchor itself changes — expansions are
+  // anchored to the current subgraph view, so swapping the anchor
+  // makes them stale.
+  useEffect(() => {
+    setExpandedNodes(new Map());
+    setExpandedEdges([]);
+    setExpandedRoots(new Set());
+    setExpandError(null);
+  }, [focusObject]);
 
   // Focus fetch effect. Only fires when both the snapshot and the
   // anchor are set; clears otherwise. Edge-type translation: the user's
@@ -218,7 +272,34 @@ export default function GraphPage() {
   // otherwise we fall back to the full graph (which itself may be
   // empty when truncated — handled in the empty-state branch below).
   const inFocusMode = focusObject.length > 0;
-  const renderSource = inFocusMode ? focusData : graphData;
+  const baseRenderSource = inFocusMode ? focusData : graphData;
+
+  // Merge any user-driven expansions into the base graph. We dedupe
+  // nodes by `node_id` (the source-of-truth key React Flow uses) and
+  // edges by ``source|target|type``. Both checks are done against the
+  // BASE set first so we never overwrite a base row with an expansion
+  // row of the same key — the base shape carries metrics that the
+  // expansion fetch may not.
+  const renderSource = useMemo(() => {
+    if (!baseRenderSource) return null;
+    if (expandedNodes.size === 0 && expandedEdges.length === 0) return baseRenderSource;
+
+    const baseNodeIds = new Set(baseRenderSource.nodes.map((n) => n.node_id));
+    const extraNodes: GN[] = [];
+    for (const [nid, node] of expandedNodes) {
+      if (!baseNodeIds.has(nid)) extraNodes.push(node);
+    }
+
+    const edgeKey = (e: GraphEdge) => `${e.source}|${e.target}|${e.type}`;
+    const baseEdgeKeys = new Set(baseRenderSource.edges.map(edgeKey));
+    const extraEdges = expandedEdges.filter((e) => !baseEdgeKeys.has(edgeKey(e)));
+
+    return {
+      ...baseRenderSource,
+      nodes: [...baseRenderSource.nodes, ...extraNodes],
+      edges: [...baseRenderSource.edges, ...extraEdges],
+    };
+  }, [baseRenderSource, expandedNodes, expandedEdges]);
 
   // Heavy memoised pipeline: filter internal nodes → optionally hide schemas →
   // filter edges by membership and type → build React Flow shapes → run dagre.
@@ -242,7 +323,10 @@ export default function GraphPage() {
     const rfNodes: Node[] = filteredNodes.map((n) => ({
       id: n.node_id,
       type: "custom",
-      data: { raw: n },
+      // ``isExpanded`` toggles the node's "✓ EXPANDED" badge + thicker
+      // border so the user can tell at a glance which nodes have
+      // already been pulled (avoids re-fetching the same neighbours).
+      data: { raw: n, isExpanded: expandedRoots.has(n.node_id) },
       position: { x: 0, y: 0 },
     }));
 
@@ -284,7 +368,7 @@ export default function GraphPage() {
       dependsEdges: filteredEdges.filter((e) => e.type === "DEPENDS_ON").length,
     };
     return { nodes: laidOut, edges: rfEdges, stats };
-  }, [renderSource, showSchemas, edgeFilter]);
+  }, [renderSource, showSchemas, edgeFilter, expandedRoots]);
 
   const snapshots = snapData?.snapshots ?? [];
   const isTruncated = graphData?.truncated === true;
@@ -293,6 +377,91 @@ export default function GraphPage() {
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelectedNode((node.data as { raw: GN }).raw);
   }, []);
+
+  // Pull one hop of neighbours around `node` and merge into the live
+  // render set. Direction maps 1:1 to the backend's `direction` param:
+  // up = upstream/producers, down = downstream/consumers, both =
+  // undirected. We hops=1 by design — the user's mental model is
+  // "show me what's connected to THIS thing", and walking deeper from
+  // a click would be surprising. They can repeat the click on a newly
+  // visible neighbour to keep exploring.
+  const handleExpand = useCallback(
+    async (node: GN, direction: "up" | "down" | "both") => {
+      if (!activeSnapshotId) return;
+      // Build the root identifier in the format `/graph/focus` expects.
+      // Schema nodes don't have a parent schema, so for SCHEMA / DATABASE
+      // we fall back to bare object_name.
+      const root =
+        node.schema_name &&
+        node.object_type !== "SCHEMA" &&
+        node.object_type !== "DATABASE"
+          ? `${node.schema_name}.${node.object_name}`
+          : node.object_name;
+
+      setExpandLoading(true);
+      setExpandError(null);
+      try {
+        const data = await getFocusedGraph({
+          snapshot_id: activeSnapshotId,
+          root,
+          hops: 1,
+          max_nodes: FOCUS_DEFAULT_MAX_NODES,
+          direction,
+          edge_types: edgeFilter === "ALL" ? undefined : edgeFilter,
+        });
+
+        // Merge nodes by node_id. We never replace an existing entry —
+        // base nodes carry metrics the focus fetch sometimes omits.
+        setExpandedNodes((prev) => {
+          const next = new Map(prev);
+          for (const n of data.nodes) {
+            if (!next.has(n.node_id)) next.set(n.node_id, n);
+          }
+          return next;
+        });
+
+        // Merge edges by composite key. The same dedupe is applied
+        // against the BASE edges in the renderSource memo, so an edge
+        // already present in the focus fetch's response won't be
+        // double-rendered.
+        setExpandedEdges((prev) => {
+          const seen = new Set(prev.map((e) => `${e.source}|${e.target}|${e.type}`));
+          const next = [...prev];
+          for (const e of data.edges) {
+            const key = `${e.source}|${e.target}|${e.type}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              next.push(e);
+            }
+          }
+          return next;
+        });
+
+        setExpandedRoots((prev) => new Set(prev).add(node.node_id));
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) {
+          setExpandError(
+            `"${root}" couldn't be resolved in the graph. Try a different node.`,
+          );
+        } else {
+          setExpandError(err instanceof Error ? err.message : "Failed to expand neighbours.");
+        }
+      } finally {
+        setExpandLoading(false);
+      }
+    },
+    [activeSnapshotId, edgeFilter],
+  );
+
+  const handleClearExpansions = useCallback(() => {
+    setExpandedNodes(new Map());
+    setExpandedEdges([]);
+    setExpandedRoots(new Set());
+    setExpandError(null);
+  }, []);
+
+  const hasExpansions = expandedRoots.size > 0;
 
   return (
     <PageShell title="System Graph" subtitle="Technical dependency & lineage visualization">
@@ -427,6 +596,28 @@ export default function GraphPage() {
         )}
       </div>
 
+      {/* "Expansions active" banner — gives the user a quick way to
+          revert to the original subgraph without having to click each
+          expanded node and re-fetch. Only visible when there's
+          something to clear. */}
+      {hasExpansions && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2 text-[11px] text-emerald-900">
+          <GitFork size={12} className="shrink-0 text-emerald-600" />
+          <div className="flex-1">
+            Expanded <strong>{expandedRoots.size}</strong> node{expandedRoots.size === 1 ? "" : "s"}
+            {" — "}showing <strong>{expandedNodes.size}</strong> additional object{expandedNodes.size === 1 ? "" : "s"}
+            {" "}and <strong>{expandedEdges.length}</strong> additional edge{expandedEdges.length === 1 ? "" : "s"}.
+          </div>
+          <button
+            onClick={handleClearExpansions}
+            className="flex items-center gap-1 text-[10px] text-emerald-700 hover:text-emerald-900 font-medium hover:underline"
+            title="Drop the expansions and revert to the initial subgraph"
+          >
+            <Eraser size={10} /> Clear expansions
+          </button>
+        </div>
+      )}
+
       {/* Mode banners */}
       {inFocusMode && focusData && nodes.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 flex items-start gap-2 text-[11px] text-blue-900">
@@ -487,6 +678,53 @@ export default function GraphPage() {
           {selectedNode && (
             <div className="w-72 bg-white rounded-lg shadow-sm border border-gray-200 p-4 self-start">
               <h3 className="text-sm font-semibold text-td-navy mb-3">Node Details</h3>
+
+              {/* ──── Expand neighbours ────
+                  Three-button tray that pulls one hop around the
+                  selected node from the server. We keep it tight at
+                  the top of the panel so it's the first thing the user
+                  sees after clicking — primary action of the page. */}
+              <div className="bg-blue-50/60 border border-blue-100 rounded-md p-2 mb-3">
+                <div className="text-[10px] font-semibold text-td-navy uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <GitFork size={10} /> Expand neighbours
+                  {expandLoading && <Loader2 size={10} className="animate-spin ml-auto text-blue-600" />}
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => handleExpand(selectedNode, "up")}
+                    disabled={expandLoading}
+                    className="flex items-center justify-center gap-1 bg-white border border-gray-200 hover:border-red-400 hover:bg-red-50 text-[10px] font-medium text-td-navy py-1.5 rounded disabled:opacity-50 transition-colors"
+                    title="Pull producers (objects that feed THIS one)"
+                  >
+                    <ArrowUp size={10} className="text-red-500" /> Upstream
+                  </button>
+                  <button
+                    onClick={() => handleExpand(selectedNode, "down")}
+                    disabled={expandLoading}
+                    className="flex items-center justify-center gap-1 bg-white border border-gray-200 hover:border-green-400 hover:bg-green-50 text-[10px] font-medium text-td-navy py-1.5 rounded disabled:opacity-50 transition-colors"
+                    title="Pull consumers (objects that this one feeds)"
+                  >
+                    <ArrowDown size={10} className="text-green-600" /> Downstream
+                  </button>
+                  <button
+                    onClick={() => handleExpand(selectedNode, "both")}
+                    disabled={expandLoading}
+                    className="flex items-center justify-center gap-1 bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-[10px] font-medium text-td-navy py-1.5 rounded disabled:opacity-50 transition-colors"
+                    title="Pull both directions in one click"
+                  >
+                    <GitFork size={10} className="text-blue-500" /> Both
+                  </button>
+                </div>
+                {expandError && (
+                  <p className="mt-2 text-[10px] text-red-700 leading-snug">{expandError}</p>
+                )}
+                {expandedRoots.has(selectedNode.node_id) && !expandLoading && !expandError && (
+                  <p className="mt-2 text-[10px] text-green-700">
+                    Already expanded — re-clicking pulls the same neighbours (no duplicates).
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span
