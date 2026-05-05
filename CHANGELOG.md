@@ -8,6 +8,59 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.14.14 (2026-05-04) — Snapshot delete cascade made viable at 240k+ tables (hot-fix)
+
+The `DELETE /snapshots/{id}` endpoint manually cascaded by materialising
+every dependent ID and feeding it to `IN (?, ?, ?, ...)`. Same SQLite
+host-parameter cap that bit `compute_snapshot_metrics` in v1.14.13 —
+on the full Transcend-DevTest extract (239k tables, 9.8M columns) the
+DELETE blew up with the same shape of error. SCION just let you finish
+your first big import with no way to undo it.
+
+This is a **hot-fix** to the existing manual-cascade approach:
+
+- All `IN(big_list)` clauses replaced with scalar subqueries. Each
+  DELETE now ships a single SQL statement with a constant number of
+  host parameters, regardless of how many rows match.
+- Cascade extended to cover the v1.14.02 sub-tables (`index_snapshot`,
+  `partitioning_snapshot`, `ddl_text_snapshot`) and the v1.13 parser
+  tables (`process`, `step`, `attribute_lineage`) plus
+  `object_criticality` — all of which were silently leaking orphan
+  rows on every snapshot delete in prior versions.
+- Counts computed up front via `func.count()` aggregates so the
+  response body still reports per-table row counts to the UI.
+
+Verified end-to-end on snapshot 11 (the Transcend-DevTest one):
+
+```
+STATUS 200 in 28.02s
+cascade = {
+  schemas:        10 712
+  tables:        239 380
+  columns:     9 858 099
+  indices:       337 817
+  partitioning:   17 140
+  ddl_text:        6 829
+  graph_nodes:   250 092
+  graph_edges:   426 243
+  criticality:   250 092
+}
+```
+
+~11.5M rows deleted in 28 s, no crash, all dependent tables clean.
+
+This is a hot-fix to keep the current manual-cascade architecture
+working at scale; the architecturally correct fix is to declare
+`ON DELETE CASCADE` on the FKs and let SQLite/Postgres handle it
+server-side. Tracked as a follow-up — see issue planned for the
+post-ingest hardening epic.
+
+74/74 metadata + diff tests still passing. No public API change
+beyond the new `indices`, `partitioning`, `ddl_text`, and
+`criticality` fields in the response's `cascade` object.
+
+---
+
 ### v1.14.13 (2026-05-04) — Post-ingest pipeline made viable at 240k+ table scale
 
 The streaming refactor in v1.14.09 made it possible to *finish* the
