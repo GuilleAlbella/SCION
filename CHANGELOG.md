@@ -8,6 +8,119 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.15.00 (2026-05-05) — DB layer cleanup: indexes, schema-parity test, single canonical init script
+
+Foundational cleanup of the persistence layer triggered by Rahul's
+Transcend extract scaling pain (~250k changes / 9.8M columns / 337k
+graph nodes). Symptom that surfaced it: a diff between snapshots #1
+and #10 — sub-second on demo data — took **54 seconds** with
+snapshot #11 (Transcend) loaded in the same DB. Root cause was
+threefold: missing SQLite indexes on the hot tables, drift between
+ORM models and Alembic migrations, and two parallel paths to schema
+creation that could (and did) diverge.
+
+#### Indexes added (migration ``d05a1b2c3d4e``)
+
+Eight composite/single-column indexes on the tables every read path
+touches:
+
+- ``change_event(snapshot_from, snapshot_to)`` — used by every diff
+  read AND by ``DiffEngine.compute_diff``'s idempotency probe. The
+  killer one: previously, a diff over snapshots 1→10 ran 9 sequential
+  full-table scans of 250k rows each. With the index, each lookup is
+  a sub-millisecond seek.
+- ``change_event(object_identifier)`` — backs ``/timeline`` and the
+  new ``/objects/search`` autocomplete.
+- ``schema_snapshot(snapshot_id)``, ``table_snapshot(schema_id)``,
+  ``column_snapshot(table_id)`` — every ``DiffEngine`` invocation
+  loaded both snapshots' schemas/tables/columns; without these
+  indexes the column scan dominated diff time on a 9.8M-row extract.
+- ``graph_node(snapshot_id)`` and ``graph_node(snapshot_id, schema_name,
+  object_name)`` — first one for plain graph fetches, second for the
+  upcoming ``/objects/search?source=graph`` autocomplete.
+- ``graph_edge(snapshot_id)`` — same reason for edge fetches.
+
+Migration is idempotent (uses ``inspect()`` to skip indexes that
+already exist) so it's safe to re-run. SQLite ``CREATE INDEX`` is
+online; on a 9.8M-row ``column_snapshot`` it took ~10–20 s of disk
+I/O once. The payoff is permanent: every subsequent diff/graph fetch
+uses the index instead of full-scanning.
+
+#### Drift between ORM and Alembic — caught and fixed
+
+A new test (``backend/tests/test_schema_parity.py``) compares the
+schema produced by ``alembic upgrade head`` against the one produced
+by ``Base.metadata.create_all()``. On its first run it found **9
+real drift items** that had been latent for months:
+
+**Columns in models but missing from migrations** — exactly the kind
+of bug that caught Helton on day one (``alembic upgrade`` produced a
+partial schema that crashed ``rich_seed`` later). Backfilled by
+migration ``e16b2c3d4f5a``, idempotent so existing dev DBs (where
+the columns already exist via ``create_all``) get a no-op:
+
+- ``snapshot.structural_hash`` (String)
+- ``snapshot.object_count`` (Integer)
+- ``change_event.severity`` (String) — drives the Changes table KPIs
+- ``change_event.is_breaking`` (Boolean) — drives the Breaking badge
+- ``impact_event.impact_score`` (Float)
+
+**Indexes in migrations but missing from models** — opposite drift:
+fresh DBs created via ``Base.metadata.create_all`` (tests, new dev
+machines) didn't get them. Added ``__table_args__`` declarations to
+the affected models so ``create_all`` produces an identical schema:
+
+- ``attribute_lineage`` (×2 lineage walks)
+- ``index_snapshot`` (table+index_number lookup)
+- ``object_criticality`` (snapshot+score top-N)
+- ``partitioning_snapshot`` (table_id)
+- ``process``, ``step`` (×3 — natural-key dedup)
+
+CI will now fail on the next drift, before it reaches anyone.
+
+#### Single canonical lifecycle script
+
+Replaced the split between ``tools/bootstrap_sqlite_db.py``
+(``create_all`` path) and bare ``alembic upgrade head`` with one
+script: ``backend/tools/db_init.py``.
+
+```
+.venv\Scripts\python.exe backend\tools\db_init.py
+```
+
+With no arguments it shows an interactive menu (init / init+seed /
+reset / reset+seed / seed-only / cancel). For scripted use:
+
+```
+db_init.py init              # idempotent; auto-stamps legacy DBs
+db_init.py reset --yes       # wipe + recreate schema
+db_init.py reset --with-seed
+db_init.py seed              # demo data only
+```
+
+Three DB states are detected automatically: **fresh** (empty),
+**managed** (alembic-tracked), **legacy** (tables exist but
+``alembic_version`` is empty — the case Guillermo's local DB landed
+in when ``create_all`` ran without a stamp). The legacy branch
+verifies schema parity with ``Base.metadata`` before stamping at HEAD;
+if it doesn't match, it refuses rather than silently entering an
+inconsistent state.
+
+The old ``bootstrap_sqlite_db.py`` is gone. README, ``docs/handover.md``
+and ``dev.ps1`` updated to reference the new script (always with the
+venv's Python — ``db_init.py`` itself prints a friendly hint when run
+with the system interpreter and bails before the ImportError noise).
+
+#### Breaking changes
+
+None at the application level. The only operational change is that
+DB setup goes through ``db_init.py`` now; the old bootstrap path
+no longer exists. Existing dev DBs (``alembic_version`` populated)
+are unaffected; legacy DBs (created via the now-removed bootstrap)
+are auto-stamped on the next ``db_init.py init``.
+
+---
+
 ### v1.14.16 (2026-05-05) — Live import UX: per-step progress, cancel, pre-flight summary, VACUUM on delete
 
 This is the big UX round on top of the perf work. The dict-import

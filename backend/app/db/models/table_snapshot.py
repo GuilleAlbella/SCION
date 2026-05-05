@@ -16,10 +16,14 @@ class TableSnapshot(Base):
     __tablename__ = "table_snapshot"
 
     table_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Indexed: every JOIN against schema_snapshot in DiffEngine.compute_diff
+    # filters tables by schema_id. With 240k tables in a Transcend extract,
+    # the un-indexed scan dominates diff time. See alembic d05a1b2c3d4e.
     schema_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("schema_snapshot.schema_id"),
         nullable=False,
+        index=True,
     )
     table_name: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[str] = mapped_column(String, nullable=False)

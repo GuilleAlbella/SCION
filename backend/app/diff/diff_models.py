@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Dict, Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -32,6 +32,20 @@ class ChangeEvent(Base):
 
     v5.5 introduces this as an append-only, immutable audit log. It is not
     used to drive diff logic itself; it only records what was detected.
+
+    Indexes (added in alembic revision d05a1b2c3d4e):
+
+    - ``ix_change_event_snapshot_pair (snapshot_from, snapshot_to)``: every
+      hot read on this table — the diff-details list, the idempotency probe
+      inside ``DiffEngine.compute_diff``, the impact / DDL endpoints — filters
+      by this pair. Without it, a 250k-row table forces a full scan per
+      query, which on a multi-pair diff request stacks up to seconds of
+      wasted CPU.
+    - ``ix_change_event_object_identifier (object_identifier)``: backs the
+      ``/timeline`` and ``/objects/search`` endpoints, which both filter
+      by object name. Substring (``ILIKE %q%``) won't use this index, but
+      exact matches and prefix matches will, and the ``DISTINCT`` query in
+      ``/objects/search`` benefits significantly.
     """
 
     __tablename__ = "change_event"
@@ -50,5 +64,10 @@ class ChangeEvent(Base):
     is_breaking: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    __table_args__ = (
+        Index("ix_change_event_snapshot_pair", "snapshot_from", "snapshot_to"),
+        Index("ix_change_event_object_identifier", "object_identifier"),
     )
 

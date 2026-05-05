@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from sqlalchemy import DateTime, Integer, JSON, String
+from sqlalchemy import DateTime, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -14,6 +14,16 @@ class GraphNode(Base):
 
     Nodes are created exclusively during snapshot execution and represent
     structural objects (tables, columns, etc.) for a specific snapshot.
+
+    Indexes (alembic d05a1b2c3d4e):
+
+    - ``ix_graph_node_snapshot``: every graph fetch / lineage subgraph /
+      criticality computation filters by ``snapshot_id``. With 337k nodes
+      on a Transcend extract this is the difference between an instant
+      response and a full-table scan.
+    - ``ix_graph_node_search``: composite over
+      ``(snapshot_id, schema_name, object_name)`` to back the
+      ``/objects/search?source=graph`` autocomplete with a single index seek.
     """
 
     __tablename__ = "graph_node"
@@ -27,11 +37,20 @@ class GraphNode(Base):
     node_uid: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
+    __table_args__ = (
+        Index("ix_graph_node_snapshot", "snapshot_id"),
+        Index("ix_graph_node_search", "snapshot_id", "schema_name", "object_name"),
+    )
+
 
 class GraphEdge(Base):
     """ORM model representing a directed edge between graph nodes.
 
     v0: structural definition only, no behaviour or relationships.
+
+    Indexes (alembic d05a1b2c3d4e): ``ix_graph_edge_snapshot`` on
+    ``snapshot_id`` so edge fetches for a snapshot don't scan the whole
+    table.
     """
 
     __tablename__ = "graph_edge"
@@ -54,3 +73,5 @@ class GraphEdge(Base):
         default=datetime.utcnow,
         nullable=True,
     )
+
+    __table_args__ = (Index("ix_graph_edge_snapshot", "snapshot_id"),)

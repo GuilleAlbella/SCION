@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.14.16
+**Version:** BETA v1.15.00
 
 ---
 
@@ -94,7 +94,7 @@ backend/
     taisa/               # TAISA client, prompts, algorithm knowledge base
     usage/               # Usage ingestor, criticality engine
   tests/                 # pytest — metadata, graph, diff, taisa, api
-  tools/                 # bootstrap_sqlite_db.py, rich_seed.py, fixtures
+  tools/                 # db_init.py (canonical schema/seed lifecycle), rich_seed.py, fixtures
 
 frontend/
   src/
@@ -311,10 +311,12 @@ pip install -r requirements/dev.txt
 cd frontend
 npm install
 
-# Database
-cd backend
-python tools/bootstrap_sqlite_db.py
-python tools/rich_seed.py
+# Database — single canonical entry point (alembic-only schema, optional demo seed).
+# Replaces the older split between `bootstrap_sqlite_db.py` and bare `alembic upgrade`.
+# IMPORTANT: always invoke with the project venv's Python, not system `python` —
+# the script needs alembic/sqlalchemy from the venv.
+.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed   # fresh DB + demo data
+# Subsequent setups / new dev: `db_init.py init` (without flags) is idempotent.
 ```
 
 ### Run
