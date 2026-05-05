@@ -8,6 +8,62 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.20.00 (2026-05-05) — /graph: click-to-expand interactive subgraph exploration
+
+The previous releases focused on making the graph readable at scale.
+This one makes it explorable: from any rendered node the user can
+pull one hop of neighbours (upstream / downstream / both) and merge
+them into the current view, then keep going from a newly visible
+neighbour. No page reload, no re-fetch of the whole graph.
+
+#### What it does
+
+- The node-detail side panel now opens with a small **Expand
+  neighbours** tray at the top: three buttons (``Upstream``,
+  ``Downstream``, ``Both``) that fire a ``GET /graph/focus`` around
+  the selected node with ``hops=1``. The result is merged into the
+  rendered subgraph. Dagre re-runs over the merged set so the layout
+  stays sensible.
+- Already-expanded nodes get a **thicker border + green ✓ EXPANDED
+  badge** so the user can tell at a glance which roots have been
+  pulled. Re-clicking is a safe no-op (server returns the same
+  neighbours, the merge dedupes by ``node_id``).
+- A green banner above the graph shows the running count of
+  expansions and exposes a single **Clear expansions** button to
+  revert to the original subgraph in one click.
+- Snapshot change OR focus-anchor change wipes the expansion state
+  automatically — anchoring expansions to one snapshot guarantees
+  that a stale node from another can't silently 404 mid-walk.
+
+#### Why it's useful
+
+The pre-existing ``hops`` slider gave you the whole N-hop
+neighbourhood at once, which becomes unreadable past 100 nodes. This
+flow is the opposite shape: start tiny, follow the threads you
+actually care about. Same backend (``/graph/focus``) under the hood,
+no new endpoint.
+
+#### Implementation notes
+
+- Pure frontend change. Backend wasn't touched.
+- Merge state lives in three pieces: ``expandedNodes:
+  Map<node_id, GN>``, ``expandedEdges: GraphEdge[]``,
+  ``expandedRoots: Set<node_id>``. The render pipeline merges them
+  into ``baseRenderSource`` (which is whatever ``focusData`` /
+  ``graphData`` last returned) inside a memo, so the original
+  responses stay immutable.
+- Edge dedup uses ``source|target|type``. Node dedup uses
+  ``node_id``. Base rows always win on conflict — they carry metrics
+  (in/out degree, fragility, hub flag) the focus-fetch occasionally
+  omits.
+- Direction handling: schema / database nodes don't have a parent
+  schema, so for those types the root identifier passed to
+  ``/graph/focus`` is bare ``object_name`` rather than
+  ``schema.object_name``. Mirrors the resolver fallback the backend
+  already supports.
+
+---
+
 ### v1.19.00 (2026-05-05) — Round-trip scale audit: /impact paginated, /alerts pre-computed, /usage cached, /intelligence windowed, /simulation autocomplete, /lineage route fix
 
 The previous releases (v1.15.00–v1.18.00) closed the headline scale
