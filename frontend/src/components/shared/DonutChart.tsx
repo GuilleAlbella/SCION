@@ -1,6 +1,7 @@
 "use client";
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { useState } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { CHART_COLORS } from "@/lib/constants";
 
 interface DonutChartProps {
@@ -10,40 +11,23 @@ interface DonutChartProps {
   showCenter?: boolean;
 }
 
-// Custom tooltip replaces Recharts' default so we can show the computed
-// percentage share in addition to the raw count. Recharts injects
-// `active` and `payload` automatically; `total` is passed from our parent.
-function CustomTooltip({ active, payload, total }: any) {
-  if (!active || !payload?.[0]) return null;
-  const d = payload[0].payload;
-  const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : "0";
-  return (
-    <div className="bg-white border border-gray-200 shadow-lg rounded-lg p-3 text-xs">
-      <div className="font-semibold text-td-navy mb-1">{d.name}</div>
-      <div className="text-td-gray-dark">
-        Count: <span className="font-bold text-td-navy">{d.value}</span>
-      </div>
-      <div className="text-td-gray-dark">
-        Share: <span className="font-bold text-td-navy">{pct}%</span>
-      </div>
-      {d.detail && (
-        <div className="text-td-gray-dark mt-1 border-t border-gray-100 pt-1">
-          {d.detail}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function DonutChart({
   title,
   data,
   colors = CHART_COLORS,
   showCenter = true,
 }: DonutChartProps) {
-  // Precompute the total once — used for both the tooltip's percentage
-  // calculation and the center label.
+  // Precompute the total once — used both for the center label and for
+  // the hover-state share percentage.
   const total = data.reduce((sum, d) => sum + d.value, 0);
+
+  // Index of the slice the cursor is currently over, or null when no
+  // slice is active. We render hover info in the donut's center hole
+  // (replacing the "Total" label) instead of using a floating tooltip
+  // that follows the cursor — the cursor sits inside the hole during
+  // hover, which made the floating tooltip overlap the static center
+  // label and produce unreadable stacked text.
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   if (data.length === 0 || total === 0) {
     return (
@@ -55,6 +39,12 @@ export default function DonutChart({
       </div>
     );
   }
+
+  const activeSlice = activeIndex != null ? data[activeIndex] : null;
+  const activePct =
+    activeSlice && total > 0
+      ? ((activeSlice.value / total) * 100).toFixed(1)
+      : null;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -71,28 +61,61 @@ export default function DonutChart({
               dataKey="value"
               stroke="#fff"
               strokeWidth={2}
+              onMouseEnter={(_, idx) => setActiveIndex(idx)}
+              onMouseLeave={() => setActiveIndex(null)}
             >
               {data.map((_, i) => (
-                <Cell key={i} fill={colors[i % colors.length]} />
+                <Cell
+                  key={i}
+                  fill={colors[i % colors.length]}
+                  opacity={activeIndex == null || activeIndex === i ? 1 : 0.45}
+                />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip total={total} />} />
           </PieChart>
         </ResponsiveContainer>
-        {/* Center text */}
+        {/* Center text — swaps between "Total" and the hovered slice's
+            details. Single positioned element, so nothing can overlap. */}
         {showCenter && (
-          <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          >
-            <div className="text-center">
-              <div className="text-2xl font-bold text-td-navy">{total}</div>
-              <div className="text-[9px] text-td-gray-dark uppercase tracking-wider">Total</div>
-            </div>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {activeSlice ? (
+              <div className="text-center px-2">
+                <div
+                  className="text-[10px] font-semibold uppercase tracking-wider truncate max-w-[100px]"
+                  style={{ color: colors[(activeIndex ?? 0) % colors.length] }}
+                  title={activeSlice.name}
+                >
+                  {activeSlice.name}
+                </div>
+                <div className="text-2xl font-bold text-td-navy leading-tight">
+                  {activeSlice.value}
+                </div>
+                <div className="text-[10px] text-td-gray-dark font-mono">
+                  {activePct}%
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-2xl font-bold text-td-navy">{total}</div>
+                <div className="text-[9px] text-td-gray-dark uppercase tracking-wider">
+                  Total
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+      {/* Detail strip — shown below the donut when the active slice
+          has a `detail` field. Lives outside the chart so long strings
+          ("Affected: tableA, tableB, tableC...") wrap cleanly instead
+          of getting truncated to fit the 100 px donut hole. Reserves
+          a fixed-height row even when empty so the legend below
+          doesn't jump as the user moves the cursor across slices. */}
+      <div className="min-h-[1.25rem] mt-1 text-[11px] text-td-gray-dark leading-snug">
+        {activeSlice?.detail ?? ""}
+      </div>
       {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
         {data.map((d, i) => (
           <div key={d.name} className="flex items-center gap-1.5 text-xs text-td-gray-dark">
             <span

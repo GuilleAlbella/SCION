@@ -6,9 +6,10 @@ import PageShell from "@/components/layout/PageShell";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
-import { getTimeline, getTimelineObjects } from "@/lib/api/timeline";
+import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
+import { getTimeline } from "@/lib/api/timeline";
 import type { TimelineResponse, TimelineEvent } from "@/lib/api/types";
-import { Clock, Search, ChevronRight, ShieldAlert } from "lucide-react";
+import { Clock, ChevronRight, ShieldAlert, Loader2 } from "lucide-react";
 import { changeTypeLabel } from "@/lib/terminology";
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -25,21 +26,25 @@ export default function TimelinePageWrapper() {
   );
 }
 
+// Page size for "Load more" on the events list. The typical timeline for
+// a single object is small (<50 events) so this is mostly defensive — but
+// substring matches on a short token (e.g. "table") can hit thousands.
+const TIMELINE_PAGE_SIZE = 200;
+
 function TimelinePage() {
-  const [objects, setObjects] = useState<string[]>([]);
   const [selected, setSelected] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
+  // Accumulated events across "Load more" clicks; reset whenever the
+  // selected object changes.
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
 
   const searchParams = useSearchParams();
-
-  useEffect(() => {
-    getTimelineObjects()
-      .then((data) => setObjects(data.objects))
-      .catch(() => {});
-  }, []);
 
   // Entry from Changes page quick-link (?object=db.tbl). Deps omit
   // handleLoad intentionally — it would cause re-fetches on every render
@@ -51,12 +56,29 @@ function TimelinePage() {
   }, [searchParams]);
 
   async function handleLoad(objectName: string) {
+    if (!objectName) {
+      // User cleared the autocomplete — reset state cleanly.
+      setSelected("");
+      setTimeline(null);
+      setEvents([]);
+      setOffset(0);
+      setHasMore(false);
+      setTotal(0);
+      return;
+    }
     setSelected(objectName);
     setLoading(true);
     setError(null);
     try {
-      const data = await getTimeline(objectName);
+      const data = await getTimeline(objectName, {
+        limit: TIMELINE_PAGE_SIZE,
+        offset: 0,
+      });
       setTimeline(data);
+      setEvents(data.events);
+      setOffset(0);
+      setHasMore(data.has_more);
+      setTotal(data.total);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load timeline");
     } finally {
@@ -64,54 +86,57 @@ function TimelinePage() {
     }
   }
 
-  const filteredObjects = searchTerm
-    ? objects.filter((o) => o.toLowerCase().includes(searchTerm.toLowerCase()))
-    : objects;
+  async function handleLoadMore() {
+    if (!selected || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextOffset = offset + TIMELINE_PAGE_SIZE;
+      const data = await getTimeline(selected, {
+        limit: TIMELINE_PAGE_SIZE,
+        offset: nextOffset,
+      });
+      setEvents((prev) => [...prev, ...data.events]);
+      setOffset(nextOffset);
+      setHasMore(data.has_more);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load more events");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <PageShell title="Timeline / History" subtitle="Object evolution across snapshots">
-      {/* Object selector */}
+      {/* Object selector — server-backed autocomplete. Replaces the legacy
+          two-input search-then-pick flow that loaded every distinct
+          identifier into a native <select>. The component itself debounces
+          and pages results, so picking an object on a 240k-extract is
+          instant. */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-3 mb-3">
           <Clock size={18} className="text-td-navy" />
           <h3 className="text-sm font-semibold text-td-navy">Select an Object</h3>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-td-gray-dark" />
-            <input
-              type="text"
-              placeholder="Search objects..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full border border-gray-300 rounded pl-9 pr-3 py-1.5 text-sm"
-            />
-          </div>
-          <select
-            value={selected}
-            onChange={(e) => {
-              if (e.target.value) handleLoad(e.target.value);
-            }}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm max-w-sm"
-          >
-            <option value="">Select object...</option>
-            {filteredObjects.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
-        </div>
+        <ObjectAutocomplete
+          value={selected}
+          onChange={handleLoad}
+          source="changes"
+          placeholder="Search objects with change history..."
+          className="max-w-xl"
+        />
       </div>
 
       {error && <ErrorAlert message={error} />}
       {loading && <LoadingSpinner />}
 
       {/* Timeline visualization */}
-      {timeline && timeline.events.length > 0 && (
+      {timeline && events.length > 0 && (
         <div className="relative">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={16} className="text-td-navy" />
             <h2 className="text-sm font-bold text-td-navy">
-              {timeline.object_identifier} — {timeline.total} change(s)
+              {timeline.object_identifier} — showing {events.length.toLocaleString()} of{" "}
+              {total.toLocaleString()} change(s)
             </h2>
           </div>
 
@@ -120,14 +145,29 @@ function TimelinePage() {
             {/* Vertical line */}
             <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-td-navy/20" />
 
-            {timeline.events.map((event, idx) => (
-              <TimelineCard key={event.change_id} event={event} isLast={idx === timeline.events.length - 1} />
+            {events.map((event, idx) => (
+              <TimelineCard key={event.change_id} event={event} isLast={idx === events.length - 1} />
             ))}
           </div>
+
+          {/* Load-more affordance — visible only when the server reports
+              more events for the current object beyond what we've loaded. */}
+          {hasMore && (
+            <div className="mt-2 flex items-center justify-center">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 bg-td-navy text-white px-4 py-1.5 rounded text-xs font-medium hover:bg-td-navy-light disabled:opacity-50 transition-colors"
+              >
+                {loadingMore ? <Loader2 size={12} className="animate-spin" /> : null}
+                {loadingMore ? "Loading..." : `Load next ${TIMELINE_PAGE_SIZE}`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {timeline && timeline.events.length === 0 && (
+      {timeline && events.length === 0 && (
         <EmptyState message={`No changes found for "${timeline.object_identifier}".`} />
       )}
 

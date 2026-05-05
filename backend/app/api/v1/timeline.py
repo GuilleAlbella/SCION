@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
@@ -33,34 +33,77 @@ class TimelineEvent(BaseModel):
 
 
 class TimelineResponse(BaseModel):
+    """Paginated timeline payload.
+
+    ``events`` is the current page; ``total`` is the count of all events
+    matching the object filter (across pages). ``has_more`` lets the UI
+    decide whether to render a "load more" affordance.
+    """
+
     object_identifier: str
     events: List[TimelineEvent]
     total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+# Server-side defaults / hard caps for timeline pagination. Default is
+# generous (200) because the typical use case — a single object's history —
+# rarely has more than a few dozen events; the cap exists for the pathological
+# case where ``object_name`` is short enough that the substring match catches
+# tens of thousands of identifiers.
+TIMELINE_LIMIT_DEFAULT = 200
+TIMELINE_LIMIT_MAX = 1000
 
 
 @router.get("", status_code=status.HTTP_200_OK, response_model=TimelineResponse)
-def get_timeline(object_name: str = Query(..., description="Object identifier to search")) -> Dict[str, Any]:
-    """Get the full change history for a specific object."""
+def get_timeline(
+    object_name: str = Query(..., description="Object identifier to search"),
+    limit: int = Query(TIMELINE_LIMIT_DEFAULT, ge=1, le=TIMELINE_LIMIT_MAX),
+    offset: int = Query(0, ge=0),
+) -> Dict[str, Any]:
+    """Get a paginated change history for a specific object.
 
-    # Build snapshot time lookup
+    Filter is unchanged from the pre-pagination revision: exact match OR
+    substring match on ``object_identifier``, so the user can search by
+    short name ("accounts") or fully-qualified ("core_banking.accounts").
+    The query is now ``LIMIT``-bounded and a separate ``COUNT(*)`` runs
+    against the same filter to populate ``total`` for the UI.
+    """
+
+    # Build snapshot time lookup once. Snapshot count is small (dozens),
+    # so loading them all is cheap and lets us O(1)-attach the timestamp
+    # to every event row below.
     with Session(bind=engine) as session:
         snapshots = session.execute(select(Snapshot)).scalars().all()
-        snap_times = {s.snapshot_id: s.snapshot_time.isoformat() if s.snapshot_time else "" for s in snapshots}
+        snap_times = {
+            s.snapshot_id: s.snapshot_time.isoformat() if s.snapshot_time else ""
+            for s in snapshots
+        }
 
-    # "contains" match is intentional — lets the user query by short table
-    # name (e.g. "accounts") and still catch fully-qualified identifiers
-    # ("core_banking.accounts"). Exact match is tried via the OR so single-
-    # segment object names still work without wildcarding surprises.
+    # Shared filter — applied to both COUNT and the page query. Pre-built
+    # once so the two queries can't drift if the filter logic changes.
+    where_clause = or_(
+        ChangeEvent.object_identifier == object_name,
+        ChangeEvent.object_identifier.contains(object_name),
+    )
+
     with Session(bind=engine) as session:
+        # Total count (for UI "Showing X of Y" + has_more).
+        total = int(
+            session.execute(
+                select(func.count()).select_from(ChangeEvent).where(where_clause)
+            ).scalar_one()
+            or 0
+        )
+
         rows = session.execute(
             select(ChangeEvent)
-            .where(
-                or_(
-                    ChangeEvent.object_identifier == object_name,
-                    ChangeEvent.object_identifier.contains(object_name),
-                )
-            )
+            .where(where_clause)
             .order_by(ChangeEvent.snapshot_to, ChangeEvent.detected_at)
+            .offset(offset)
+            .limit(limit)
         ).scalars().all()
 
     events = []
@@ -77,10 +120,15 @@ def get_timeline(object_name: str = Query(..., description="Object identifier to
             "after_state": r.after_state,
         })
 
+    has_more = (offset + len(events)) < total
+
     return {
         "object_identifier": object_name,
         "events": events,
-        "total": len(events),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
     }
 
 
@@ -90,10 +138,22 @@ class TimelineObjectsResponse(BaseModel):
 
 @router.get("/objects", status_code=status.HTTP_200_OK, response_model=TimelineObjectsResponse)
 def list_timeline_objects() -> Dict[str, Any]:
-    """List all unique object identifiers that have changes."""
+    """List unique object identifiers that have changes.
+
+    DEPRECATED in v1.15: this endpoint loads up to ``TIMELINE_OBJECTS_HARD_CAP``
+    distinct identifiers in one shot, which on Rahul's Transcend extract
+    (~240k distinct identifiers) freezes the browser's native ``<select>``.
+    New UI code should use ``GET /objects/search?q=...`` instead. We keep
+    this endpoint working for any external script that still calls it, but
+    capped so it can't bring the server down.
+    """
+    TIMELINE_OBJECTS_HARD_CAP = 1000
     with Session(bind=engine) as session:
         rows = session.execute(
-            select(ChangeEvent.object_identifier).distinct()
+            select(ChangeEvent.object_identifier)
+            .distinct()
+            .order_by(ChangeEvent.object_identifier)
+            .limit(TIMELINE_OBJECTS_HARD_CAP)
         ).scalars().all()
 
-    return {"objects": sorted(rows)}
+    return {"objects": list(rows)}
