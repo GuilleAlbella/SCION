@@ -38,8 +38,20 @@ class ImpactResponse(BaseModel):
 
 
 class BatchImpactRequest(BaseModel):
+    """Request payload for the batch impact endpoint.
+
+    ``limit`` / ``offset`` paginate the per-change ``changes`` list in
+    the response. The aggregates (``summary`` buckets, ``blast_radius``)
+    are always computed over the FULL diff regardless of which page is
+    requested — that's what lets the page render KPIs / donuts without
+    iterating the whole list client-side. Defaults match v1.18 behaviour
+    for the demo (small diffs return everything in one page).
+    """
+
     snapshot_from: int
     snapshot_to: int
+    limit: int = 100
+    offset: int = 0
 
 
 class BatchChangeImpact(BaseModel):
@@ -55,12 +67,45 @@ class BatchChangeImpact(BaseModel):
     user_count: int = 0
 
 
+class AffectedDatabase(BaseModel):
+    """One database (schema) and the tables touched within it.
+
+    Pre-grouped server-side so the frontend doesn't have to filter
+    ``affected_tables`` once per database to render the
+    "Affected objects, by database" section. At Transcend scale that
+    nested filter was O(databases × tables) and visibly slow.
+    """
+
+    schema_name: str
+    tables: List[str] = []
+
+
 class BatchBlastRadius(BaseModel):
     total_impacted_nodes: int = 0
     max_depth: int = 0
     weighted_score: float = 0.0
     affected_schemas: List[str] = []
+    # Kept for backward compatibility with any external consumer of the
+    # JSON shape — populated as a flat union of every grouped table.
     affected_tables: List[str] = []
+    # New in v1.19: pre-grouped tables-per-database. The frontend should
+    # prefer this when present and fall back to ``affected_tables`` only
+    # for compatibility.
+    affected_databases: List[AffectedDatabase] = []
+
+
+class BucketCount(BaseModel):
+    """One bucket of the donut/distribution charts.
+
+    ``name`` is whatever the bucket is keyed by (severity level, change
+    type, database name, etc.). ``count`` is the number of changes in
+    the FULL filtered set falling into that bucket — independent of
+    pagination, so the donuts stay accurate regardless of which page
+    of ``changes`` the user is currently looking at.
+    """
+
+    name: str
+    count: int
 
 
 class BatchSummary(BaseModel):
@@ -68,6 +113,15 @@ class BatchSummary(BaseModel):
     total_indirect: int = 0
     breaking_count: int = 0
     overall_risk: str = "LOW"
+    # ──── Server-side aggregate buckets (v1.19+) ────
+    # Computed over the full change set during the same pass that builds
+    # the per-change list, so adding them costs nothing extra and lets
+    # the frontend stop iterating ``changes`` to populate donuts and KPIs.
+    by_severity: List[BucketCount] = []
+    by_change_type: List[BucketCount] = []
+    by_schema: List[BucketCount] = []
+    by_breaking: List[BucketCount] = []
+    total_query_count: int = 0
 
 
 class BatchImpactResponse(BaseModel):
@@ -75,8 +129,14 @@ class BatchImpactResponse(BaseModel):
     snapshot_to: int
     changes_analyzed: int
     blast_radius: BatchBlastRadius
+    # The current page of per-change rows. Length is at most ``limit``.
     changes: List[BatchChangeImpact]
     summary: BatchSummary
+    # Pagination metadata: lets the UI decide whether to show a "Load
+    # more" affordance and where the next page starts.
+    limit: int = 100
+    offset: int = 0
+    has_more: bool = False
 
 
 def _get_node_name_map(snapshot_id: int) -> Dict[int, str]:
@@ -107,7 +167,12 @@ def execute_batch_impact(request: BatchImpactRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Graph/impact engine is stopped or not ready.")
 
-    result = compute_batch_impact(request.snapshot_from, request.snapshot_to)
+    result = compute_batch_impact(
+        request.snapshot_from,
+        request.snapshot_to,
+        limit=request.limit,
+        offset=request.offset,
+    )
     return result.to_dict()
 
 

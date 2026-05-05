@@ -6,12 +6,11 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
+import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { useGraph } from "@/lib/hooks/useGraph";
 import { runSimulation } from "@/lib/api/simulation";
 import type { SimulationResponse } from "@/lib/api/types";
-import { INTERNAL_OBJECT_NAMES } from "@/lib/constants";
 import {
   FlaskConical,
   Play,
@@ -49,11 +48,7 @@ export default function SimulationPage() {
   // "current" state the user is reasoning about. Manual select is the fallback.
   const [selectedSnap, setSelectedSnap] = useState<string>("");
   const snapshotId = activeDiffPair?.snapshotTo ?? (selectedSnap ? Number(selectedSnap) : null);
-  // Graph is needed to populate the object picker — we can only simulate
-  // against objects that exist in the graph for this snapshot.
-  const { data: graphData } = useGraph(snapshotId);
 
-  const [objectFilter, setObjectFilter] = useState("");
   const [selectedObject, setSelectedObject] = useState("");
   const [changeType, setChangeType] = useState(CHANGE_TYPES[0].value);
   const [loading, setLoading] = useState(false);
@@ -70,20 +65,13 @@ export default function SimulationPage() {
     }
   }, [activeDiffPair, selectedSnap]);
 
-  // Only tables and views are valid simulation targets — stored procs,
-  // triggers etc. don't fit the CHANGE_TYPES catalog. We also strip SCION's
-  // internal bookkeeping objects so users don't accidentally simulate on them.
-  const allObjects = graphData
-    ? graphData.nodes
-        .filter((n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? ""))
-        .filter((n) => n.object_type === "TABLE" || n.object_type === "VIEW")
-        .map((n) => n.object_name)
-        .sort()
-    : [];
-
-  const filteredObjects = objectFilter
-    ? allObjects.filter((o) => o.toLowerCase().includes(objectFilter.toLowerCase()))
-    : allObjects;
+  // Reset the object pick when the snapshot changes — a stale anchor
+  // from a different snapshot would either silently 404 against the new
+  // one or simulate on an object the user didn't intend.
+  useEffect(() => {
+    setSelectedObject("");
+    setResult(null);
+  }, [snapshotId]);
 
   async function handleSimulate() {
     if (!selectedObject || !snapshotId) return;
@@ -155,27 +143,23 @@ export default function SimulationPage() {
             </select>
           </div>
 
-          {/* Object */}
+          {/* Object — server-backed autocomplete restricted to TABLE/VIEW.
+              Replaces the legacy two-input "filter + native select" combo
+              that used to load the full snapshot graph (337k+ nodes on
+              Transcend) into the dropdown. The autocomplete debounces,
+              hits /objects/search?source=graph&object_types=TABLE,VIEW,
+              and only renders matches as the user types. */}
           <div>
             <label className="text-xs text-td-gray-dark block mb-1">Target object</label>
-            <input
-              type="text"
-              placeholder="Filter..."
-              value={objectFilter}
-              onChange={(e) => setObjectFilter(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-1.5 text-xs w-full mb-1"
-            />
-            <select
+            <ObjectAutocomplete
               value={selectedObject}
-              onChange={(e) => setSelectedObject(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
+              onChange={setSelectedObject}
+              snapshotId={snapshotId ?? undefined}
+              source="graph"
+              objectTypes="TABLE,VIEW"
+              placeholder={snapshotId ? "Type a table or view name..." : "Pick a snapshot first"}
               disabled={!snapshotId}
-            >
-              <option value="">Select object...</option>
-              {filteredObjects.map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Change type */}

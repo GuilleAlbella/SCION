@@ -42,6 +42,13 @@ def compute_criticality(
     # Criticality is snapshot-scoped and deterministic, so if we already
     # computed it for this snapshot we return the stored rows immediately.
     # `force=True` is the escape hatch for re-runs after a usage backfill.
+    #
+    # The read uses the ``ix_object_criticality_snapshot_score`` composite
+    # index added in v1.15.00, so even on a 337k-row Transcend snapshot
+    # the query plan is an indexed scan in score order — no full sort,
+    # no temp table. The full result set is still loaded so callers that
+    # need every row (e.g. the criticality CSV exporter) keep working;
+    # the API endpoint slices to top-N before serialising.
     with Session(engine) as session:
         if not force:
             existing = session.scalar(

@@ -66,6 +66,15 @@ def search_objects(
         "changes",
         description="`changes` = distinct object_identifier from change_event. `graph` = nodes in the snapshot graph.",
     ),
+    object_types: Optional[str] = Query(
+        None,
+        description=(
+            "Comma-separated whitelist of `GraphNode.object_type` values "
+            "(e.g. `TABLE,VIEW`). Only meaningful with `source=graph`; "
+            "ignored on `source=changes` because `change_event.object_type` "
+            "uses a different vocabulary (COLUMN / TABLE / SCHEMA / …)."
+        ),
+    ),
     limit: int = Query(20, ge=1, le=100),
 ) -> dict:
     """Search for object identifiers matching ``q``.
@@ -114,6 +123,17 @@ def search_objects(
             stmt = select(full_id).where(GraphNode.snapshot_id == snapshot_id)
             if pattern is not None:
                 stmt = stmt.where(full_id.ilike(pattern))
+            # Optional object_type whitelist. The Simulation page uses
+            # this to restrict the picker to TABLE / VIEW (the only
+            # types its CHANGE_TYPES catalog makes sense against).
+            if object_types is not None and object_types.strip():
+                wanted = [
+                    t.strip().upper()
+                    for t in object_types.split(",")
+                    if t.strip()
+                ]
+                if wanted:
+                    stmt = stmt.where(GraphNode.object_type.in_(wanted))
             stmt = stmt.order_by(_func.lower(full_id)).limit(fetch_n)
             rows = session.execute(stmt).scalars().all()
 

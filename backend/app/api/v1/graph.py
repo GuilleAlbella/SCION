@@ -86,56 +86,12 @@ class FocusedGraphResponse(BaseModel):
     capped: bool
 
 
-@router.get("/{snapshot_id}", status_code=status.HTTP_200_OK, response_model=GraphResponse)
-def get_graph(snapshot_id: int) -> Dict[str, Any]:
-    """Return the full structural graph for a snapshot, or a truncation marker.
-
-    For graphs at or below ``FULL_GRAPH_NODE_CAP`` nodes the response is
-    the full set of nodes + edges (matches the pre-v1.17 behaviour so
-    the demo and small customers see no UX change). Above the cap we
-    return ``{ truncated: true, total_nodes: N, nodes: [], edges: [] }``
-    and the frontend switches to the focus-picker flow rather than
-    locking up the browser.
-    """
-
-    with Session(bind=engine) as session:
-        # Cheap pre-flight count first. With the
-        # ``ix_graph_node_snapshot`` index this is sub-millisecond even
-        # on 337k-node extracts; doing it before the bulk fetch saves
-        # us from materialising millions of rows we'd then discard.
-        total_nodes = int(
-            session.execute(
-                select(func.count())
-                .select_from(GraphNode)
-                .where(GraphNode.snapshot_id == snapshot_id)
-            ).scalar_one()
-            or 0
-        )
-
-        if total_nodes > FULL_GRAPH_NODE_CAP:
-            return {
-                "snapshot_id": snapshot_id,
-                "nodes": [],
-                "edges": [],
-                "truncated": True,
-                "total_nodes": total_nodes,
-            }
-
-        node_rows = session.execute(
-            select(GraphNode).where(GraphNode.snapshot_id == snapshot_id)
-        ).scalars().all()
-        edge_rows = session.execute(
-            select(GraphEdge).where(GraphEdge.snapshot_id == snapshot_id)
-        ).scalars().all()
-
-    nodes, edges = _serialize_graph(node_rows, edge_rows)
-    return {
-        "snapshot_id": snapshot_id,
-        "nodes": nodes,
-        "edges": edges,
-        "truncated": False,
-        "total_nodes": total_nodes,
-    }
+# IMPORTANT: route ORDER matters here. FastAPI matches in source order,
+# so the static ``/focus`` route MUST come before the ``/{snapshot_id}``
+# parametrised route — otherwise ``GET /focus`` is routed to
+# ``get_graph`` which tries to parse the literal string "focus" as
+# ``snapshot_id: int`` and rejects it with 422 Unprocessable Entity.
+# (Yes, we hit this bug on the first /lineage call against Transcend.)
 
 
 @router.get(
@@ -300,6 +256,58 @@ def get_focused_graph(
         "nodes": nodes,
         "edges": edges,
         "capped": capped,
+    }
+
+
+@router.get("/{snapshot_id}", status_code=status.HTTP_200_OK, response_model=GraphResponse)
+def get_graph(snapshot_id: int) -> Dict[str, Any]:
+    """Return the full structural graph for a snapshot, or a truncation marker.
+
+    For graphs at or below ``FULL_GRAPH_NODE_CAP`` nodes the response is
+    the full set of nodes + edges (matches the pre-v1.17 behaviour so
+    the demo and small customers see no UX change). Above the cap we
+    return ``{ truncated: true, total_nodes: N, nodes: [], edges: [] }``
+    and the frontend switches to the focus-picker flow rather than
+    locking up the browser.
+    """
+
+    with Session(bind=engine) as session:
+        # Cheap pre-flight count first. With the
+        # ``ix_graph_node_snapshot`` index this is sub-millisecond even
+        # on 337k-node extracts; doing it before the bulk fetch saves
+        # us from materialising millions of rows we'd then discard.
+        total_nodes = int(
+            session.execute(
+                select(func.count())
+                .select_from(GraphNode)
+                .where(GraphNode.snapshot_id == snapshot_id)
+            ).scalar_one()
+            or 0
+        )
+
+        if total_nodes > FULL_GRAPH_NODE_CAP:
+            return {
+                "snapshot_id": snapshot_id,
+                "nodes": [],
+                "edges": [],
+                "truncated": True,
+                "total_nodes": total_nodes,
+            }
+
+        node_rows = session.execute(
+            select(GraphNode).where(GraphNode.snapshot_id == snapshot_id)
+        ).scalars().all()
+        edge_rows = session.execute(
+            select(GraphEdge).where(GraphEdge.snapshot_id == snapshot_id)
+        ).scalars().all()
+
+    nodes, edges = _serialize_graph(node_rows, edge_rows)
+    return {
+        "snapshot_id": snapshot_id,
+        "nodes": nodes,
+        "edges": edges,
+        "truncated": False,
+        "total_nodes": total_nodes,
     }
 
 

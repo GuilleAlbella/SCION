@@ -39,6 +39,13 @@ from app.diff.diff_models import ChangeEvent
 # would be 7–14 and would represent weekly cadence.
 DEFAULT_WINDOW = 3
 
+# Cap on history depth (most recent N snapshots scanned). Same motivation
+# as the cochange cap: at Transcend scale the un-capped scan over
+# change_event made the Intelligence page hang. 20 covers a few months
+# of weekly-import history, which is plenty for a "recent trajectory"
+# view; older data wouldn't change the trend anyway.
+DEFAULT_MAX_HISTORY_SNAPSHOTS = 20
+
 
 @dataclass
 class VolatilityPoint:
@@ -77,32 +84,59 @@ def _classify_trend(delta_pct: float, epsilon: float = 5.0) -> str:
 
 def compute_schema_volatility_trend(
     window: int = DEFAULT_WINDOW,
+    max_history_snapshots: int = DEFAULT_MAX_HISTORY_SNAPSHOTS,
 ) -> List[SchemaVolatilityTrend]:
-    """Return rolling volatility per schema across all snapshots.
+    """Return rolling volatility per schema across the recent history.
 
     Algorithm:
-      1. Load all snapshots in order + their schema→table counts.
-      2. Load all change events indexed by (schema, snapshot_to).
-      3. For each schema × snapshot_t, compute:
+      1. Identify the ``max_history_snapshots`` most recent snapshots —
+         this is the universe scanned for changes. Anything older is
+         excluded so the function stays bounded at production scale.
+      2. Load schema→table counts for those snapshots.
+      3. Load change events for those snapshots, indexed by
+         (schema, snapshot_to).
+      4. For each schema × snapshot_t in scope, compute:
            numerator   = distinct objects in this schema that changed
                          in snapshots (t-window+1 .. t)
            denominator = # of objects in this schema AT snapshot t
            volatility  = num / den
-      4. Emit the full series plus the delta between the last and
+      5. Emit the per-schema series plus the delta between the last and
          second-to-last points.
     """
     # ── 1. Snapshot order + per-schema object counts per snapshot ──
+    # Restricted to the most-recent ``max_history_snapshots`` so this
+    # never tries to walk every historical snapshot at Transcend scale.
     with Session(bind=engine) as session:
+        recent_snapshot_ids = [
+            int(s) for s in session.execute(
+                select(SchemaSnapshot.snapshot_id)
+                .distinct()
+                .order_by(SchemaSnapshot.snapshot_id.desc())
+                .limit(max_history_snapshots)
+            ).scalars().all()
+        ]
+        if not recent_snapshot_ids:
+            return []
+
         schema_rows = session.execute(
             select(
                 SchemaSnapshot.snapshot_id,
                 SchemaSnapshot.schema_id,
                 SchemaSnapshot.schema_name,
             )
+            .where(SchemaSnapshot.snapshot_id.in_(recent_snapshot_ids))
         ).all()
-        table_rows = session.execute(
-            select(TableSnapshot.schema_id)
-        ).all()
+        # Limit table_rows to the recent-snapshot scope by joining
+        # against the same schema_ids — keeps memory bounded for
+        # Transcend-scale ``table_snapshot`` (240k+ rows total).
+        scoped_schema_ids = [int(sid) for _sn, sid, _name in schema_rows]
+        if scoped_schema_ids:
+            table_rows = session.execute(
+                select(TableSnapshot.schema_id)
+                .where(TableSnapshot.schema_id.in_(scoped_schema_ids))
+            ).all()
+        else:
+            table_rows = []
 
     # Build schema_id -> schema_name and (snapshot, schema) -> count
     counts: Dict[Tuple[int, str], int] = {}
@@ -125,7 +159,10 @@ def compute_schema_volatility_trend(
     # ── 2. change_event indexed by (schema, snapshot_to) ──
     # We dedupe objects within a snapshot so a table with many column
     # changes still counts as one "object changed", matching the intuition
-    # of "surface area touched".
+    # of "surface area touched". Scoped to the recent snapshot window to
+    # avoid scanning the whole change_event table at Transcend scale —
+    # the (snapshot_from, snapshot_to) index added in v1.15.00 makes
+    # the IN-clause a fast index seek.
     with Session(bind=engine) as session:
         change_rows = session.execute(
             select(
@@ -133,6 +170,7 @@ def compute_schema_volatility_trend(
                 ChangeEvent.object_identifier,
                 ChangeEvent.object_type,
             )
+            .where(ChangeEvent.snapshot_to.in_(recent_snapshot_ids))
         ).all()
 
     changed_by: Dict[Tuple[str, int], set[str]] = {}

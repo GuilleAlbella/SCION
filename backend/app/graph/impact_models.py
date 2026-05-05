@@ -85,3 +85,41 @@ class ChangeImpactSummary(Base):
     __table_args__ = (
         Index("ix_change_impact_summary_snapshot", "snapshot_id"),
     )
+
+
+class ProactiveAlert(Base):
+    """Pre-computed structural alerts for the /alerts page (v1.19+).
+
+    The /alerts endpoint surfaces three structural checks (broken
+    lineage, orphan objects, hub-node changes). Until v1.19 these
+    walked all graph_node + graph_edge rows for the snapshot on every
+    request — a 337k-node Transcend extract froze the page. We now
+    compute them once during post-ingest (see
+    ``app/graph/proactive_alerts.py``) and the endpoint reads indexed
+    rows.
+
+    Idempotent: re-running ``persist_proactive_alerts`` for the same
+    snapshot replaces the rows instead of compounding them. Each
+    snapshot's alerts live independently — there's no cross-snapshot
+    state to manage.
+    """
+
+    __tablename__ = "proactive_alert"
+
+    alert_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
+    snapshot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    alert_type: Mapped[str] = mapped_column(String, nullable=False)
+    severity: Mapped[str] = mapped_column(String, nullable=False)
+    message: Mapped[str] = mapped_column(String, nullable=False)
+    object_identifier: Mapped[str] = mapped_column(String, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        Index("ix_proactive_alert_snapshot", "snapshot_id"),
+    )

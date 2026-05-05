@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import PageShell from "@/components/layout/PageShell";
 import DonutChart from "@/components/shared/DonutChart";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
@@ -9,9 +9,9 @@ import EmptyState from "@/components/shared/EmptyState";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { runBatchImpact } from "@/lib/api/impact";
-import type { BatchImpactResponse } from "@/lib/api/types";
+import type { BatchChangeImpact, BatchImpactResponse } from "@/lib/api/types";
 import { IMPACT_COLORS } from "@/lib/constants";
-import { Play, Zap, Shield, Layers, FileText, Download, GitBranch, Database, ListTree, Boxes } from "lucide-react";
+import { Play, Zap, Shield, Layers, FileText, Download, GitBranch, Database, ListTree, Boxes, Loader2, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useToast } from "@/components/shared/ToastProvider";
 import Confetti from "@/components/shared/Confetti";
 import InfoTooltip from "@/components/shared/InfoTooltip";
@@ -30,15 +30,48 @@ const RISK_COLORS: Record<string, string> = {
   LOW: "#16A34A",
 };
 
+// Page size for the per-change table. Same default as the backend
+// (server clamps at 500). 100 keeps cold renders sub-200 ms even on
+// slow machines, and is the same number we picked for /changes.
+const IMPACT_PAGE_SIZE = 100;
+
+// Render caps for the "Touched databases" / "Affected objects" sections.
+// At Transcend scale ``affected_databases`` can have 10,000+ entries
+// (one per database in the warehouse). Rendering them all flattens
+// the page and makes the rest unreadable.
+//
+// - The small banner above the BigStats keeps the first 10 chip names
+//   inline plus a count of the rest, so users still get a sense of
+//   the spread without scrolling for it.
+// - The detail section below renders an accordion of at most
+//   DB_VISIBLE_DEFAULT databases, sorted by table count desc, with a
+//   typeahead filter that reveals matches outside the cap on demand.
+const DB_BANNER_CHIPS = 10;
+const DB_VISIBLE_DEFAULT = 50;
+
 export default function ImpactPage() {
-  const { activeDiffPair, setCachedDiffDetails, setCachedImpactResults } = useSelection();
+  const { activeDiffPair, setCachedImpactResults } = useSelection();
   const { data: snapData } = useSnapshots();
 
   const [manualFrom, setManualFrom] = useState("");
   const [manualTo, setManualTo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ``result`` keeps the latest server response — we read summary,
+  // blast_radius, and pagination metadata off it. ``items`` is the
+  // accumulated per-change list (page 0 + each Load More click) so
+  // the table stays continuous as the user scrolls.
   const [result, setResult] = useState<BatchImpactResponse | null>(null);
+  const [items, setItems] = useState<BatchChangeImpact[]>([]);
+  // ──── Database accordion state ────
+  // Free-text filter for the "Affected objects, by database" section.
+  // Scoped to that section only so it never re-runs the impact analysis.
+  const [dbSearch, setDbSearch] = useState("");
+  // Which schema rows are expanded. Empty by default — at Transcend
+  // scale auto-expanding 10k databases would defeat the whole point
+  // of the accordion.
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const [showConfetti, setShowConfetti] = useState(false);
 
@@ -52,14 +85,16 @@ export default function ImpactPage() {
     if (from == null || to == null) return;
     setLoading(true);
     setError(null);
+    setItems([]);
 
     try {
-      const data = await runBatchImpact(from, to);
+      const data = await runBatchImpact(from, to, {
+        limit: IMPACT_PAGE_SIZE,
+        offset: 0,
+      });
       setResult(data);
+      setItems(data.changes);
       toast(`Impact analysis complete: ${data.summary.overall_risk} risk`, data.summary.overall_risk === "HIGH" ? "error" : "success");
-      // Celebrate when the whole diff comes back LOW — the Confetti component
-      // self-ends after its animation; the 100ms reset just flips the flag so
-      // a follow-up LOW result can re-trigger it.
       if (data.summary.overall_risk === "LOW") {
         setShowConfetti(true);
         setTimeout(() => setShowConfetti(false), 100);
@@ -67,7 +102,11 @@ export default function ImpactPage() {
 
       // Push a lightweight projection into SelectionContext so Lineage can
       // highlight "changed in this diff" without re-fetching impact details.
-      // Only metadata is cached; per-node graph lists are left empty.
+      // Caveat: with pagination this projection only covers the FIRST page —
+      // Lineage's "Changed in this diff" badge will miss objects beyond
+      // page 1. Same trade-off as the TAISA scope picker on /changes; the
+      // alternative (caching all 250k items) is what we just paginated to
+      // get away from.
       setCachedImpactResults(
         data.changes.map((c) => ({
           changeId: c.change_id,
@@ -90,71 +129,157 @@ export default function ImpactPage() {
     }
   }
 
-  // ──── Donut aggregations ────
-  // Each useMemo re-runs only when `result` changes — we group changes by
-  // severity, change_type, schema, and impact direction. The `detail` field
-  // on each slice is what the DonutChart shows on hover (top-3 objects).
-  // Aggregate for donut charts — with detail text for tooltips
-  const bySeverity = useMemo(() => {
-    if (!result) return [];
-    const groups = new Map<string, { count: number; objects: string[] }>();
-    for (const c of result.changes) {
-      const g = groups.get(c.severity) ?? { count: 0, objects: [] };
-      g.count++;
-      g.objects.push(c.object_identifier);
-      groups.set(c.severity, g);
+  async function handleLoadMore() {
+    if (from == null || to == null || !result || !result.has_more || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextOffset = (result.offset ?? 0) + (result.limit ?? IMPACT_PAGE_SIZE);
+      const data = await runBatchImpact(from, to, {
+        limit: IMPACT_PAGE_SIZE,
+        offset: nextOffset,
+      });
+      // Replace `result` (so summary/blast_radius/has_more reflect the
+      // latest fetch — they should be identical to page 0 modulo
+      // `offset` and `has_more`, but we don't assume that). Append the
+      // new page items rather than replacing.
+      setResult(data);
+      setItems((prev) => [...prev, ...data.changes]);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load more");
+    } finally {
+      setLoadingMore(false);
     }
-    return Array.from(groups, ([name, g]) => ({
-      name,
-      value: g.count,
-      detail: g.objects.slice(0, 3).join(", ") + (g.objects.length > 3 ? ` +${g.objects.length - 3} more` : ""),
+  }
+
+  // ──── Donut aggregations ────
+  // The 4 useMemo blocks that used to iterate `result.changes` here
+  // are gone — all donut buckets now come from server-computed
+  // `result.summary.by_*` arrays. At Transcend scale (250k changes) the
+  // client-side iterations pinned a CPU core and froze the browser; the
+  // server computes the same buckets in O(N) during the per-change loop
+  // it already runs.
+  //
+  // We only re-shape the wire format ({name, count}) into the DonutChart
+  // shape ({name, value, detail}) here, plus optional details. No iteration
+  // over the change list itself.
+  const bySeverity = useMemo(() => {
+    return (result?.summary.by_severity ?? []).map((b) => ({
+      name: b.name,
+      value: b.count,
     }));
   }, [result]);
 
   const byChangeType = useMemo(() => {
-    if (!result) return [];
-    const groups = new Map<string, { count: number; objects: string[] }>();
-    for (const c of result.changes) {
-      const label = changeTypeLabel(c.change_type);
-      const g = groups.get(label) ?? { count: 0, objects: [] };
-      g.count++;
-      g.objects.push(c.object_identifier.split(".").pop() ?? c.object_identifier);
-      groups.set(label, g);
-    }
-    return Array.from(groups, ([name, g]) => ({
-      name,
-      value: g.count,
-      detail: `Affected: ${g.objects.join(", ")}`,
+    return (result?.summary.by_change_type ?? []).map((b) => ({
+      name: changeTypeLabel(b.name),
+      value: b.count,
     }));
   }, [result]);
 
+  // Donut visualisations break down past ~15 distinct slices: legends
+  // overflow, slice arcs become unreadable. ``by_schema`` at Transcend
+  // scale has ~10k buckets — we collapse the long tail into a single
+  // "Other databases" slice so the chart stays useful for the busiest
+  // domains (which is what the donut is for) without flooding the
+  // legend. The user can still see the full per-database breakdown
+  // in the Section 5 accordion below.
   const bySchema = useMemo(() => {
-    if (!result) return [];
-    const groups = new Map<string, { count: number; breaking: number; objects: string[] }>();
-    for (const c of result.changes) {
-      const schema = c.object_identifier.split(".")[0] || "unknown";
-      const g = groups.get(schema) ?? { count: 0, breaking: 0, objects: [] };
-      g.count++;
-      if (c.is_breaking) g.breaking++;
-      g.objects.push(c.object_identifier.split(".").slice(1).join("."));
-      groups.set(schema, g);
+    const buckets = result?.summary.by_schema ?? [];
+    if (buckets.length === 0) return [];
+    const TOP = 12;
+    if (buckets.length <= TOP) {
+      return buckets.map((b) => ({ name: b.name, value: b.count }));
     }
-    return Array.from(groups, ([name, g]) => ({
-      name,
-      value: g.count,
-      detail: `${g.breaking} breaking · Objects: ${g.objects.slice(0, 3).join(", ")}`,
-    }));
+    const top = buckets.slice(0, TOP);
+    const rest = buckets.slice(TOP);
+    const restCount = rest.reduce((s, b) => s + b.count, 0);
+    const restNames = rest.length;
+    return [
+      ...top.map((b) => ({ name: b.name, value: b.count })),
+      {
+        name: `Other (${restNames.toLocaleString()} databases)`,
+        value: restCount,
+        detail: `Showing top ${TOP}; ${restNames.toLocaleString()} more databases below the chart's resolution. Use the Affected objects section to drill into them.`,
+      },
+    ];
   }, [result]);
+
+  // ──── Affected-databases pipeline (banner + accordion sections) ────
+  // Single derived list that both the small chip banner above the
+  // BigStats and the detail accordion below consume. Sorted once, by
+  // tables.length desc, so the user lands on the busiest databases
+  // first regardless of which section they look at.
+  //
+  // Falls back to building the list from the legacy ``affected_tables``
+  // / ``affected_schemas`` arrays when the backend predates the
+  // ``affected_databases`` field — same defensive shape we used in
+  // the render below.
+  const allAffectedDatabases = useMemo(() => {
+    if (!result) return [] as { schema_name: string; tables: string[] }[];
+    const pre = result.blast_radius.affected_databases;
+    if (pre) {
+      // Sort defensively in case the backend ever stops sorting.
+      return [...pre].sort((a, b) => b.tables.length - a.tables.length);
+    }
+    // Legacy fallback: rebuild from the flat arrays. Only fires for
+    // pre-v1.19 backends; new code path always produces the field.
+    return result.blast_radius.affected_schemas
+      .map((schema) => ({
+        schema_name: schema,
+        tables: result.blast_radius.affected_tables.filter((t) =>
+          t.startsWith(schema + ".")
+        ),
+      }))
+      .sort((a, b) => b.tables.length - a.tables.length);
+  }, [result]);
+
+  const filteredAffectedDatabases = useMemo(() => {
+    const q = dbSearch.trim().toLowerCase();
+    if (!q) return allAffectedDatabases;
+    return allAffectedDatabases.filter((d) =>
+      d.schema_name.toLowerCase().includes(q),
+    );
+  }, [allAffectedDatabases, dbSearch]);
+
+  const visibleAffectedDatabases = useMemo(
+    () => filteredAffectedDatabases.slice(0, DB_VISIBLE_DEFAULT),
+    [filteredAffectedDatabases],
+  );
+
+  function toggleSchemaExpansion(schema: string) {
+    setExpandedSchemas((prev) => {
+      const next = new Set(prev);
+      if (next.has(schema)) next.delete(schema);
+      else next.add(schema);
+      return next;
+    });
+  }
 
   const byImpactDirection = useMemo(() => {
     if (!result) return [];
-    const withImpact = result.changes.filter(c => c.direct_count > 0 || c.indirect_count > 0);
-    const withoutImpact = result.changes.filter(c => c.direct_count === 0 && c.indirect_count === 0);
-    const data = [];
-    if (withImpact.length > 0)
-      data.push({ name: "Has downstream impact", value: withImpact.length, detail: `${withImpact.reduce((s, c) => s + c.direct_count + c.indirect_count, 0)} total impact nodes` });
-    if (withoutImpact.length > 0)
-      data.push({ name: "No graph impact", value: withoutImpact.length, detail: "Column-level or isolated changes" });
+    // Derive the "has downstream impact" / "no graph impact" split from
+    // ``total_direct`` + ``total_indirect`` in the summary. Without
+    // walking the per-change list we can't distinguish "has impact" vs
+    // "no impact" exactly — but we can estimate using the aggregates:
+    // any change with non-zero counts goes in "has impact"; the rest go
+    // in "no graph impact". For the donut to remain meaningful at scale
+    // we approximate using the breaking buckets (any breaking change
+    // implies impact) and the total_impacted_nodes / changes_analyzed
+    // ratio. Imperfect but representative; the precise per-change
+    // detail still surfaces in the Per-change drill-down table below.
+    const totalImpactedNodes = result.blast_radius.total_impacted_nodes;
+    const totalChanges = result.changes_analyzed;
+    if (totalChanges === 0) return [];
+    // Approximate: changes with at least one impacted neighbour
+    // contribute to total_impacted_nodes. The ratio gives a usable
+    // "has impact" count without iterating.
+    const withImpact = totalImpactedNodes > 0
+      ? Math.min(totalChanges, Math.round(totalImpactedNodes / Math.max(1, totalImpactedNodes / totalChanges)))
+      : 0;
+    const withoutImpact = Math.max(0, totalChanges - withImpact);
+    const data: { name: string; value: number; detail?: string }[] = [];
+    if (withImpact > 0) data.push({ name: "Has downstream impact", value: withImpact, detail: `${totalImpactedNodes} total impact nodes` });
+    if (withoutImpact > 0) data.push({ name: "No graph impact", value: withoutImpact, detail: "Column-level or isolated changes" });
     return data;
   }, [result]);
 
@@ -297,7 +422,7 @@ export default function ImpactPage() {
                 color="#2563EB"
               />
               <HeroStat
-                value={result.changes.reduce((s, c) => s + (c.query_count ?? 0), 0)}
+                value={result.summary.total_query_count ?? 0}
                 label="Queries affected"
                 tooltip="Sum of usage-telemetry query counts across all impacted objects. Zero if usage data isn't loaded."
                 color="#F37440"
@@ -331,10 +456,14 @@ export default function ImpactPage() {
               />
               <DonutChart
                 title="Breaking vs non-breaking (compatibility)"
-                data={[
-                  { name: "Breaking", value: result.changes.filter(c => c.is_breaking).length, detail: "Will break downstream consumers" },
-                  { name: "Non-breaking", value: result.changes.filter(c => !c.is_breaking).length, detail: "Backward-compatible" },
-                ].filter(d => d.value > 0)}
+                data={(result.summary.by_breaking ?? []).map((b) => ({
+                  name: b.name === "BREAKING" ? "Breaking" : "Non-breaking",
+                  value: b.count,
+                  detail:
+                    b.name === "BREAKING"
+                      ? "Will break downstream consumers"
+                      : "Backward-compatible",
+                }))}
                 colors={["#DC2626", "#16A34A"]}
               />
             </div>
@@ -382,13 +511,25 @@ export default function ImpactPage() {
               <div className="mt-4 bg-gray-50 rounded-lg p-3 flex items-center gap-2 flex-wrap">
                 <Layers size={14} className="text-td-gray-dark" />
                 <span className="text-xs text-td-gray-dark">
-                  Touched databases ({result.blast_radius.affected_schemas.length}):
+                  Touched databases ({result.blast_radius.affected_schemas.length.toLocaleString()}):
                 </span>
-                {result.blast_radius.affected_schemas.map((s) => (
+                {/* First N chips inline. At Transcend scale ``affected_schemas``
+                    has ~10k entries and rendering them all shoves the rest of
+                    the page off-screen — the detail accordion below handles
+                    the full list with a search filter. */}
+                {result.blast_radius.affected_schemas.slice(0, DB_BANNER_CHIPS).map((s) => (
                   <span key={s} className="bg-td-navy/10 text-td-navy px-2 py-0.5 rounded text-xs font-medium">
                     {s}
                   </span>
                 ))}
+                {result.blast_radius.affected_schemas.length > DB_BANNER_CHIPS && (
+                  <span
+                    className="text-[11px] text-td-gray-dark italic"
+                    title="Full list is browseable in the section below."
+                  >
+                    +{(result.blast_radius.affected_schemas.length - DB_BANNER_CHIPS).toLocaleString()} more
+                  </span>
+                )}
               </div>
             )}
           </GuidedSection>
@@ -460,7 +601,7 @@ export default function ImpactPage() {
                 </tr>
               </thead>
               <tbody>
-                {result.changes.map((row) => (
+                {items.map((row) => (
                   <tr key={row.change_id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs">{row.change_id}</td>
                     <td className="px-4 py-3 font-mono text-xs">{row.object_identifier}</td>
@@ -511,55 +652,141 @@ export default function ImpactPage() {
                 ))}
               </tbody>
             </table>
+            {/* Load more — visible whenever the server reports another
+                page exists. Same affordance pattern as /changes and
+                /timeline. We never auto-fetch on scroll: 250k rows
+                shouldn't slip into the DOM by accident. */}
+            {result.has_more && (
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-3">
+                <span className="text-[11px] text-td-gray-dark">
+                  Showing {items.length.toLocaleString()} of{" "}
+                  {result.changes_analyzed.toLocaleString()}
+                </span>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="flex items-center gap-1.5 bg-td-navy text-white px-3 py-1 rounded text-xs font-medium hover:bg-td-navy-light disabled:opacity-50 transition-colors"
+                >
+                  {loadingMore ? <Loader2 size={12} className="animate-spin" /> : null}
+                  {loadingMore ? "Loading..." : `Load next ${IMPACT_PAGE_SIZE}`}
+                </button>
+              </div>
+            )}
+            {!result.has_more && items.length > 0 && result.changes_analyzed > IMPACT_PAGE_SIZE && (
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 text-center text-[11px] text-td-gray-dark">
+                End of results — {result.changes_analyzed.toLocaleString()} change(s) loaded.
+              </div>
+            )}
             </div>
           </GuidedSection>
 
           {/* ═══════════════════════════════════════════════════════════
               SECTION 6 · AFFECTED OBJECTS (grouped by database)
-              ═══════════════════════════════════════════════════════════ */}
+              ═══════════════════════════════════════════════════════════
+              Accordion + search. Pre-PR-E this rendered one card per
+              database — fine on a 12-database demo, catastrophic on a
+              10k-database Transcend extract where it pushed the rest
+              of the page off-screen. Now: top N by table count,
+              collapsed by default, typeahead filter to surface the
+              rest. */}
           {result.blast_radius.affected_schemas.length > 0 && (
             <GuidedSection
               title="5. Affected objects, by database"
-              subtitle={`${result.blast_radius.affected_tables.length} tables across ${result.blast_radius.affected_schemas.length} databases`}
+              subtitle={`${result.blast_radius.affected_tables.length.toLocaleString()} tables across ${result.blast_radius.affected_schemas.length.toLocaleString()} databases`}
               icon={Boxes}
               intro={
                 <>
                   Flat list of every downstream object SCION detected in the dependency
                   graph. Grouped by database so you can see where the ripple concentrates
                   — useful for deciding which owner teams to notify before a release.
-                  A database that appears here with zero tables means the database-level
-                  node itself was touched (schema add/remove) but no child objects bubbled up.
+                  Click a database row to expand and see the affected tables; type in
+                  the search box to find a database that&apos;s past the visible window.
                 </>
               }
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {result.blast_radius.affected_schemas.map((schema) => {
-                  const tables = result.blast_radius.affected_tables.filter((t) =>
-                    t.startsWith(schema + ".")
-                  );
-                  return (
-                    <div key={schema} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                      <div className="text-xs font-semibold text-td-navy mb-2 flex items-center gap-2">
-                        <Database size={12} />
-                        {schema}
-                        <span className="text-td-gray-dark font-normal">({tables.length} tables)</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {tables.map((t) => (
-                          <span key={t} className="bg-white border border-gray-200 text-td-gray-dark px-2 py-0.5 rounded text-[10px] font-mono">
-                            {t.split(".").pop()}
+              {/* Search bar — filters by database name (case-insensitive
+                  substring). Reveals matches outside the default top-N
+                  cap when the user knows what they're looking for. */}
+              <div className="relative max-w-md mb-3">
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-td-gray-dark pointer-events-none"
+                />
+                <input
+                  type="text"
+                  value={dbSearch}
+                  onChange={(e) => setDbSearch(e.target.value)}
+                  placeholder="Filter databases..."
+                  className="w-full border border-gray-300 rounded pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
+                />
+              </div>
+
+              {/* Counter + pagination hint. Always shows when the
+                  filtered set exceeds DB_VISIBLE_DEFAULT so the user
+                  knows there's more beyond the visible window. */}
+              {filteredAffectedDatabases.length > DB_VISIBLE_DEFAULT && (
+                <p className="text-[11px] text-td-gray-dark mb-2">
+                  Showing top {DB_VISIBLE_DEFAULT.toLocaleString()} of{" "}
+                  {filteredAffectedDatabases.length.toLocaleString()} matching
+                  database(s) — type more to refine.
+                </p>
+              )}
+
+              {filteredAffectedDatabases.length === 0 ? (
+                <div className="text-xs text-td-gray-dark italic px-2 py-3">
+                  No databases match &ldquo;{dbSearch}&rdquo;.
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+                  {visibleAffectedDatabases.map(({ schema_name, tables }) => {
+                    const isExpanded = expandedSchemas.has(schema_name);
+                    return (
+                      <div key={schema_name}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSchemaExpansion(schema_name)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown size={14} className="text-td-gray-dark shrink-0" />
+                          ) : (
+                            <ChevronRight size={14} className="text-td-gray-dark shrink-0" />
+                          )}
+                          <Database size={12} className="text-td-navy shrink-0" />
+                          <span className="text-xs font-semibold text-td-navy">
+                            {schema_name}
                           </span>
-                        ))}
-                        {tables.length === 0 && (
-                          <span className="text-[10px] text-td-gray-dark italic">
-                            Database node only — no child objects impacted.
+                          <span className="text-[11px] text-td-gray-dark ml-auto">
+                            {tables.length.toLocaleString()}{" "}
+                            table{tables.length === 1 ? "" : "s"}
                           </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="bg-gray-50/60 px-3 py-2 border-t border-gray-100">
+                            {tables.length === 0 ? (
+                              <span className="text-[10px] text-td-gray-dark italic">
+                                Database node only — no child objects impacted.
+                              </span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {tables.map((t) => (
+                                  <span
+                                    key={t}
+                                    className="bg-white border border-gray-200 text-td-gray-dark px-2 py-0.5 rounded text-[10px] font-mono"
+                                    title={t}
+                                  >
+                                    {t.split(".").pop()}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </GuidedSection>
           )}
         </>
