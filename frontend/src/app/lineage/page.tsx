@@ -1,5 +1,25 @@
 "use client";
 
+// Data Lineage page — focused subgraph view around a selected object.
+//
+// Architecture (changed in v1.17):
+//
+// Previously this page fetched the entire system graph for the active
+// snapshot via ``useGraph(snapshotId)`` and then carved the 5-lane
+// subgraph (upstream-2 → upstream-1 → CENTER → downstream-1 →
+// downstream-2) in the browser. That was fine on a 150-object demo
+// but locked up Chrome on a 337k-node Transcend extract — both
+// during the wire transfer and during dagre's O(V³) layout.
+//
+// Now: the page never loads the full graph. It uses
+// ``<ObjectAutocomplete source="graph">`` to let the user search the
+// snapshot's catalog server-side, then calls ``GET /graph/focus`` to
+// fetch ONLY the BFS subgraph (default 2 hops, capped at 200 nodes).
+// The 5-lane lineage layout is still computed in the browser, but
+// from a much smaller input. ``capped`` from the server tells us
+// when BFS ran out of room, so the UI can suggest widening the
+// search.
+
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -19,21 +39,32 @@ import KpiCard from "@/components/shared/KpiCard";
 import EmptyState from "@/components/shared/EmptyState";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { useGraph } from "@/lib/hooks/useGraph";
-import { INTERNAL_OBJECT_NAMES } from "@/lib/constants";
-import type { GraphNode as GN } from "@/lib/api/types";
+import { getFocusedGraph } from "@/lib/api/graph";
+import type {
+  FocusedGraphResponse,
+  GraphNode as GN,
+} from "@/lib/api/types";
 import { changeTypeLabel } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
-import ObjectPicker from "@/components/shared/ObjectPicker";
-import { Search, ArrowUp, ArrowDown, Info, Network, GitBranch, Layers } from "lucide-react";
+import { ArrowUp, ArrowDown, Info, Network, GitBranch, Layers } from "lucide-react";
 
 const NODE_W = 220;
 const NODE_H = 60;
 
+// Lineage walks 2 hops in each direction by default — enough to spot
+// "is this fed by an external table?" without overloading the layout.
+// Caller can extend later if we add a hops control to the UI.
+const LINEAGE_HOPS = 2;
+// Local nodes cap. The backend hard-caps at 1000; 300 covers any sane
+// lineage neighbourhood while leaving headroom for the pathological
+// "table feeds 100 reports" case before we'd want to surface a hint.
+const LINEAGE_MAX_NODES = 300;
+
 /* ---- Custom nodes for the lineage subgraph ---- */
-function UpstreamNode({ data }: { data: { label: string; type: string; metrics?: any } }) {
+function UpstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
     <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W }}>
       <Handle type="target" position={Position.Top} style={{ background: "#DC2626" }} />
@@ -45,7 +76,7 @@ function UpstreamNode({ data }: { data: { label: string; type: string; metrics?:
   );
 }
 
-function CenterNode({ data }: { data: { label: string; type: string; metrics?: any } }) {
+function CenterNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
     <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#2563EB" }} />
@@ -57,7 +88,7 @@ function CenterNode({ data }: { data: { label: string; type: string; metrics?: a
   );
 }
 
-function DownstreamNode({ data }: { data: { label: string; type: string; metrics?: any } }) {
+function DownstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
     <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W }}>
       <Handle type="target" position={Position.Top} style={{ background: "#16A34A" }} />
@@ -105,41 +136,33 @@ function LineagePage() {
   const snapshots = snapData?.snapshots ?? [];
 
   // Priority for which snapshot to analyse, highest wins:
-  //   1. URL `?snapshot=X` (deep-link from Changes/Impact) — user's explicit intent
-  //   2. `selectedSnap` (user's manual dropdown pick on this page)
+  //   1. URL `?snapshot=X` (deep-link from Changes/Impact) — explicit intent
+  //   2. `selectedSnap` (manual dropdown pick on this page)
   //   3. `activeDiffPair.snapshotTo` (cross-page SelectionContext fallback)
-  // Previously activeDiffPair took precedence, which silently overrode the
-  // URL param — so clicking "Lineage" for an object in snap #2 would load
-  // snap #10 (whatever diff pair was active) and report the object missing.
   const [selectedSnap, setSelectedSnap] = useState<string>("");
   const snapshotId = selectedSnap
     ? Number(selectedSnap)
     : activeDiffPair?.snapshotTo ?? null;
-  const { data: graphData, error: graphError, isLoading } = useGraph(snapshotId);
 
-  const [selectedObject, setSelectedObject] = useState<string | null>(null);
+  const [selectedObject, setSelectedObject] = useState<string>("");
+  const [focusData, setFocusData] = useState<FocusedGraphResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
   // aren't lineage-level nodes in SCION — only databases / tables / views /
   // procs are. `redirectedFromColumn` captures the original column name so
-  // we can show an info banner explaining the redirection instead of
-  // silently dropping the fragment.
+  // we can show an info banner explaining the redirection.
   const [redirectedFromColumn, setRedirectedFromColumn] = useState<string | null>(null);
 
-  // Quick-link entry point: other pages deep-link here with ?object=X&snapshot=Y
-  // so the user lands with the graph already focused. URL params ALWAYS win —
-  // they represent the user's most recent explicit intent, even if the
-  // cross-page SelectionContext has something different cached.
+  // Quick-link entry: ?object=X&snapshot=Y from other pages. URL params
+  // ALWAYS win because they represent the user's most recent explicit intent.
   const searchParams = useSearchParams();
   useEffect(() => {
     const objectParam = searchParams.get("object");
     const snapshotParam = searchParams.get("snapshot");
     if (objectParam) {
-      // Heuristic: 3+ dot-separated segments → this is a column (or deeper)
-      // and we should focus on the parent table instead. Column-level
-      // changes come from Changes page quick-links; they're legitimate
-      // but not lineage-addressable on their own.
       const parts = objectParam.split(".");
       if (parts.length >= 3) {
         const parentTable = parts.slice(0, 2).join(".");
@@ -154,75 +177,95 @@ function LineagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Build object list from graph (excluding internal). Keep both a plain
-  // string array (legacy uses below) and an enriched `ObjectEntry[]` for
-  // ObjectPicker so it can show per-object type icons.
-  const allObjects = useMemo(() => {
-    if (!graphData) return [];
-    return graphData.nodes
-      .filter((n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? ""))
-      .map((n) => n.object_name)
-      .sort();
-  }, [graphData]);
+  // Fetch the focused subgraph whenever (snapshot, object) changes. We
+  // deliberately do this in a manual effect rather than SWR because the
+  // request is keyed on TWO inputs that change together — using SWR
+  // would mean composing the cache key out of both anyway, and the
+  // payload is small enough that re-fetching on rapid pair changes
+  // isn't a perf concern.
+  useEffect(() => {
+    if (!snapshotId || !selectedObject) {
+      setFocusData(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getFocusedGraph({
+      snapshot_id: snapshotId,
+      root: selectedObject,
+      hops: LINEAGE_HOPS,
+      max_nodes: LINEAGE_MAX_NODES,
+      // Lineage is about data flow, so we follow only FEEDS edges.
+      // DEPENDS_ON edges (e.g. table→database) are structural and
+      // would clutter the picture without adding lineage value.
+      edge_types: "FEEDS",
+    })
+      .then((data) => {
+        if (!cancelled) setFocusData(data);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) {
+          setFocusData(null);
+          setError("Object not found in this snapshot.");
+        } else {
+          setError(err instanceof Error ? err.message : "Failed to load lineage.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshotId, selectedObject]);
 
-  const pickerEntries = useMemo(() => {
-    if (!graphData) return [];
-    return graphData.nodes
-      .filter((n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? ""))
-      .map((n) => ({ name: n.object_name, type: n.object_type }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [graphData]);
-
-  // ──── Lineage subgraph builder ────
-  // This is the core of the page: from the full system graph we carve out
-  // a 5-lane subgraph centered on `selectedObject` — upstream-2, upstream-1,
-  // CENTER, downstream-1, downstream-2. Only FEEDS edges count as data flow;
-  // DEPENDS_ON edges are structural (e.g. table→database) and intentionally
-  // ignored to keep the lineage view about data, not metadata.
-  // Depends on `graphData` (network fetch) and `selectedObject` (user pick).
+  // ──── Build the 5-lane lineage view from the focused subgraph ────
+  // The backend hands us a (capped) BFS neighbourhood; here we tag each
+  // node as upstream / center / downstream based on edge directionality
+  // relative to the root. The original page did the same thing, just over
+  // a much larger candidate set.
   const { nodes, edges, upstreamList, downstreamList, selectedNodeData } = useMemo(() => {
-    if (!graphData || !selectedObject) return { nodes: [] as Node[], edges: [] as Edge[], upstreamList: [] as string[], downstreamList: [] as string[], selectedNodeData: null as GN | null };
+    if (!focusData)
+      return {
+        nodes: [] as Node[],
+        edges: [] as Edge[],
+        upstreamList: [] as string[],
+        downstreamList: [] as string[],
+        selectedNodeData: null as GN | null,
+      };
 
-    const nodeMap = new Map(graphData.nodes.map((n) => [n.node_id, n]));
-    const selectedNode = graphData.nodes.find((n) => n.object_name === selectedObject);
-    if (!selectedNode) return { nodes: [] as Node[], edges: [] as Edge[], upstreamList: [] as string[], downstreamList: [] as string[], selectedNodeData: null as GN | null };
+    const nodeMap = new Map(focusData.nodes.map((n) => [n.node_id, n]));
+    const selectedNode = focusData.nodes.find(
+      (n) => n.object_name === selectedObject || `${n.schema_name}.${n.object_name}` === selectedObject,
+    );
+    if (!selectedNode)
+      return {
+        nodes: [] as Node[],
+        edges: [] as Edge[],
+        upstreamList: [] as string[],
+        downstreamList: [] as string[],
+        selectedNodeData: null as GN | null,
+      };
 
-    // Find upstream: nodes that have an edge TO the selected node (they feed into it)
+    // Upstream = nodes that feed INTO selected (FEEDS edge ends at root).
     const upstreamIds = new Set<string>();
-    for (const e of graphData.edges) {
-      if (e.target === selectedNode.node_id && e.type === "FEEDS") {
-        upstreamIds.add(e.source);
-      }
-    }
-    // Also check nodes that the selected node DEPENDS_ON (database)
-    for (const e of graphData.edges) {
-      if (e.source === selectedNode.node_id && e.type === "DEPENDS_ON") {
-        // Don't show database as upstream — it's structural, not data flow
-      }
-    }
-
-    // Find downstream: nodes that have an edge FROM the selected node (it feeds them)
     const downstreamIds = new Set<string>();
-    for (const e of graphData.edges) {
-      if (e.source === selectedNode.node_id && e.type === "FEEDS") {
-        downstreamIds.add(e.target);
-      }
-    }
-    // Also: nodes where selected is the target of a FEEDS (selected feeds them = they depend on selected)
-    for (const e of graphData.edges) {
-      if (e.target === selectedNode.node_id && e.type === "DEPENDS_ON") {
-        // source DEPENDS_ON selected → selected is upstream of source
-        // But for lineage we show: who consumes our data
-      }
+    for (const e of focusData.edges) {
+      if (e.type !== "FEEDS") continue;
+      if (e.target === selectedNode.node_id) upstreamIds.add(e.source);
+      if (e.source === selectedNode.node_id) downstreamIds.add(e.target);
     }
 
-    // 2nd-level expansion: go one more hop away in each direction so users
-    // see the broader neighbourhood. We skip edges that point back to the
-    // selected node to avoid double-listing it.
-    // 2nd level: nodes that feed into downstream nodes or that upstream feeds from
+    // 2nd-level expansion. The focus call already returned a 2-hop
+    // neighbourhood, so any node that feeds an upstream node (or that
+    // a downstream node feeds) is in the dataset and just needs to
+    // be tagged.
     const upstream2 = new Set<string>();
     for (const uid of upstreamIds) {
-      for (const e of graphData.edges) {
+      for (const e of focusData.edges) {
         if (e.target === uid && e.type === "FEEDS" && e.source !== selectedNode.node_id) {
           upstream2.add(e.source);
         }
@@ -230,65 +273,42 @@ function LineagePage() {
     }
     const downstream2 = new Set<string>();
     for (const did of downstreamIds) {
-      for (const e of graphData.edges) {
+      for (const e of focusData.edges) {
         if (e.source === did && e.type === "FEEDS" && e.target !== selectedNode.node_id) {
           downstream2.add(e.target);
         }
       }
     }
 
-    // Build React Flow nodes in visual order (upstream-2 → upstream-1 →
-    // center → downstream-1 → downstream-2). `added` dedupes since a node
-    // could technically appear in more than one level (e.g. cycles).
     const rfNodes: Node[] = [];
     const rfEdges: Edge[] = [];
     const added = new Set<string>();
 
-    // Upstream level 2
-    for (const id of upstream2) {
+    const pushNode = (id: string, type: "upstream" | "center" | "downstream") => {
       const n = nodeMap.get(id);
-      if (!n || added.has(id)) continue;
+      if (!n || added.has(id)) return;
       added.add(id);
-      rfNodes.push({ id, type: "upstream", data: { label: n.object_name.split(".").pop() ?? n.object_name, type: n.object_type, metrics: n.metrics }, position: { x: 0, y: 0 } });
-    }
+      rfNodes.push({
+        id,
+        type,
+        data: {
+          label: n.object_name.split(".").pop() ?? n.object_name,
+          type: n.object_type,
+          metrics: n.metrics,
+        },
+        position: { x: 0, y: 0 },
+      });
+    };
 
-    // Upstream level 1
-    for (const id of upstreamIds) {
-      const n = nodeMap.get(id);
-      if (!n || added.has(id)) continue;
-      added.add(id);
-      rfNodes.push({ id, type: "upstream", data: { label: n.object_name.split(".").pop() ?? n.object_name, type: n.object_type, metrics: n.metrics }, position: { x: 0, y: 0 } });
-    }
+    upstream2.forEach((id) => pushNode(id, "upstream"));
+    upstreamIds.forEach((id) => pushNode(id, "upstream"));
+    pushNode(selectedNode.node_id, "center");
+    downstreamIds.forEach((id) => pushNode(id, "downstream"));
+    downstream2.forEach((id) => pushNode(id, "downstream"));
 
-    // Center
-    added.add(selectedNode.node_id);
-    rfNodes.push({
-      id: selectedNode.node_id, type: "center",
-      data: { label: selectedNode.object_name.split(".").pop() ?? selectedNode.object_name, type: selectedNode.object_type, metrics: selectedNode.metrics },
-      position: { x: 0, y: 0 },
-    });
-
-    // Downstream level 1
-    for (const id of downstreamIds) {
-      const n = nodeMap.get(id);
-      if (!n || added.has(id)) continue;
-      added.add(id);
-      rfNodes.push({ id, type: "downstream", data: { label: n.object_name.split(".").pop() ?? n.object_name, type: n.object_type, metrics: n.metrics }, position: { x: 0, y: 0 } });
-    }
-
-    // Downstream level 2
-    for (const id of downstream2) {
-      const n = nodeMap.get(id);
-      if (!n || added.has(id)) continue;
-      added.add(id);
-      rfNodes.push({ id, type: "downstream", data: { label: n.object_name.split(".").pop() ?? n.object_name, type: n.object_type, metrics: n.metrics }, position: { x: 0, y: 0 } });
-    }
-
-    // Only emit edges whose BOTH endpoints landed in the subgraph. This
-    // guards against React Flow complaining about dangling edge IDs.
-    // Edges (only FEEDS between nodes in our subgraph)
+    // Only emit edges whose BOTH endpoints landed in the subgraph.
     let ei = 0;
-    for (const e of graphData.edges) {
+    for (const e of focusData.edges) {
       if (e.type !== "FEEDS") continue;
       if (added.has(e.source) && added.has(e.target)) {
         const isUpstream = upstreamIds.has(e.source) || upstream2.has(e.source);
@@ -312,7 +332,7 @@ function LineagePage() {
       downstreamList: [...downstreamIds].map((id) => nodeMap.get(id)?.object_name ?? id),
       selectedNodeData: selectedNode,
     };
-  }, [graphData, selectedObject]);
+  }, [focusData, selectedObject]);
 
   // If the user ran an Impact analysis earlier, cachedImpactResults tells us
   // whether the selected object was part of that diff — used to show the
@@ -322,10 +342,16 @@ function LineagePage() {
     return cachedImpactResults.find((r) => r.objectIdentifier === selectedObject);
   }, [selectedObject, cachedImpactResults]);
 
+  // Click-handler for the upstream/downstream list items: jumps focus to the
+  // clicked object. Wrapped in useCallback so the list rows' inline
+  // `onClick={() => setSelectedObject(name)}` doesn't reallocate every render.
+  const focusOn = useCallback((name: string) => {
+    setSelectedObject(name);
+    setRedirectedFromColumn(null);
+  }, []);
+
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
-      {/* Page-level intro — kept compact because this page is visualisation-
-          driven and the real "sections" only appear after an object is picked. */}
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-4 flex items-start gap-2">
         <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-[11px] text-td-gray-dark leading-relaxed">
@@ -333,17 +359,13 @@ function LineagePage() {
           downstream breaks with it?</strong> and <strong>if a report is wrong, where might
           the bad data come from?</strong> Pick an object below; SCION traces 2 hops in
           each direction and colours the graph so upstream (red) shows data sources and
-          downstream (green) shows data consumers. The dropdown only lists{" "}
-          <strong>databases, tables, views and procedures</strong> — columns aren&apos;t
-          lineage-level objects, so for column-level impact use the Changes page instead.
+          downstream (green) shows data consumers. Search is server-side, so even
+          on a 240k-table extract the picker stays instant.
         </p>
       </div>
 
-      {/* Controls — snapshot dropdown is ALWAYS visible so a user who arrived
-          via deep-link (?object=X&snapshot=Y) can still switch context without
-          losing the selected object. */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 flex-wrap">
           <div>
             <label className="text-xs text-td-gray-dark block mb-1">Snapshot</label>
             <select
@@ -359,39 +381,28 @@ function LineagePage() {
               ))}
             </select>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-[280px]">
             <label className="text-xs text-td-gray-dark block mb-1">
-              <Search size={12} className="inline mr-1" />
               Object of Interest
               <span
                 className="ml-1 text-[10px] text-td-gray-dark font-normal"
-                title="Type to search across all objects, or browse by database in the tree."
+                title="Type to search the snapshot's catalog. Matches schema.object names."
               >
-                — search or drill down
+                — type to search
               </span>
             </label>
-            <ObjectPicker
-              objects={pickerEntries}
+            <ObjectAutocomplete
               value={selectedObject}
               onChange={setSelectedObject}
-              placeholder="Search object or browse by database..."
+              source="graph"
+              snapshotId={snapshotId ?? undefined}
+              placeholder={snapshotId ? "Search object by name..." : "Select a snapshot first..."}
+              disabled={!snapshotId}
             />
           </div>
-          {snapshotId && (
-            <span
-              className="text-xs text-td-gray-dark pb-1 whitespace-nowrap"
-              title="Counts tables, views, procs and database containers. Columns aren't listed because lineage operates at the object level — use the Changes page for column-level detail."
-            >
-              Snapshot #{snapshotId} · {allObjects.length} objects
-            </span>
-          )}
         </div>
 
-        {/* ──── "Redirected from column" info banner ────
-            Fires when we came here via a deep-link pointing at a column
-            (3-part identifier) and auto-resolved to the parent table.
-            Explains the translation so the user doesn't think we silently
-            ignored part of the URL. */}
+        {/* Redirected-from-column info banner */}
         {redirectedFromColumn && selectedObject && (
           <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-start gap-2">
             <svg className="text-emerald-600 shrink-0 mt-0.5" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
@@ -399,39 +410,28 @@ function LineagePage() {
               Original change was on column{" "}
               <strong className="font-mono">{redirectedFromColumn}</strong> — columns aren&apos;t
               lineage-level nodes in SCION, so we&apos;re showing lineage for its parent table{" "}
-              <strong className="font-mono">{selectedObject}</strong>. For column-level impact
-              detail, see the Changes page.
+              <strong className="font-mono">{selectedObject}</strong>.
             </p>
           </div>
         )}
 
-        {/* ──── "Object not found in this snapshot" hint ────
-            Fires when we have a graph loaded AND the user has a pre-selected
-            object (e.g. from a deep-link) that doesn't exist in this
-            particular snapshot. Covers the common case where someone
-            clicks Lineage on a schema/table that was added in a later
-            snapshot or removed in an earlier one. */}
-        {graphData && selectedObject && !allObjects.includes(selectedObject) && (
-          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
-            <svg className="text-amber-500 shrink-0 mt-0.5" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <p className="text-[11px] text-amber-900 leading-relaxed">
-              <strong className="font-mono">{selectedObject}</strong> isn&apos;t present in snapshot
-              #{snapshotId}. It may have been added in a later snapshot or removed in an earlier
-              one. Try switching the Snapshot dropdown above — for example, the snapshot where
-              the change was detected.
-            </p>
+        {focusData?.capped && (
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-900">
+            BFS reached the {LINEAGE_MAX_NODES}-node cap before exhausting {LINEAGE_HOPS} hops.
+            The graph below is the largest readable slice; widen the search via Changes
+            or pick a more specific object to see the full neighbourhood.
           </div>
         )}
       </div>
 
-      {graphError && <ErrorAlert message="Failed to load graph" />}
-      {isLoading && <LoadingSpinner />}
+      {error && <ErrorAlert message={error} />}
+      {loading && <LoadingSpinner />}
 
-      {!snapshotId && !isLoading && (
+      {!snapshotId && !loading && (
         <EmptyState message="Select a snapshot or run a diff first to explore data lineage." />
       )}
 
-      {snapshotId && !selectedObject && !isLoading && (
+      {snapshotId && !selectedObject && !loading && (
         <EmptyState message="Pick an object above to see where its data comes from and where it goes." />
       )}
 
@@ -524,7 +524,7 @@ function LineagePage() {
                 <ul className="space-y-1">
                   {upstreamList.map((name) => (
                     <li key={name} className="text-xs font-mono bg-red-50 rounded px-2 py-1 text-red-800 cursor-pointer hover:bg-red-100"
-                      onClick={() => setSelectedObject(name)}>
+                      onClick={() => focusOn(name)}>
                       {name}
                     </li>
                   ))}
@@ -577,7 +577,7 @@ function LineagePage() {
                 <ul className="space-y-1">
                   {downstreamList.map((name) => (
                     <li key={name} className="text-xs font-mono bg-green-50 rounded px-2 py-1 text-green-800 cursor-pointer hover:bg-green-100"
-                      onClick={() => setSelectedObject(name)}>
+                      onClick={() => focusOn(name)}>
                       {name}
                     </li>
                   ))}
