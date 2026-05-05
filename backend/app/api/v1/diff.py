@@ -18,9 +18,9 @@ Non-responsibilities:
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.engine_registry import get_diff_engine
@@ -149,6 +149,13 @@ class DiffDetailItem(BaseModel):
 
 
 class DiffDetailSummary(BaseModel):
+    """Aggregate counts over the FULL filtered set, not just the page.
+
+    These drive the KPI cards on the Changes page; they must reflect the
+    total impact of the diff (e.g. "12,500 breaking changes") regardless
+    of which page is currently being viewed.
+    """
+
     total: int
     breaking_count: int
     high_count: int
@@ -157,10 +164,29 @@ class DiffDetailSummary(BaseModel):
 
 
 class DiffDetailResponse(BaseModel):
+    """Paginated change-events payload.
+
+    ``changes`` is a single page (sized by ``limit``). ``summary`` is
+    computed over every change matching the same filters, so the UI
+    can render aggregate KPIs without having to walk all pages.
+    """
+
     snapshot_from: int
     snapshot_to: int
     summary: DiffDetailSummary
     changes: List[DiffDetailItem]
+    limit: int
+    offset: int
+    has_more: bool
+
+
+# Server-side defaults / hard caps for diff-details pagination. ``LIMIT_MAX``
+# is the ceiling we'll enforce regardless of what the client sends — large
+# enough that scripts and ad-hoc API consumers can pull a useful chunk in
+# one round trip, small enough that no single response can OOM the browser
+# or the server's response buffer on a 250k-change extract.
+DIFF_DETAILS_LIMIT_DEFAULT = 100
+DIFF_DETAILS_LIMIT_MAX = 1000
 
 
 @router.get(
@@ -168,20 +194,56 @@ class DiffDetailResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     response_model=DiffDetailResponse,
 )
-def get_diff_details(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
-    """Return all change events between two snapshots.
+def get_diff_details(
+    snapshot_from: int,
+    snapshot_to: int,
+    limit: int = Query(DIFF_DETAILS_LIMIT_DEFAULT, ge=1, le=DIFF_DETAILS_LIMIT_MAX),
+    offset: int = Query(0, ge=0),
+    severity: Optional[str] = Query(
+        None,
+        description="HIGH / MEDIUM / LOW. Omit (or pass 'ALL') to skip filtering.",
+    ),
+    is_breaking: Optional[bool] = Query(
+        None,
+        description="When set, restrict to breaking (true) or non-breaking (false) changes.",
+    ),
+    object_q: Optional[str] = Query(
+        None,
+        description="Case-insensitive substring filter against object_identifier.",
+    ),
+) -> Dict[str, Any]:
+    """Return one paginated page of change events between two snapshots.
 
-    If the snapshots are not consecutive, accumulates changes across all
-    intermediate pairs (e.g. 1→3 returns changes from 1→2 + 2→3).
+    History
+    -------
+    Pre-paginated revisions returned every change event in a single
+    response, plus an in-Python summary computed by counting rows. With
+    Rahul's Transcend extract that meant ~250k rows + tens of MB of
+    JSON in one response — the browser couldn't survive parsing it.
+
+    The endpoint now:
+
+    1. Resolves the snapshot range into a list of consecutive pairs (the
+       cumulative-pairs strategy is unchanged: 1→3 is computed as
+       1→2 ∪ 2→3, so non-adjacent jumps still work).
+    2. Auto-materialises any missing pair via ``compute_diff`` *only on
+       the first page* (offset == 0). Subsequent page fetches assume the
+       pair is already persisted; they don't redo the work.
+    3. Builds a single ``WHERE`` clause covering all pairs + the optional
+       severity/breaking/object filters and uses it twice:
+       (a) for a small ``GROUP BY severity, is_breaking`` summary count,
+       (b) for the page itself with ``ORDER BY ... LIMIT ... OFFSET``.
+    4. Returns at most ``limit`` rows plus a ``has_more`` flag so the UI
+       can decide whether to render a "load more" affordance.
+
+    Filter semantics
+    ----------------
+    - ``severity``: case-insensitive; "ALL" or null disables the filter.
+    - ``is_breaking``: tri-state — null means "any", true/false restrict.
+    - ``object_q``: ``ILIKE %q%`` against ``object_identifier``.
     """
 
-    from app.db.models.snapshot import Snapshot
-
-    # ──── Cumulative-pairs strategy ────
-    # If the user requests 1→3 but diffs were only computed for consecutive
-    # pairs (1→2 and 2→3), we walk every intermediate snapshot and union
-    # their change events. This guarantees the answer stays consistent even
-    # when the user jumps across non-adjacent snapshots.
+    # ──── Step 1: resolve snapshots into consecutive pairs ────
     with Session(bind=db_engine) as session:
         all_snaps = session.execute(
             select(Snapshot.snapshot_id)
@@ -192,68 +254,118 @@ def get_diff_details(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
             .order_by(Snapshot.snapshot_id)
         ).scalars().all()
 
-    # Build all consecutive pairs that sit inside the requested range.
-    pairs = []
+    pairs: List[tuple] = []
     if len(all_snaps) >= 2:
         for i in range(len(all_snaps) - 1):
             pairs.append((all_snaps[i], all_snaps[i + 1]))
     else:
-        # Fallback — nothing in between, treat as a direct pair.
         pairs = [(snapshot_from, snapshot_to)]
 
-    # Idempotent safety net: re-running compute_diff on an already-computed
-    # pair is a no-op, but this ensures any missing pair is materialised
-    # before we read the change_event rows below.
-    try:
-        diff_engine = get_diff_engine()
-        for sf, st in pairs:
-            if sf != st:
-                diff_engine.compute_diff(sf, st)
-    except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Diff computation failed for range %d->%d: %s", snapshot_from, snapshot_to, exc)
-
-    # Load all change events across all pairs
-    with Session(bind=db_engine) as session:
-        rows = []
-        for sf, st in pairs:
-            pair_rows = (
-                session.query(ChangeEvent)
-                .filter(
-                    ChangeEvent.snapshot_from == sf,
-                    ChangeEvent.snapshot_to == st,
-                )
-                .all()
+    # ──── Step 2: idempotent compute_diff (first page only) ────
+    # Doing this on every page would be wasteful and would make pagination
+    # weirdly slow on offset>0 fetches. compute_diff is itself idempotent
+    # (it short-circuits when the pair already has change_event rows), so
+    # gating on offset==0 just avoids the redundant call.
+    if offset == 0:
+        try:
+            diff_engine = get_diff_engine()
+            for sf, st in pairs:
+                if sf != st:
+                    diff_engine.compute_diff(sf, st)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Diff computation failed for range %d->%d: %s",
+                snapshot_from,
+                snapshot_to,
+                exc,
             )
-            rows.extend(pair_rows)
-        # Sort by snapshot pair then by change_id for consistent ordering
-        rows.sort(key=lambda r: (r.snapshot_from, r.snapshot_to, r.change_id))
 
-    changes = []
+    # ──── Step 3: build the shared filter expression ────
+    # We previously used `tuple_(...).in_(pairs)` to push the pair filter
+    # in one shot, but SQLite's planner doesn't always recognise row-value
+    # IN as eligible for index seeks on a composite-key index — depending
+    # on version it falls back to a full table scan. Expanding to a plain
+    # OR-of-equality-pairs gives the planner unambiguous index hints,
+    # which on tables with a hot `change_event` (250k+ rows) is the
+    # difference between sub-100 ms and seconds.
+    pair_filter = or_(
+        *[
+            and_(
+                ChangeEvent.snapshot_from == sf,
+                ChangeEvent.snapshot_to == st,
+            )
+            for sf, st in pairs
+        ]
+    )
+    filters = [pair_filter]
+
+    if severity is not None and severity.strip() and severity.strip().upper() != "ALL":
+        filters.append(ChangeEvent.severity == severity.strip().upper())
+    if is_breaking is not None:
+        filters.append(ChangeEvent.is_breaking == is_breaking)
+    if object_q is not None and object_q.strip():
+        filters.append(
+            ChangeEvent.object_identifier.ilike(f"%{object_q.strip()}%")
+        )
+
+    where_clause = and_(*filters)
+
+    # ──── Steps 4 & 5: summary + page ────
+    # One session covers both queries so we don't pay the connection-acquire
+    # / PRAGMA-emission cost twice. Summary (small GROUP BY) and page
+    # (LIMIT/OFFSET) read the same rows, so SQLite's page cache warms up
+    # for the second query when they share a connection.
+    with Session(bind=db_engine) as session:
+        summary_rows = session.execute(
+            select(
+                ChangeEvent.severity,
+                ChangeEvent.is_breaking,
+                func.count().label("n"),
+            )
+            .where(where_clause)
+            .group_by(ChangeEvent.severity, ChangeEvent.is_breaking)
+        ).all()
+
+        page_rows = session.execute(
+            select(ChangeEvent)
+            .where(where_clause)
+            .order_by(
+                ChangeEvent.snapshot_from,
+                ChangeEvent.snapshot_to,
+                ChangeEvent.change_id,
+            )
+            .offset(offset)
+            .limit(limit)
+        ).scalars().all()
+
+    total = 0
     breaking_count = 0
     high_count = 0
     medium_count = 0
     low_count = 0
-
-    for row in rows:
-        sev = row.severity or "LOW"
-        brk = row.is_breaking or False
+    for sev, brk, n in summary_rows:
+        n = int(n or 0)
+        total += n
         if brk:
-            breaking_count += 1
-        if sev == "HIGH":
-            high_count += 1
-        elif sev == "MEDIUM":
-            medium_count += 1
+            breaking_count += n
+        sev_norm = (sev or "LOW").upper()
+        if sev_norm == "HIGH":
+            high_count += n
+        elif sev_norm == "MEDIUM":
+            medium_count += n
         else:
-            low_count += 1
+            low_count += n
 
+    changes = []
+    for row in page_rows:
         changes.append({
             "change_id": row.change_id,
             "object_type": row.object_type,
             "object_identifier": row.object_identifier,
             "change_type": row.change_type,
-            "severity": sev,
-            "is_breaking": brk,
+            "severity": row.severity or "LOW",
+            "is_breaking": row.is_breaking or False,
             "before_state": row.before_state,
             "after_state": row.after_state,
             "snapshot_from": row.snapshot_from,
@@ -261,15 +373,20 @@ def get_diff_details(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
             "detected_at": row.detected_at.isoformat() if row.detected_at else "",
         })
 
+    has_more = (offset + len(changes)) < total
+
     return {
         "snapshot_from": snapshot_from,
         "snapshot_to": snapshot_to,
         "summary": {
-            "total": len(changes),
+            "total": total,
             "breaking_count": breaking_count,
             "high_count": high_count,
             "medium_count": medium_count,
             "low_count": low_count,
         },
         "changes": changes,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
     }

@@ -8,6 +8,102 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.16.00 (2026-05-05) — Pagination + server-backed object autocomplete + Changes/Timeline scale fix
+
+The frontend half of the Transcend-scale work. PR-A (v1.15.00)
+indexed the hot tables so the backend stopped doing 9.8M-row scans
+on every diff. This release does the equivalent on the wire: instead
+of shipping 250k changes to the browser in one JSON blob, we
+paginate, filter server-side, and replace the giant native ``<select>``
+widgets with a real typeahead.
+
+#### Backend
+
+- **``/diff/{from}/{to}/details``** is paginated. Accepts ``limit``,
+  ``offset``, ``severity``, ``is_breaking``, and ``object_q``;
+  returns ``{ summary, changes, limit, offset, has_more }``. The
+  ``summary`` is computed by a single ``GROUP BY severity, is_breaking``
+  query — at most ~6 buckets regardless of how many millions of
+  changes match — so the KPI cards always reflect the full filtered
+  set without paying for a full result download. Filter pushdown
+  uses ``OR``-of-equality pairs over ``(snapshot_from, snapshot_to)``
+  rather than ``tuple_(...).in_(...)`` because SQLite's planner is
+  more reliably able to pick up the composite index from the former.
+  ``compute_diff`` is now only redispatched on ``offset==0`` so
+  paginating doesn't redo idempotency probes per page.
+
+- **``/timeline``** is paginated. Same envelope (``{ events, total,
+  limit, offset, has_more }``). The legacy ``/timeline/objects`` is
+  hard-capped at 1000 results and marked deprecated — new code
+  should use the new search endpoint instead.
+
+- **New ``GET /objects/search``** — generic, server-side autocomplete.
+  Backed by either ``change_event.object_identifier`` (default —
+  what Timeline uses) or ``graph_node`` (for Simulation/What-If
+  later). Returns at most ``limit`` items + a ``has_more`` flag,
+  computed via ``LIMIT limit+1`` so we don't pay for a separate
+  ``COUNT(*)``. The composite ``(snapshot_id, schema_name,
+  object_name)`` index added in v1.15.00 makes the graph-source
+  variant a single seek even on 337k-node extracts.
+
+#### Frontend
+
+- **New shared ``<ObjectAutocomplete>``** (``components/shared/``).
+  Replaces every place we used to ``<select>`` over an unbounded
+  list of objects. Debounced (250 ms), AbortController-cancelled
+  for in-flight requests when the user keeps typing, click-outside
+  to close, Enter to pick the top match, Escape to dismiss. Works
+  for both backing sources via the ``source`` prop.
+
+- **``/changes`` rewrite.** Filters (severity, breaking, object name)
+  are sent server-side; the table renders one page (default 100
+  rows) with a ``Load next 100`` affordance, instead of the
+  500-row hard cap the previous release shipped. KPI cards source
+  off a separately-cached ``baseSummary`` (the very first
+  unfiltered fetch for a pair) so toggling filters doesn't
+  flicker the cards. ``ExpandableRow`` no longer owns its own
+  ``useState``; expansion is a ``Set<change_id>`` in the parent —
+  removes the React-hook explosion that killed the previous
+  500-row render at 250k rows. SelectionContext hydration on
+  navigate-back now skips the auto-refetch when the cache already
+  has the active pair, restoring the pre-pagination instant feel
+  for revisits.
+
+- **``/timeline`` uses ``<ObjectAutocomplete>``** instead of the
+  legacy two-input "search box + native ``<select>``" combo. The
+  events list also paginates with a ``Load next 200`` button.
+
+- **``DonutChart`` overlay fix.** Previously, hovering a slice
+  dropped the floating tooltip card on top of the static centre
+  ``Total`` label, producing unreadable stacked text on
+  ``/usage``. Now the centre swaps to the active slice's name +
+  value + share on hover (single positioned element, can't
+  overlap), inactive slices fade to 0.45 opacity for visual
+  feedback, and a small detail strip below the donut shows the
+  optional ``detail`` field for callers that pass one.
+
+#### Numbers
+
+On the user's environment:
+
+- ``/changes`` for the 9-pair demo (≈30 changes total): unchanged,
+  still instant.
+- ``/changes`` for snapshot 1→11 (where 11 is the 250k Transcend
+  diff): previously hung the browser entirely; now lands in
+  ~2 s with the first 100 rows visible and ``Load more`` for the
+  rest.
+- ``/timeline`` object selector: the 240k-identifier dropdown is
+  gone; the autocomplete returns the top 20 matches per
+  keystroke, debounced 250 ms.
+
+#### Caveats / not in this release
+
+- ``/impact`` and ``/graph`` are still slow on the Transcend
+  extract — they need their own focused-subgraph and pre-aggregated
+  summary work (planned for the next release).
+
+---
+
 ### v1.15.00 (2026-05-05) — DB layer cleanup: indexes, schema-parity test, single canonical init script
 
 Foundational cleanup of the persistence layer triggered by Rahul's

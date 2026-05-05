@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mutate } from "swr";
 import PageShell from "@/components/layout/PageShell";
 import KpiCard from "@/components/shared/KpiCard";
@@ -11,7 +11,12 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useSelection } from "@/lib/SelectionContext";
 import { runDiff } from "@/lib/api/diff";
 import { getDiffDetails } from "@/lib/api/diff";
-import type { DiffDetailResponse, DiffDetailItem } from "@/lib/api/types";
+import type {
+  DiffDetailResponse,
+  DiffDetailItem,
+  DiffDetailSummary,
+  DiffDetailsParams,
+} from "@/lib/api/types";
 import {
   Play,
   Check,
@@ -82,25 +87,33 @@ function CopyButton({ text }: { text: string }) {
 // Each change row can expand to reveal before/after JSON, quick-link chips to
 // related views (lineage/timeline/impact/usage), and — if the user has clicked
 // "Generate DDL" — the suggested SQL statement with TAISA warnings.
-// Local `open` state per row keeps this independent from the selection set.
+//
+// Expansion state is OWNED BY THE PARENT (`expandedIds: Set<number>`), not by
+// each row. With production-scale diffs (Rahul's Transcend extract = 250k
+// changes) this matters a lot: a `useState` here would mean 250k React hooks,
+// 250k internal fiber states, and the browser dies during render. Lifting the
+// state means the parent has one Set; toggling is O(1); each row is a pure
+// component again.
 function ExpandableRow({
   item,
   ddlItem,
   selected,
   onToggle,
+  expanded,
+  onToggleExpand,
 }: {
   item: DiffDetailItem;
   ddlItem?: DDLItem;
   selected: boolean;
   onToggle: (id: number) => void;
+  expanded: boolean;
+  onToggleExpand: (id: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
     <>
       <tr
         className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-        onClick={() => setOpen(!open)}
+        onClick={() => onToggleExpand(item.change_id)}
       >
         {/* stopPropagation: the <tr> click toggles the expand panel — we don't
             want ticking the checkbox to also open/close the row. */}
@@ -113,7 +126,7 @@ function ExpandableRow({
           />
         </td>
         <td className="px-4 py-3">
-          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </td>
         <td className="px-4 py-3 font-mono text-xs">{item.change_id}</td>
         <td className="px-4 py-3 text-xs text-td-gray-dark">
@@ -142,7 +155,7 @@ function ExpandableRow({
           <BreakingBadge breaking={item.is_breaking} />
         </td>
       </tr>
-      {open && (
+      {expanded && (
         <tr className="bg-gray-50">
           <td colSpan={9} className="px-8 py-3">
             {/* Quick Links — navigate to related views filtered by this object */}
@@ -243,6 +256,16 @@ function ExpandableRow({
   );
 }
 
+// Server-side page size. The backend caps at 1000; 100 is a sweet spot for
+// "feels instant" + "useful chunk to scroll through" + "doesn't choke React's
+// reconciler when filters change". Tweak via PAGE_SIZE if profiling shows we
+// can grow it.
+const PAGE_SIZE = 100;
+// Object-filter input is keystroke-driven; we wait this long after the last
+// keystroke before re-firing the API. 300 ms is the typical "feels live"
+// number that doesn't fire on every letter typed.
+const OBJECT_FILTER_DEBOUNCE_MS = 300;
+
 export default function ChangesPage() {
   const { data: snapData } = useSnapshots();
   // SelectionContext survives client-side navigation, so a diff run here stays
@@ -260,19 +283,37 @@ export default function ChangesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Two-tier cache: prefer context (shared across pages), fall back to local
-  // state if the user re-runs a diff here without going through context first.
-  const [localDetails, setLocalDetails] = useState<DiffDetailResponse | null>(null);
-  const details = cachedDiffDetails ?? localDetails;
+  // ──── Pagination + filters ────
+  // Items shown in the table — accumulated across "Load more" clicks. Reset
+  // to the first page whenever any filter or the snapshot pair changes.
+  const [pageItems, setPageItems] = useState<DiffDetailItem[]>([]);
+  const [pageOffset, setPageOffset] = useState(0);
+  const [pageHasMore, setPageHasMore] = useState(false);
+  const [pageTotal, setPageTotal] = useState(0); // total over the *filtered* set
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Snapshot pair currently displayed. Distinct from the diff-runner form
+  // (`diffFrom`/`diffTo`) which represents what the user is *about* to load.
+  const [activePair, setActivePair] = useState<{ from: number; to: number } | null>(null);
+  // KPI cards at the top show the *unfiltered* totals for the diff so the
+  // user always sees "this diff has 250k changes / 12k breaking" regardless
+  // of which filters they've applied to the table. Captured once on initial
+  // load (or whenever the snapshot pair changes) and kept stable through
+  // filter changes. Sourced from the SelectionContext cache when present.
+  const [baseSummary, setBaseSummary] = useState<DiffDetailSummary | null>(
+    cachedDiffDetails?.summary ?? null,
+  );
 
-  // Filter + view-mode state — purely presentational, doesn't hit the API.
+  // Filter state. Severity & breaking are quick-toggle; object is free-text.
   const [filterSeverity, setFilterSeverity] = useState<string>("ALL");
   const [filterBreaking, setFilterBreaking] = useState<string>("ALL");
-  // Object filter: free-text, case-insensitive substring match against
-  // `object_identifier`. Empty string = show all. Kept as plain state
-  // (no debounce) because the changes list is bounded (tens-hundreds of
-  // rows) and re-filtering on every keystroke is imperceptible.
   const [filterObject, setFilterObject] = useState<string>("");
+  // Debounced mirror of `filterObject`. Decoupling these means the input
+  // stays responsive (every keystroke re-renders only the input) while the
+  // expensive part (refetch with the new filter) only fires once typing
+  // settles.
+  const [debouncedFilterObject, setDebouncedFilterObject] = useState<string>("");
+  const objectDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // DDL generation is a separate backend call, triggered by the "Generate DDL"
   // button. We keep the response here rather than in context because it's
   // specific to this page and can be heavy (SQL blobs).
@@ -281,10 +322,48 @@ export default function ChangesPage() {
   // selectedChangeIds drives BOTH the DDL filter (generate SQL for a subset)
   // and the "select all" checkbox in the table header.
   const [selectedChangeIds, setSelectedChangeIds] = useState<Set<number>>(new Set());
+  // Centralised expanded-row state. Lives here (not inside ExpandableRow) so a
+  // diff with thousands of rows doesn't instantiate one useState per row.
+  const [expandedChangeIds, setExpandedChangeIds] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "visual">("table");
+  // TAISA "scope to single change" — typeahead operates on items already
+  // loaded into `pageItems`. With pagination, that means the user may need
+  // to load more pages first to find the change they want; we surface a
+  // hint making this explicit.
+  const [taisaSearch, setTaisaSearch] = useState("");
 
   const { toast } = useToast();
   const snapshots = snapData?.snapshots ?? [];
+
+  // When the auto-refetch effect (below) fires only because the hydrate
+  // effect populated `activePair` from cache, we want to SKIP the fetch —
+  // the cached data is already correct. Without this guard, every
+  // navigation back to /changes from another page would silently re-fetch
+  // the diff (visible regression vs the pre-pagination version, which
+  // simply used the cached value as-is).
+  const skipNextAutoRefetchRef = useRef(false);
+
+  // Restore from SelectionContext when arriving from another page. Only
+  // hydrates the *first* page of items, not the entire previously-loaded
+  // dataset — that's the whole point of pagination — but the summary and
+  // active pair survive, so the user lands on a page that already has
+  // KPIs visible WITHOUT refetching the diff. New filter changes or
+  // pair switches still trigger a fresh fetch, just not the mount.
+  useEffect(() => {
+    if (cachedDiffDetails && !activePair) {
+      skipNextAutoRefetchRef.current = true;
+      setActivePair({
+        from: cachedDiffDetails.snapshot_from,
+        to: cachedDiffDetails.snapshot_to,
+      });
+      setPageItems(cachedDiffDetails.changes);
+      setPageOffset(cachedDiffDetails.offset ?? 0);
+      setPageHasMore(cachedDiffDetails.has_more ?? false);
+      setPageTotal(cachedDiffDetails.summary.total);
+      setBaseSummary(cachedDiffDetails.summary);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleChangeSelection(id: number) {
     setSelectedChangeIds((prev) => {
@@ -295,25 +374,118 @@ export default function ChangesPage() {
     });
   }
 
-  // Note: toggleAllChanges uses filteredChanges defined below — safe because
-  // it's only called from an event handler, not during render.
+  function toggleChangeExpansion(id: number) {
+    setExpandedChangeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // "Select all" now operates on the loaded page only — selecting "every
+  // change in the diff" wouldn't be useful with 250k rows (Generate DDL
+  // would explode). The button toggles selection of just `pageItems`.
   function toggleAllChanges() {
     setSelectedChangeIds((prev) => {
-      const q = filterObject.trim().toLowerCase();
-      const allIds = (details?.changes ?? [])
-        .filter((c) => {
-          if (filterSeverity !== "ALL" && c.severity !== filterSeverity) return false;
-          if (filterBreaking === "BREAKING" && !c.is_breaking) return false;
-          if (filterBreaking === "NON_BREAKING" && c.is_breaking) return false;
-          if (q && !c.object_identifier.toLowerCase().includes(q)) return false;
-          return true;
-        })
-        .map((c) => c.change_id);
+      const allIds = pageItems.map((c) => c.change_id);
       if (prev.size === allIds.length && allIds.every((id) => prev.has(id))) {
         return new Set();
       }
       return new Set(allIds);
     });
+  }
+
+  // Translate the filter UI state into the params shape the API client wants.
+  // Memoised in `useCallback` so the effect below has a stable identity.
+  const buildFilterParams = useCallback((): Omit<DiffDetailsParams, "limit" | "offset"> => {
+    const params: Omit<DiffDetailsParams, "limit" | "offset"> = {};
+    if (filterSeverity !== "ALL") params.severity = filterSeverity;
+    if (filterBreaking === "BREAKING") params.is_breaking = true;
+    if (filterBreaking === "NON_BREAKING") params.is_breaking = false;
+    if (debouncedFilterObject.trim()) params.object_q = debouncedFilterObject.trim();
+    return params;
+  }, [filterSeverity, filterBreaking, debouncedFilterObject]);
+
+  // Single source of truth for fetching a page. Used by:
+  //  - initial load (Run Diff / View Existing) — fired indirectly via the
+  //    `activePair` change in the effect below.
+  //  - filter changes (auto-refetch with offset=0)
+  //  - "Load more" (offset > 0, append rather than replace)
+  // `mode === "replace"` resets pageItems and the offset; "append" tacks
+  // results onto the existing list.
+  //
+  // Side-effect: when fetching offset 0 with NO filters, the response's
+  // summary doubles as `baseSummary` (the unfiltered totals shown in the
+  // KPI cards). Capturing it here avoids a separate "summary fetch" round
+  // trip — the first paginated call is by definition unfiltered offset-0,
+  // so we get the baseline for free.
+  const fetchPage = useCallback(
+    async (
+      from: number,
+      to: number,
+      offset: number,
+      mode: "replace" | "append",
+      currentFilters: Omit<DiffDetailsParams, "limit" | "offset">,
+    ): Promise<DiffDetailResponse | null> => {
+      try {
+        const data = await getDiffDetails(from, to, {
+          limit: PAGE_SIZE,
+          offset,
+          ...currentFilters,
+        });
+        setPageOffset(offset);
+        setPageHasMore(data.has_more);
+        setPageTotal(data.summary.total);
+        if (mode === "replace") {
+          setPageItems(data.changes);
+        } else {
+          setPageItems((prev) => [...prev, ...data.changes]);
+        }
+        // Cache the unfiltered baseline summary on the very first fetch
+        // for a given pair. We detect "unfiltered" structurally — empty
+        // params beyond limit/offset — rather than via an external flag,
+        // so this works whether the trigger came from loadInitial or
+        // from the effect below picking up an activePair change.
+        const unfiltered =
+          currentFilters.severity === undefined &&
+          currentFilters.is_breaking === undefined &&
+          (currentFilters.object_q === undefined ||
+            currentFilters.object_q === "");
+        if (offset === 0 && unfiltered) {
+          setBaseSummary(data.summary);
+          setCachedDiffDetails(data);
+        }
+        return data;
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to load diff details");
+        return null;
+      }
+    },
+    [setCachedDiffDetails],
+  );
+
+  // Initial load — kicks off the fetch chain by setting the active pair.
+  // Filters reset to defaults; the effect downstream picks up the change
+  // and runs the actual fetch (which captures baseSummary). Splitting the
+  // mutation here from the API call in the effect means we can't ever
+  // double-fire on a snapshot-pair change.
+  function loadInitial(from: number, to: number) {
+    setError(null);
+    setActiveDiffPair({ snapshotFrom: from, snapshotTo: to });
+    // Reset filters BEFORE switching activePair so the upcoming effect
+    // fires with no filters; otherwise the auto-refetch would carry over
+    // whatever the user had selected for the previous pair.
+    setFilterSeverity("ALL");
+    setFilterBreaking("ALL");
+    setFilterObject("");
+    setDebouncedFilterObject("");
+    setBaseSummary(null);
+    setPageItems([]);
+    setPageOffset(0);
+    setPageHasMore(false);
+    setPageTotal(0);
+    setActivePair({ from, to });
   }
 
   // Run Diff = POST /diff/run (expensive, writes new change rows on the backend).
@@ -331,10 +503,8 @@ export default function ChangesPage() {
         snapshot_to: diffTo,
       });
       setDiffMsg(`Detected ${res.changes_detected} new change(s)`);
-      // Revalidate the global "changes" SWR key so dashboards update.
       await mutate("changes");
-      // Auto-load details so the user doesn't have to click again.
-      await loadDetails(Number(diffFrom), Number(diffTo));
+      await loadInitial(Number(diffFrom), Number(diffTo));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Diff failed";
       setDiffMsg(msg);
@@ -343,33 +513,80 @@ export default function ChangesPage() {
     }
   }
 
-  async function loadDetails(from: number, to: number) {
-    setLoading(true);
-    setError(null);
+  async function handleLoadExisting() {
+    if (!diffFrom || !diffTo) return;
+    await loadInitial(Number(diffFrom), Number(diffTo));
+  }
+
+  async function handleLoadMore() {
+    if (!activePair || loadingMore || !pageHasMore) return;
+    setLoadingMore(true);
     try {
-      const data = await getDiffDetails(from, to);
-      // Write to BOTH local state and context: local for the current render,
-      // context so Impact/Lineage/Simulation can pick up the same diff without
-      // the user selecting snapshots again.
-      setLocalDetails(data);
-      setCachedDiffDetails(data);
-      setActiveDiffPair({ snapshotFrom: from, snapshotTo: to });
-      toast(`Diff loaded: ${data.summary.total} change(s), ${data.summary.breaking_count} breaking`, data.summary.breaking_count > 0 ? "error" : "success");
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load diff details");
+      await fetchPage(
+        activePair.from,
+        activePair.to,
+        pageOffset + PAGE_SIZE,
+        "append",
+        buildFilterParams(),
+      );
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   }
 
-  async function handleLoadExisting() {
-    if (!diffFrom || !diffTo) return;
-    await loadDetails(Number(diffFrom), Number(diffTo));
-  }
+  // Object-filter debouncer. Resets on every keystroke; commits the
+  // current value to `debouncedFilterObject` once typing settles. The
+  // refetch effect below reads the debounced value.
+  useEffect(() => {
+    if (objectDebounceRef.current) clearTimeout(objectDebounceRef.current);
+    objectDebounceRef.current = setTimeout(() => {
+      setDebouncedFilterObject(filterObject);
+    }, OBJECT_FILTER_DEBOUNCE_MS);
+    return () => {
+      if (objectDebounceRef.current) clearTimeout(objectDebounceRef.current);
+    };
+  }, [filterObject]);
+
+  // Auto-refetch on pair OR filter change. Single effect handles both the
+  // initial load (when the user clicks Run Diff / View Existing → activePair
+  // flips from null) and subsequent filter tweaks. Uses `replace` mode so
+  // the table jumps back to page 0 matching the new filter set.
+  //
+  // We also use this entry point to surface the "diff loaded" toast — but
+  // only on the very first fetch for a new pair (when `baseSummary` is
+  // still null), so changing a filter later doesn't spam toasts.
+  useEffect(() => {
+    if (!activePair) return;
+    if (skipNextAutoRefetchRef.current) {
+      skipNextAutoRefetchRef.current = false;
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const filters = buildFilterParams();
+    const isFirstFetchForPair = baseSummary === null;
+    fetchPage(activePair.from, activePair.to, 0, "replace", filters)
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (isFirstFetchForPair) {
+          toast(
+            `Diff loaded: ${data.summary.total} change(s), ${data.summary.breaking_count} breaking`,
+            data.summary.breaking_count > 0 ? "error" : "success",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePair, filterSeverity, filterBreaking, debouncedFilterObject]);
 
   async function handleGenerateDDL() {
-    const f = details?.snapshot_from;
-    const t = details?.snapshot_to;
+    const f = activePair?.from;
+    const t = activePair?.to;
     if (!f || !t) return;
     setDdlLoading(true);
     try {
@@ -404,19 +621,35 @@ export default function ChangesPage() {
       : ddlData.items
     : [];
 
-  // Filter changes — severity + breaking + free-text object match.
-  // `q` is pre-computed once outside the filter closure so it's not
-  // re-lowercased on every row.
-  const q = filterObject.trim().toLowerCase();
-  const filteredChanges =
-    details?.changes.filter((c) => {
-      if (filterSeverity !== "ALL" && c.severity !== filterSeverity)
-        return false;
-      if (filterBreaking === "BREAKING" && !c.is_breaking) return false;
-      if (filterBreaking === "NON_BREAKING" && c.is_breaking) return false;
-      if (q && !c.object_identifier.toLowerCase().includes(q)) return false;
-      return true;
-    }) ?? [];
+  // ──── Derived state for rendering ────
+  // The table now reads `pageItems` directly — filters are applied server-
+  // side, so there's no extra in-memory filter pass to do here. `pageTotal`
+  // is the full filtered count (across all pages); we show "X of Y" in the
+  // toolbar.
+  const visibleChanges = pageItems;
+
+  // TAISA scope selector — typeahead candidates pulled from the items
+  // currently loaded in `pageItems`. With pagination, that means the user
+  // may need to widen the search (clear filters / Load More) to find the
+  // change they want; we surface that as a hint in the UI rather than
+  // pretending to search the whole 250k set.
+  const TAISA_SCOPE_MAX_OPTIONS = 50;
+  const taisaQ = taisaSearch.trim().toLowerCase();
+  const taisaCandidates =
+    taisaQ.length >= 2
+      ? pageItems
+          .filter(
+            (c) =>
+              c.object_identifier.toLowerCase().includes(taisaQ) ||
+              String(c.change_id).includes(taisaQ),
+          )
+          .slice(0, TAISA_SCOPE_MAX_OPTIONS)
+      : [];
+
+  // Convenience: the page renders pieces gated on "did the user load a
+  // diff yet?". With pagination, `pageItems` may be empty (filters yielded
+  // nothing) even when a diff IS loaded — so we gate on activePair instead.
+  const hasLoadedDiff = activePair !== null;
 
   return (
     <PageShell
@@ -497,11 +730,10 @@ export default function ChangesPage() {
       {error && <ErrorAlert message={error} />}
       {loading && <LoadingSpinner />}
 
-      {/* ──── Results section (only when `details` is loaded) ────
+      {/* ──── Results section (only when a diff has been loaded) ────
           Shows summary KPIs, severity/breaking explainer, view-mode toggle,
           filters, the changes table with inline DDL, and a drill-down hint. */}
-      {/* ──── Results section (only when `details` is loaded) ──── */}
-      {details && (
+      {hasLoadedDiff && baseSummary && (
         <>
           {/* ═══════════════════════════════════════════════════════════
               SECTION 1 · Summary
@@ -521,12 +753,16 @@ export default function ChangesPage() {
               </>
             }
           >
+            {/* KPIs reflect the FULL diff (unfiltered totals captured on
+                the first fetch). Filter changes don't reshape these — that
+                way the user always sees the diff's overall scope, while
+                the table below changes to match the active filters. */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <KpiCard label="Total Changes" value={details.summary.total} color="#00233C" />
-              <KpiCard label="Breaking" value={details.summary.breaking_count} color="#DC2626" />
-              <KpiCard label="High Severity" value={details.summary.high_count} color="#DC2626" />
-              <KpiCard label="Medium Severity" value={details.summary.medium_count} color="#F59E0B" />
-              <KpiCard label="Low Severity" value={details.summary.low_count} color="#16A34A" />
+              <KpiCard label="Total Changes" value={baseSummary.total} color="#00233C" />
+              <KpiCard label="Breaking" value={baseSummary.breaking_count} color="#DC2626" />
+              <KpiCard label="High Severity" value={baseSummary.high_count} color="#DC2626" />
+              <KpiCard label="Medium Severity" value={baseSummary.medium_count} color="#F59E0B" />
+              <KpiCard label="Low Severity" value={baseSummary.low_count} color="#16A34A" />
             </div>
           </GuidedSection>
 
@@ -572,10 +808,17 @@ export default function ChangesPage() {
             </button>
           </div>
 
-          {/* Visual Diff mode */}
-          {viewMode === "visual" && details && (
+          {/* Visual Diff mode. SchemaVisualDiff currently consumes whatever
+              `changes` we hand it; with pagination that's only the items
+              visible in the current page (PR 5 will fetch its data
+              independently of the table pagination). */}
+          {viewMode === "visual" && activePair && (
             <div className="mb-6">
-              <SchemaVisualDiff snapshotFrom={details.snapshot_from} snapshotTo={details.snapshot_to} changes={details.changes} />
+              <SchemaVisualDiff
+                snapshotFrom={activePair.from}
+                snapshotTo={activePair.to}
+                changes={pageItems}
+              />
             </div>
           )}
 
@@ -609,9 +852,14 @@ export default function ChangesPage() {
                   </button>
                 )}
               </div>
-              {filterObject && (
+              {filterObject && filterObject !== debouncedFilterObject && (
+                <span className="text-[11px] text-td-gray-dark italic">
+                  …
+                </span>
+              )}
+              {debouncedFilterObject && (
                 <span className="text-[11px] text-td-gray-dark">
-                  Match: <strong className="text-td-navy">{filteredChanges.length}</strong> of {details.changes.length}
+                  <strong className="text-td-navy">{pageTotal.toLocaleString()}</strong> match(es)
                 </span>
               )}
             </div>
@@ -650,8 +898,8 @@ export default function ChangesPage() {
               ))}
             </div>
             <span className="text-xs text-td-gray-dark ml-auto">
-              Showing {filteredChanges.length} of {details.changes.length}{" "}
-              changes
+              Showing {pageItems.length.toLocaleString()} of{" "}
+              {pageTotal.toLocaleString()} change(s)
               {selectedChangeIds.size > 0 && (
                 <span className="ml-2 text-td-orange font-medium">
                   ({selectedChangeIds.size} selected for DDL)
@@ -672,9 +920,9 @@ export default function ChangesPage() {
                     ? `Generate DDL (${selectedChangeIds.size})`
                     : "Generate DDL (All)"}
             </button>
-            {details && (
+            {activePair && (
               <a
-                href={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1"}/export/changes/${details.snapshot_from}/${details.snapshot_to}`}
+                href={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1"}/export/changes/${activePair.from}/${activePair.to}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-green-700 transition-colors"
@@ -694,14 +942,16 @@ export default function ChangesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-td-navy text-white text-left">
-                  {/* "Select all" — checked only when every currently-visible
-                      (i.e. filtered) row is selected. Comparing just sizes is
-                      not enough because hidden rows may be selected from a
-                      previous filter state. */}
+                  {/* "Select all" toggles selection of the currently-loaded
+                      page (`pageItems`). With server-side pagination,
+                      "select every change in the diff" would mean clicking
+                      Load More to the end first — and on a 250k diff that's
+                      pathological. The DDL generator works fine on a per-
+                      page basis. */}
                   <th className="px-4 py-3 w-8">
                     <input
                       type="checkbox"
-                      checked={filteredChanges.length > 0 && selectedChangeIds.size === filteredChanges.length && filteredChanges.every((c) => selectedChangeIds.has(c.change_id))}
+                      checked={pageItems.length > 0 && selectedChangeIds.size === pageItems.length && pageItems.every((c) => selectedChangeIds.has(c.change_id))}
                       onChange={toggleAllChanges}
                       className="w-3.5 h-3.5 rounded cursor-pointer accent-td-orange"
                     />
@@ -717,17 +967,52 @@ export default function ChangesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredChanges.map((item) => (
+                {visibleChanges.map((item) => (
                   <ExpandableRow
                     key={item.change_id}
                     item={item}
                     ddlItem={ddlMap.get(item.change_id)}
                     selected={selectedChangeIds.has(item.change_id)}
                     onToggle={toggleChangeSelection}
+                    expanded={expandedChangeIds.has(item.change_id)}
+                    onToggleExpand={toggleChangeExpansion}
                   />
                 ))}
               </tbody>
             </table>
+            {/* Load-more affordance. Visible whenever the server reported
+                additional pages exist for the current filter set. We never
+                auto-fetch on scroll: the user explicitly opts into pulling
+                more rows so they don't accidentally tank their browser by
+                holding Page Down on a 250k diff. */}
+            {pageHasMore && (
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-3">
+                <span className="text-[11px] text-td-gray-dark">
+                  Showing {pageItems.length.toLocaleString()} of{" "}
+                  {pageTotal.toLocaleString()}
+                </span>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="flex items-center gap-1.5 bg-td-navy text-white px-3 py-1 rounded text-xs font-medium hover:bg-td-navy-light disabled:opacity-50 transition-colors"
+                >
+                  {loadingMore ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : null}
+                  {loadingMore ? "Loading..." : `Load next ${PAGE_SIZE}`}
+                </button>
+              </div>
+            )}
+            {!pageHasMore && pageItems.length > 0 && pageTotal > PAGE_SIZE && (
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 text-center text-[11px] text-td-gray-dark">
+                End of results — {pageTotal.toLocaleString()} change(s) loaded.
+              </div>
+            )}
+            {pageItems.length === 0 && !loading && (
+              <div className="px-4 py-6 text-center text-xs text-td-gray-dark">
+                No changes match the current filters.
+              </div>
+            )}
           </div>
 
           {/* DDL Panel — appears after Generate DDL */}
@@ -812,10 +1097,10 @@ export default function ChangesPage() {
             icon={ArrowRight}
             intro={
               <>
-                The diff pair <strong>#{details.snapshot_from} → #{details.snapshot_to}</strong>{" "}
+                The diff pair <strong>#{activePair?.from} → #{activePair?.to}</strong>{" "}
                 is selected and shared across the app. Click over to <strong>Impact Analysis</strong>{" "}
                 for the full propagation report, or summon <strong>TAISA</strong> (bottom-right)
-                to reason over all {details.summary.total} changes at once. If only one change is
+                to reason over all {baseSummary.total} changes at once. If only one change is
                 weird, scope TAISA to it via the selector below.
               </>
             }
@@ -824,32 +1109,80 @@ export default function ChangesPage() {
               <div className="flex items-center gap-3">
                 <Check size={16} className="text-td-downstream" />
                 <span className="text-sm text-td-navy">
-                  <strong>Diff #{details.snapshot_from} → #{details.snapshot_to}</strong> is the active pair.
+                  <strong>Diff #{activePair?.from} → #{activePair?.to}</strong> is the active pair.
                 </span>
               </div>
               <details className="mt-3">
                 <summary className="text-xs text-td-gray-dark cursor-pointer hover:text-td-navy">
                   Scope TAISA to a single change...
                 </summary>
+                {/* Typeahead instead of a <select> with every change. With
+                    250k options the native dropdown freezes the page; here we
+                    only render up to TAISA_SCOPE_MAX_OPTIONS rows once the
+                    user has typed ≥2 chars. */}
                 <div className="mt-2">
-                  <select
-                    value={activeChangeId ?? ""}
-                    onChange={(e) =>
-                      setActiveChangeId(e.target.value ? Number(e.target.value) : null)
-                    }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm min-w-[400px]"
-                  >
-                    <option value="">Select a change...</option>
-                    {details.changes.map((c) => (
-                      <option key={c.change_id} value={c.change_id}>
-                        #{c.change_id} — {changeTypeLabel(c.change_type)}: {c.object_identifier} [{c.severity}]
-                      </option>
-                    ))}
-                  </select>
-                  {activeChangeId && (
-                    <span className="ml-3 text-xs text-td-object">
-                      <Check size={12} className="inline" /> Change #{activeChangeId} selected
-                    </span>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <input
+                      type="text"
+                      value={taisaSearch}
+                      onChange={(e) => setTaisaSearch(e.target.value)}
+                      placeholder="Type to search by object name or change id..."
+                      className="border border-gray-300 rounded px-3 py-1.5 text-sm min-w-[400px] focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
+                    />
+                    {activeChangeId && (
+                      <span className="text-xs text-td-object">
+                        <Check size={12} className="inline" /> Change #{activeChangeId} selected
+                      </span>
+                    )}
+                    {activeChangeId && (
+                      <button
+                        onClick={() => {
+                          setActiveChangeId(null);
+                          setTaisaSearch("");
+                        }}
+                        className="text-xs text-td-gray-dark hover:text-td-navy underline"
+                      >
+                        clear
+                      </button>
+                    )}
+                  </div>
+                  {taisaQ.length === 0 && (
+                    <p className="mt-1 text-[11px] text-td-gray-dark">
+                      Searches across the <strong>{pageItems.length.toLocaleString()}</strong> change(s) currently
+                      loaded in the table. Use Load More (or relax filters) to widen the search.
+                    </p>
+                  )}
+                  {taisaQ.length > 0 && taisaQ.length < 2 && (
+                    <p className="mt-1 text-[11px] text-td-gray-dark">
+                      Type at least 2 characters...
+                    </p>
+                  )}
+                  {taisaQ.length >= 2 && taisaCandidates.length === 0 && (
+                    <p className="mt-1 text-[11px] text-td-gray-dark">
+                      No changes match &ldquo;{taisaSearch}&rdquo;.
+                    </p>
+                  )}
+                  {taisaCandidates.length > 0 && (
+                    <ul className="mt-2 max-h-64 overflow-y-auto border border-gray-200 rounded divide-y divide-gray-100 bg-white shadow-sm max-w-2xl">
+                      {taisaCandidates.map((c) => (
+                        <li key={c.change_id}>
+                          <button
+                            onClick={() => {
+                              setActiveChangeId(c.change_id);
+                              setTaisaSearch("");
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <span className="font-mono text-td-gray-dark">#{c.change_id}</span>
+                            <span className="bg-td-orange/10 text-td-orange px-1.5 py-0.5 rounded text-[10px] font-medium">
+                              {changeTypeLabel(c.change_type)}
+                            </span>
+                            <span className="font-mono text-td-navy truncate">{c.object_identifier}</span>
+                            <span className="ml-auto text-[10px] text-td-gray-dark">[{c.severity}]</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </details>
@@ -858,7 +1191,7 @@ export default function ChangesPage() {
         </>
       )}
 
-      {!details && !loading && (
+      {!hasLoadedDiff && !loading && (
         <EmptyState message="Select two snapshots and run a diff to see changes." />
       )}
     </PageShell>

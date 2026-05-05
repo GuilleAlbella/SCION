@@ -56,7 +56,25 @@ export interface DiffDetailResponse {
   snapshot_from: number;
   snapshot_to: number;
   summary: DiffDetailSummary;
+  /** Current page of changes — at most `limit` rows. The KPI cards drive
+   *  off `summary` (total over the FULL filtered set), not this array. */
   changes: DiffDetailItem[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+/** Filter / pagination params for `getDiffDetails`. All optional — the
+ *  server applies sensible defaults (limit=100, offset=0, no filters). */
+export interface DiffDetailsParams {
+  limit?: number;
+  offset?: number;
+  /** "HIGH" / "MEDIUM" / "LOW", or omit to disable. */
+  severity?: string;
+  /** true = breaking only, false = non-breaking only, undefined = both. */
+  is_breaking?: boolean;
+  /** Case-insensitive substring filter against object_identifier. */
+  object_q?: string;
 }
 
 export interface ChangesResponse {
@@ -273,6 +291,28 @@ export interface TimelineResponse {
   object_identifier: string;
   events: TimelineEvent[];
   total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface TimelineParams {
+  limit?: number;
+  offset?: number;
+}
+
+// Object Autocomplete (shared, replaces /timeline/objects for new UI code)
+export interface ObjectSearchResponse {
+  items: string[];
+  has_more: boolean;
+  source: "changes" | "graph";
+}
+
+export interface ObjectSearchParams {
+  q?: string;
+  snapshot_id?: number;
+  source?: "changes" | "graph";
+  limit?: number;
 }
 
 // Global Search
