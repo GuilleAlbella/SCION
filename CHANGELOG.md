@@ -8,6 +8,83 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.17.00 (2026-05-05) — Focused subgraph for /graph and /lineage at warehouse scale
+
+The third leg of the Transcend-scale work. v1.15.00 indexed the hot
+tables; v1.16.00 paginated the Changes/Timeline endpoints. This
+release moves the dependency-graph pages — which used to crash the
+browser on a 337k-node extract by trying to dagre-layout the full
+graph in JS — to a server-side BFS subgraph model.
+
+#### Backend
+
+- **New ``GET /graph/focus``** — server-side BFS around an anchor
+  object. Parameters: ``snapshot_id``, ``root`` (accepts both
+  ``schema.object_name`` and bare ``object_name`` forms), ``hops``
+  (1–5, default 2), ``max_nodes`` (10–1000, default 200),
+  ``edge_types`` (optional CSV whitelist), ``direction`` (up / down
+  / both, default both). BFS is bounded by ``max_nodes``: when the
+  cap is reached before exhausting hops we surface ``capped: true``
+  so the UI can warn. Per-hop edge fetches use the
+  ``ix_graph_edge_snapshot`` index; root resolution uses
+  ``ix_graph_node_search`` (both added in v1.15.00) — typical focus
+  lookup is sub-100 ms even on the 337k-node Transcend graph.
+
+- **``GET /graph/{snapshot_id}`` adds a soft cap.** When the
+  snapshot has more than ``FULL_GRAPH_NODE_CAP`` (5000) nodes, the
+  endpoint short-circuits and returns
+  ``{ truncated: true, total_nodes: N, nodes: [], edges: [] }``.
+  The pre-flight ``COUNT(*)`` is sub-millisecond thanks to the
+  same v1.15.00 index. Below the cap, behaviour is unchanged so the
+  demo and small-customer flows are not affected.
+
+#### Frontend
+
+- **``/lineage`` rewritten.** No longer fetches the full graph;
+  uses ``<ObjectAutocomplete source="graph">`` (introduced in
+  v1.16.00) for the object picker and calls ``/graph/focus`` with
+  ``edge_types=FEEDS`` directly. The 5-lane upstream / center /
+  downstream layout is still computed in the browser, but from a
+  ~200-node BFS neighbourhood instead of a 337k-node soup. Surfaces
+  a "BFS hit cap" hint when the server reports ``capped: true``.
+
+- **``/graph`` is dual-mode.** Snapshots under the soft cap render
+  the full graph as before. Above it, the page shows an
+  amber "this graph has N nodes — pick an anchor" banner and the
+  autocomplete; once the user picks an anchor the page calls
+  ``/graph/focus`` (with the user's edge-filter and hops slider)
+  and dagre-lays out the resulting subgraph. Switching snapshots
+  resets focus state so a stale anchor from one snapshot can't
+  silently 404 against another.
+
+- The legacy ``ObjectPicker`` component (which required a
+  pre-loaded list of objects) is no longer wired into ``/graph``
+  or ``/lineage``. It still exists in the codebase for any caller
+  that genuinely wants a client-side filtered list of a small
+  bounded set; the autocomplete-via-API replaces it everywhere
+  the bounded-set assumption breaks at scale.
+
+#### Numbers
+
+On the user's environment with the Transcend extract loaded:
+
+- ``/graph``: previously hung the browser entirely; now shows the
+  truncation banner instantly, and a focused subgraph renders in
+  ~1 s after picking an anchor.
+- ``/lineage``: previously hung at the wire-transfer + dagre
+  layout phase; now lands in <1 s for any object, regardless of
+  warehouse size.
+
+#### Caveats / not in this release
+
+- ``/impact`` is still slow on the Transcend extract — that's a
+  separate architectural problem (250k changes × 2 recursive
+  CTEs each). The proper fix is pre-aggregating per-change impact
+  summaries during ``run_post_ingest_pipeline``, planned for the
+  next release.
+
+---
+
 ### v1.16.00 (2026-05-05) — Pagination + server-backed object autocomplete + Changes/Timeline scale fix
 
 The frontend half of the Transcend-scale work. PR-A (v1.15.00)

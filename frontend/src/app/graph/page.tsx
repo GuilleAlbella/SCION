@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+// System Graph page — full overview for small snapshots, server-side
+// focus subgraph for large ones. The browser never tries to dagre-layout
+// a 337k-node graph: when the snapshot exceeds the server's
+// FULL_GRAPH_NODE_CAP (5k), the full-graph response comes back with
+// `truncated: true` and the page prompts the user to pick an anchor
+// instead. Anchor selection uses `<ObjectAutocomplete source="graph">`
+// (server-backed) and the subgraph fetch is `/graph/focus`.
+
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   ReactFlow,
   Background,
@@ -18,16 +26,19 @@ import PageShell from "@/components/layout/PageShell";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
+import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useGraph } from "@/lib/hooks/useGraph";
+import { getFocusedGraph } from "@/lib/api/graph";
 import { INTERNAL_OBJECT_NAMES } from "@/lib/constants";
-import type { GraphNode as GN } from "@/lib/api/types";
-import ObjectPicker from "@/components/shared/ObjectPicker";
-import { Focus, X as CloseIcon } from "lucide-react";
+import type { FocusedGraphResponse, GraphNode as GN } from "@/lib/api/types";
+import { Focus, X as CloseIcon, AlertTriangle } from "lucide-react";
 
 const NODE_WIDTH = 240;
 const NODE_HEIGHT = 70;
+const FOCUS_DEFAULT_HOPS = 2;
+const FOCUS_DEFAULT_MAX_NODES = 200;
 
 const TYPE_STYLES: Record<string, { bg: string; accent: string; text: string; icon: string; label: string }> = {
   SCHEMA:           { bg: "#EFF6FF", accent: "#3B82F6", text: "#1E40AF", icon: "DB", label: "Database" },
@@ -40,8 +51,6 @@ const TYPE_STYLES: Record<string, { bg: string; accent: string; text: string; ic
   UDF:              { bg: "#ECFEFF", accent: "#06B6D4", text: "#155E75", icon: "U",  label: "UDF" },
   TRIGGER:          { bg: "#FEF2F2", accent: "#EF4444", text: "#991B1B", icon: "TR", label: "Trigger" },
   INDEX:            { bg: "#FEFCE8", accent: "#EAB308", text: "#854D0E", icon: "I",  label: "Index" },
-  // UNKNOWN = parser v1 didn't send `datasetType`. Rendered in amber to
-  // match the "Structural snapshot incomplete" warning surfaced at import.
   UNKNOWN:          { bg: "#FFFBEB", accent: "#F59E0B", text: "#92400E", icon: "?",  label: "Unclassified" },
 };
 const DEFAULT_STYLE = { bg: "#F9FAFB", accent: "#9CA3AF", text: "#374151", icon: "?", label: "Other" };
@@ -80,7 +89,6 @@ function GraphNodeComponent({ data }: { data: { raw: GN } }) {
       <Handle type="target" position={Position.Top} style={{ background: s.accent }} />
       <Handle type="source" position={Position.Bottom} style={{ background: s.accent }} />
 
-      {/* Type badge */}
       <div style={{
         position: "absolute", top: -10, left: 12,
         background: s.accent, color: "white",
@@ -90,19 +98,16 @@ function GraphNodeComponent({ data }: { data: { raw: GN } }) {
         {s.label.toUpperCase()}
       </div>
 
-      {/* Name */}
       <div style={{ color: s.text, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
         {displayName}
       </div>
 
-      {/* Database */}
       {schemaLabel && n.object_type !== "SCHEMA" && n.object_type !== "DATABASE" && (
         <div style={{ color: s.text, fontSize: 10, opacity: 0.6 }}>
           {schemaLabel}
         </div>
       )}
 
-      {/* Metrics row */}
       {n.metrics && (
         <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 9, color: "#6B7280" }}>
           <span>in:{n.metrics.in_degree}</span>
@@ -121,10 +126,6 @@ function GraphNodeComponent({ data }: { data: { raw: GN } }) {
 
 const nodeTypes: NodeTypes = { custom: GraphNodeComponent };
 
-/* ---- Layout helper ----
-   We use dagre for a deterministic top-down layered layout. React Flow's
-   built-in auto-layout is position-based; dagre gives us proper hierarchical
-   ranks so "upstream above, downstream below" reads naturally. */
 function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
@@ -145,73 +146,95 @@ function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
 export default function GraphPage() {
   const { activeSnapshotId, setActiveSnapshotId } = useSelection();
   const { data: snapData } = useSnapshots();
-  const { data: graphData, error, isLoading } = useGraph(activeSnapshotId);
+  const { data: graphData, error: fullGraphError, isLoading: fullGraphLoading } =
+    useGraph(activeSnapshotId);
   const [selectedNode, setSelectedNode] = useState<GN | null>(null);
   const [showSchemas, setShowSchemas] = useState(true);
   const [edgeFilter, setEdgeFilter] = useState<"ALL" | "DEPENDS_ON" | "FEEDS">("ALL");
 
-  // ──── Focus mode (Meeting #7 / Kindy + Rahul) ────
-  // At Lloyds-scale (500M relationships) rendering the whole graph is
-  // pointless. Focus mode lets the user pick an anchor object and N hops;
-  // we BFS out from that anchor in both directions and render only the
-  // reachable subgraph. Falls through to "show everything" when no anchor
-  // is set, so existing behaviour is preserved.
-  const [focusObject, setFocusObject] = useState<string | null>(null);
-  const [hops, setHops] = useState<number>(2);
+  // ──── Focus mode ────
+  // The full-graph response uses `truncated: true` to signal "this is too
+  // big to ship; pick an anchor instead". For both that case AND the
+  // small-snapshot case where the user explicitly enables focus, we pull
+  // the subgraph from the server via `/graph/focus` rather than doing
+  // client-side BFS. That keeps the two paths consistent.
+  const [focusObject, setFocusObject] = useState<string>("");
+  const [hops, setHops] = useState<number>(FOCUS_DEFAULT_HOPS);
+  const [focusData, setFocusData] = useState<FocusedGraphResponse | null>(null);
+  const [focusLoading, setFocusLoading] = useState(false);
+  const [focusError, setFocusError] = useState<string | null>(null);
 
-  // Heavy memoized pipeline: filter internal nodes → optionally hide schemas →
-  // filter edges by endpoint membership and by type → build React Flow nodes
-  // and edges → run dagre → compute stats. Runs only when inputs change.
-  const { nodes, edges, stats, focusMissing } = useMemo(() => {
-    if (!graphData) return { nodes: [], edges: [], stats: { schemas: 0, tables: 0, views: 0, unclassified: 0, feedsEdges: 0, dependsEdges: 0 }, focusMissing: false };
+  // Reset focus state when the snapshot changes — otherwise an anchor
+  // from snapshot 5 could silently 404 against snapshot 7.
+  useEffect(() => {
+    setFocusObject("");
+    setFocusData(null);
+    setSelectedNode(null);
+  }, [activeSnapshotId]);
 
-    let filteredNodes = graphData.nodes.filter(
-      (n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? "")
+  // Focus fetch effect. Only fires when both the snapshot and the
+  // anchor are set; clears otherwise. Edge-type translation: the user's
+  // ALL/DEPENDS_ON/FEEDS toggle maps to a backend `edge_types` filter
+  // so we don't pull edges we'll just hide on the client.
+  useEffect(() => {
+    if (!activeSnapshotId || !focusObject) {
+      setFocusData(null);
+      return;
+    }
+    let cancelled = false;
+    setFocusLoading(true);
+    setFocusError(null);
+    getFocusedGraph({
+      snapshot_id: activeSnapshotId,
+      root: focusObject,
+      hops,
+      max_nodes: FOCUS_DEFAULT_MAX_NODES,
+      edge_types: edgeFilter === "ALL" ? undefined : edgeFilter,
+    })
+      .then((data) => {
+        if (!cancelled) setFocusData(data);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) {
+          setFocusError(
+            `"${focusObject}" isn't in this snapshot. Try a different anchor or switch snapshots.`,
+          );
+        } else {
+          setFocusError(err instanceof Error ? err.message : "Failed to load focus subgraph.");
+        }
+        setFocusData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFocusLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSnapshotId, focusObject, hops, edgeFilter]);
+
+  // Source-of-truth selection for what to render. Focus wins when active;
+  // otherwise we fall back to the full graph (which itself may be
+  // empty when truncated — handled in the empty-state branch below).
+  const inFocusMode = focusObject.length > 0;
+  const renderSource = inFocusMode ? focusData : graphData;
+
+  // Heavy memoised pipeline: filter internal nodes → optionally hide schemas →
+  // filter edges by membership and type → build React Flow shapes → run dagre.
+  const { nodes, edges, stats } = useMemo(() => {
+    if (!renderSource)
+      return {
+        nodes: [] as Node[],
+        edges: [] as Edge[],
+        stats: { schemas: 0, tables: 0, views: 0, unclassified: 0, feedsEdges: 0, dependsEdges: 0 },
+      };
+
+    let filteredNodes = renderSource.nodes.filter(
+      (n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? ""),
     );
-
     if (!showSchemas) {
       filteredNodes = filteredNodes.filter((n) => n.object_type !== "SCHEMA");
-    }
-
-    // ──── Focus BFS ────
-    // When an anchor is set, carve out the subgraph within `hops` edges
-    // (undirected) from that anchor. Both FEEDS and DEPENDS_ON edges count
-    // as traversal steps regardless of the edgeFilter below — the edge
-    // filter is cosmetic (what we *render*), not a reachability filter.
-    let focusMissingLocal = false;
-    if (focusObject) {
-      const anchor = filteredNodes.find((n) => n.object_name === focusObject);
-      if (!anchor) {
-        focusMissingLocal = true;
-        filteredNodes = [];
-      } else {
-        // Adjacency list from the (pre-filter) graph so hops can cross
-        // hidden containers — otherwise turning off "Database nodes"
-        // would silently break the BFS.
-        const adj = new Map<string, string[]>();
-        for (const e of graphData.edges) {
-          if (!adj.has(e.source)) adj.set(e.source, []);
-          if (!adj.has(e.target)) adj.set(e.target, []);
-          adj.get(e.source)!.push(e.target);
-          adj.get(e.target)!.push(e.source);
-        }
-        const reachable = new Set<string>([anchor.node_id]);
-        let frontier: string[] = [anchor.node_id];
-        for (let depth = 0; depth < hops; depth++) {
-          const next: string[] = [];
-          for (const id of frontier) {
-            for (const nb of adj.get(id) ?? []) {
-              if (!reachable.has(nb)) {
-                reachable.add(nb);
-                next.push(nb);
-              }
-            }
-          }
-          if (next.length === 0) break;
-          frontier = next;
-        }
-        filteredNodes = filteredNodes.filter((n) => reachable.has(n.node_id));
-      }
     }
 
     const nodeIds = new Set(filteredNodes.map((n) => n.node_id));
@@ -223,11 +246,12 @@ export default function GraphPage() {
       position: { x: 0, y: 0 },
     }));
 
-    // Drop edges whose endpoints were filtered out — React Flow would throw
-    // on dangling edges otherwise.
-    let filteredEdges = graphData.edges.filter(
-      (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+    let filteredEdges = renderSource.edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
     );
+    // edge_types is already pushed to the backend in focus mode, but we
+    // re-apply on the client for the full-graph case (and as a no-op
+    // sanity check for focus).
     if (edgeFilter !== "ALL") {
       filteredEdges = filteredEdges.filter((e) => e.type === edgeFilter);
     }
@@ -251,10 +275,6 @@ export default function GraphPage() {
     });
 
     const laidOut = layoutGraph(rfNodes, rfEdges);
-
-    // `unclassified` surfaces the count of UNKNOWN-type nodes so a parser-v1
-    // import doesn't look deceptively empty in the header ("0 tables" is
-    // technically true but hides real data).
     const stats = {
       schemas: filteredNodes.filter((n) => n.object_type === "SCHEMA" || n.object_type === "DATABASE").length,
       tables: filteredNodes.filter((n) => n.object_type === "TABLE").length,
@@ -263,22 +283,12 @@ export default function GraphPage() {
       feedsEdges: filteredEdges.filter((e) => e.type === "FEEDS").length,
       dependsEdges: filteredEdges.filter((e) => e.type === "DEPENDS_ON").length,
     };
-
-    return { nodes: laidOut, edges: rfEdges, stats, focusMissing: focusMissingLocal };
-  }, [graphData, showSchemas, edgeFilter, focusObject, hops]);
+    return { nodes: laidOut, edges: rfEdges, stats };
+  }, [renderSource, showSchemas, edgeFilter]);
 
   const snapshots = snapData?.snapshots ?? [];
-
-  // Picker entries — same filtering as the rendered graph but keep the
-  // full catalog so users can still anchor on objects hidden by Schemas
-  // toggle etc. (the BFS re-introduces anything reachable).
-  const pickerEntries = useMemo(() => {
-    if (!graphData) return [];
-    return graphData.nodes
-      .filter((n) => !INTERNAL_OBJECT_NAMES.has(n.object_name.split(".").pop() ?? ""))
-      .map((n) => ({ name: n.object_name, type: n.object_type }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [graphData]);
+  const isTruncated = graphData?.truncated === true;
+  const totalNodes = graphData?.total_nodes ?? 0;
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
     setSelectedNode((node.data as { raw: GN }).raw);
@@ -286,25 +296,20 @@ export default function GraphPage() {
 
   return (
     <PageShell title="System Graph" subtitle="Technical dependency & lineage visualization">
-      {/* Page-level intro — compact because the page is visualisation-driven.
-          Legend at the bottom of the page carries the formal explanation of
-          shapes / colours / fragility; this intro sells the value of the view. */}
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-4 flex items-start gap-2">
         <svg className="text-blue-500 shrink-0 mt-0.5" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         <p className="text-[11px] text-td-gray-dark leading-relaxed">
-          A bird&apos;s-eye view of the entire warehouse as a graph:{" "}
-          <strong>nodes = database objects</strong> (tables, views, procs, …),{" "}
-          <strong>edges = dependencies</strong> (what feeds what).
-          Use the filter bar to narrow by edge type (DEPENDS_ON vs FEEDS) or hide
-          database-level container nodes. For large warehouses, set{" "}
-          <strong>Focus on object</strong> to carve out a neighbourhood of N hops
-          around any anchor — the whole-graph view isn&apos;t readable past a few
-          hundred nodes. Click any node to see its metrics on the right —
-          in-degree, out-degree, fragility, hub status.
+          A bird&apos;s-eye view of the warehouse as a graph:{" "}
+          <strong>nodes = database objects</strong>, <strong>edges = dependencies</strong>.
+          For small snapshots the whole graph is shown directly. For large snapshots
+          (over 5,000 objects) we ask you to pick an anchor — the focus subgraph is
+          server-computed in BFS, capped at {FOCUS_DEFAULT_MAX_NODES} nodes, and
+          stays readable at any warehouse size. Click any node to see its metrics
+          on the right.
         </p>
       </div>
 
-      {/* ──── Controls bar ──── Snapshot picker + edge-type filter + schema toggle + live counts */}
+      {/* ──── Controls bar ──── */}
       <div className="flex items-center gap-4 mb-4 flex-wrap">
         <div>
           <label className="text-xs text-td-gray-dark block mb-1">Snapshot</label>
@@ -357,20 +362,21 @@ export default function GraphPage() {
           </label>
         </div>
 
-        {graphData && (
+        {activeSnapshotId && (
           <div className="flex-1 min-w-[240px] max-w-[420px]">
-            <label className="text-xs text-td-gray-dark block mb-1 flex items-center gap-1">
+            <label className="text-xs text-td-gray-dark mb-1 flex items-center gap-1">
               <Focus size={12} className="inline" />
               Focus on object
-              <span className="text-[10px] text-gray-400 font-normal" title="Narrow the graph to a neighbourhood around one object. Useful when the full graph has thousands of nodes.">
-                (optional, scales to large graphs)
+              <span className="text-[10px] text-gray-400 font-normal" title="Required for snapshots over 5k nodes; optional otherwise.">
+                (required for very large graphs)
               </span>
             </label>
-            <ObjectPicker
-              objects={pickerEntries}
+            <ObjectAutocomplete
               value={focusObject}
               onChange={setFocusObject}
-              placeholder="Show entire graph — or pick an anchor..."
+              source="graph"
+              snapshotId={activeSnapshotId}
+              placeholder={isTruncated ? "Pick an anchor to focus on..." : "Optional: focus on an anchor..."}
             />
           </div>
         )}
@@ -387,22 +393,22 @@ export default function GraphPage() {
               value={hops}
               onChange={(e) => setHops(Number(e.target.value))}
               className="w-28"
-              title="How many edges away from the anchor to include. 1 = direct neighbours only; 5 = wide neighbourhood."
+              title="How many edges away from the anchor to include."
             />
           </div>
         )}
 
         {focusObject && (
           <button
-            onClick={() => setFocusObject(null)}
+            onClick={() => setFocusObject("")}
             className="text-xs text-blue-600 hover:underline flex items-center gap-1 self-end pb-1.5"
-            title="Clear focus and show the entire graph"
+            title="Clear focus and return to the full graph"
           >
             <CloseIcon size={10} /> Clear focus
           </button>
         )}
 
-        {graphData && (
+        {(graphData || focusData) && (
           <div className="ml-auto flex gap-3 text-xs text-td-gray-dark items-center">
             <span>{stats.schemas} databases</span>
             <span>{stats.tables} tables</span>
@@ -421,26 +427,38 @@ export default function GraphPage() {
         )}
       </div>
 
-      {focusObject && !focusMissing && nodes.length > 0 && (
+      {/* Mode banners */}
+      {inFocusMode && focusData && nodes.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 flex items-start gap-2 text-[11px] text-blue-900">
           <Focus size={12} className="shrink-0 mt-0.5 text-blue-500" />
           <div>
             Focus mode: showing <strong>{nodes.length}</strong> objects within <strong>{hops}</strong> hop{hops === 1 ? "" : "s"} of{" "}
-            <span className="font-mono">{focusObject}</span>. Pull the slider right to widen the neighbourhood, or click &ldquo;Clear focus&rdquo; to see the whole graph.
+            <span className="font-mono">{focusObject}</span>.
+            {focusData.capped && (
+              <> BFS hit the {focusData.max_nodes}-node cap — narrow your anchor or reduce hops to see a complete neighbourhood.</>
+            )}
           </div>
         </div>
       )}
-      {focusMissing && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 text-[11px] text-amber-900">
-          Anchor <span className="font-mono">{focusObject}</span> isn&apos;t present in this snapshot. Try a different snapshot or clear the focus.
+
+      {isTruncated && !focusObject && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-start gap-2 text-[12px] text-amber-900">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            This snapshot has <strong>{totalNodes.toLocaleString()}</strong> graph nodes —
+            too many to render at once. Pick an anchor in the focus selector above to
+            see a {FOCUS_DEFAULT_HOPS}-hop neighbourhood (default {FOCUS_DEFAULT_MAX_NODES} nodes).
+          </div>
         </div>
       )}
 
       {!activeSnapshotId && <EmptyState message="Select a snapshot to visualize its dependency graph." />}
-      {error && <ErrorAlert message="Failed to load graph data" />}
-      {isLoading && <LoadingSpinner />}
+      {fullGraphError && !inFocusMode && <ErrorAlert message="Failed to load graph data" />}
+      {focusError && <ErrorAlert message={focusError} />}
+      {(fullGraphLoading || focusLoading) && <LoadingSpinner />}
 
-      {graphData && nodes.length > 0 && (
+      {/* Render the graph when we have something to show */}
+      {renderSource && nodes.length > 0 && (
         <div className="flex gap-4">
           <div
             className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
@@ -522,26 +540,25 @@ export default function GraphPage() {
         </div>
       )}
 
-      {graphData && nodes.length === 0 && (
+      {/* Empty states */}
+      {activeSnapshotId && !inFocusMode && !isTruncated && graphData && nodes.length === 0 && !fullGraphLoading && (
         <EmptyState message="No objects found for this snapshot." />
       )}
+      {activeSnapshotId && isTruncated && !focusObject && !focusLoading && (
+        <EmptyState message="This graph is too large to render whole — pick an anchor above to focus." />
+      )}
 
-      {/* ──── Legend ──── Three independent visual encodings in one legend:
-          box color = object type, edge style = relationship kind,
-          inline "frag:N%" text color = fragility bucket. Deliberately separate
-          so users can read each dimension independently. */}
-      {graphData && nodes.length > 0 && (
+      {/* Legend */}
+      {renderSource && nodes.length > 0 && (
         <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 p-3 space-y-2">
           <div className="flex items-start gap-4 flex-wrap text-xs">
-            {/* Object type (box color) — only show types present in the graph */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-td-navy">Object type:</span>
               {(() => {
-                const present = new Set(graphData.nodes.map(n => n.object_type));
+                const present = new Set(renderSource.nodes.map(n => n.object_type));
                 return Object.entries(TYPE_STYLES)
                   .filter(([type]) => present.has(type))
                   .filter(([type], idx, arr) => {
-                    // Merge DATABASE and SCHEMA visually (same style)
                     if (type === "SCHEMA") return !arr.find(([t]) => t === "DATABASE" && present.has("DATABASE"));
                     return true;
                   })
@@ -554,7 +571,6 @@ export default function GraphPage() {
               })()}
             </div>
 
-            {/* Edges */}
             <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
               <span className="font-semibold text-td-navy">Relationship:</span>
               <div className="flex items-center gap-1.5" title="DEPENDS_ON: this object references another">
@@ -567,9 +583,8 @@ export default function GraphPage() {
               </div>
             </div>
 
-            {/* Fragility (inline text) */}
             <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
-              <span className="font-semibold text-td-navy" title="Fragility = in_degree / (in_degree + out_degree). Shown as text inside each node (e.g. 'frag:25%').">
+              <span className="font-semibold text-td-navy" title="Fragility = in_degree / (in_degree + out_degree).">
                 Fragility (text):
               </span>
               <span className="flex items-center gap-1 text-td-gray-dark"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />&lt;5% low</span>
@@ -577,9 +592,6 @@ export default function GraphPage() {
               <span className="flex items-center gap-1 text-td-gray-dark"><span className="w-2.5 h-2.5 rounded-full bg-red-500" />≥10% high</span>
             </div>
           </div>
-          <p className="text-[10px] text-td-gray-dark italic">
-            Note: box color = object type. Fragility appears as coloured text inside each node (not on the border). Hub nodes (★) have many connections.
-          </p>
         </div>
       )}
     </PageShell>

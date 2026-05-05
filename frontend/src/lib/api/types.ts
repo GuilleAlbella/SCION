@@ -117,6 +117,42 @@ export interface GraphResponse {
   snapshot_id: number;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** True when the snapshot's full graph exceeds the server's
+   *  `FULL_GRAPH_NODE_CAP` and the response was bailed early. The
+   *  `nodes` and `edges` arrays will be empty; the UI should switch
+   *  to the focus-picker flow. */
+  truncated?: boolean;
+  /** Real node count (populated regardless of truncation). Used to
+   *  surface "this graph has N nodes" in the empty-state copy. */
+  total_nodes?: number;
+}
+
+export interface FocusedGraphParams {
+  snapshot_id: number;
+  /** "schema.object_name" — the format produced by ObjectAutocomplete
+   *  with `source="graph"`. Bare `object_name` also works for legacy
+   *  callers. */
+  root: string;
+  /** BFS depth from the root. 1–5 (server-clamped). */
+  hops?: number;
+  /** Hard cap on returned nodes. 10–1000 (server-clamped). */
+  max_nodes?: number;
+  /** Comma-separated edge type whitelist (e.g. "FEEDS,DEPENDS_ON"). */
+  edge_types?: string;
+  /** Traversal direction. Default `both`. */
+  direction?: "up" | "down" | "both";
+}
+
+export interface FocusedGraphResponse {
+  snapshot_id: number;
+  root: string;
+  hops: number;
+  max_nodes: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** True when BFS hit `max_nodes` before exhausting `hops`. UI should
+   *  surface a "increase max_nodes or narrow the search" hint. */
+  capped: boolean;
 }
 
 export interface ImpactItem {
