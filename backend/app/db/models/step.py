@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -70,3 +70,13 @@ class Step(Base):
     )
 
     process: Mapped["Process"] = relationship(back_populates="steps")
+
+    # Two complementary access paths matter here:
+    # - ``process_id`` for "list every step of this process" (Step browser
+    #   panel, lineage walks).
+    # - ``(snapshot_id, step_natural_key)`` for parser-import dedup, same
+    #   pattern as Process. Both created in alembic f1a8b3c5d207.
+    __table_args__ = (
+        Index("ix_step_process", "process_id"),
+        Index("ix_step_snapshot_natural", "snapshot_id", "step_natural_key"),
+    )

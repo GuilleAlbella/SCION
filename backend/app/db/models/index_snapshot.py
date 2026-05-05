@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -39,3 +39,11 @@ class IndexSnapshot(Base):
     unique_flag: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     column_name: Mapped[str] = mapped_column(String, nullable=False)
     column_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # The Indices viewer groups by ``(table_id, index_number)`` to assemble
+    # multi-column indexes. Without this composite index the page does a
+    # full scan of every row in the table, which on a 337k-index extract
+    # was visibly sluggish. Created in alembic b83c9d5e6f12.
+    __table_args__ = (
+        Index("ix_index_snapshot_table_index", "table_id", "index_number"),
+    )

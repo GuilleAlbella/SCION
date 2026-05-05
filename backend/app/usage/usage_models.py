@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, JSON, String
+from sqlalchemy import DateTime, Float, Index, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -51,4 +51,17 @@ class ObjectCriticality(Base):
     criticality_level: Mapped[str] = mapped_column(String, nullable=False, default="LOW")
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    # ``(snapshot_id, combined_score)`` is the exact ordering used by the
+    # /usage criticality scorecard, the TAISA "what's most critical here?"
+    # context fetch, and the criticality CSV export. Indexing on the score
+    # too lets SQLite serve the top-N queries by index scan instead of a
+    # sort over the full snapshot. Created in alembic c94d0e6a7b23.
+    __table_args__ = (
+        Index(
+            "ix_object_criticality_snapshot_score",
+            "snapshot_id",
+            "combined_score",
+        ),
     )

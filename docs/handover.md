@@ -34,12 +34,12 @@ cd frontend
 npm install
 cd ..
 
-# 2. Bootstrap an empty SQLite DB and run all Alembic migrations
-.venv\Scripts\python.exe backend\tools\bootstrap_sqlite_db.py
-.venv\Scripts\python.exe -m alembic upgrade head
-
-# 3. Seed demo data so the UI has something to show
-.venv\Scripts\python.exe backend\tools\rich_seed.py
+# 2. Create the SQLite DB (alembic upgrade head, idempotent) and seed demo data.
+#    `db_init.py` is the single canonical entry point: it auto-detects fresh /
+#    managed / legacy DB states and applies the correct path. The old
+#    `bootstrap_sqlite_db.py` (which used Base.metadata.create_all and could
+#    drift from migrations) is gone — `db_init.py reset --with-seed` replaces it.
+.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed
 
 # 4. Run both services
 .\dev.ps1
@@ -102,7 +102,7 @@ backend/
 │  │  └─ dict_persister.py           ← snapshot keyed by run_id
 │  └─ ...
 ├─ tests/                 # pytest, mostly unit + a few integration
-└─ tools/                 # one-off scripts (seed, bootstrap, …)
+└─ tools/                 # db_init.py (schema + seed lifecycle), rich_seed.py, …
 
 frontend/
 └─ src/

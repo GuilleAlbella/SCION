@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -62,3 +62,11 @@ class Process(Base):
     # Back-ref: a process has many steps. Declared via string to avoid circular
     # import at module load time (step.py imports Process too).
     steps: Mapped[List["Step"]] = relationship(back_populates="process")
+
+    # Composite index on the natural lookup key. The parser-import pipeline
+    # de-duplicates incoming processes by ``(snapshot_id, process_natural_key)``
+    # on every batch; without this index that probe scales linearly with
+    # process count. Created in alembic f1a8b3c5d207.
+    __table_args__ = (
+        Index("ix_process_snapshot_natural", "snapshot_id", "process_natural_key"),
+    )

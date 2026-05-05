@@ -87,7 +87,7 @@ Write-Ok "Node modules ready"
 
 $dbFile = Join-Path $root "kalido_lite.db"
 if (-not (Test-Path $dbFile)) {
-    Write-Warn "kalido_lite.db not found -- seed it with 'backend/tools/rich_seed.py' for demo data"
+    Write-Warn "kalido_lite.db not found -- run '.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed' for a fresh DB + demo data"
 } else {
     $dbSize = [math]::Round((Get-Item $dbFile).Length / 1KB, 1)
     Write-Ok "Demo database present (${dbSize} KB)"

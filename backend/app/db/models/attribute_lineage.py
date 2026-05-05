@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -79,4 +79,23 @@ class AttributeLineage(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
+    )
+
+    # Composite indexes that mirror the upstream/downstream lineage walks:
+    # the lineage browser starts from either side of the edge and walks
+    # within a single snapshot, so each query filters by
+    # ``(snapshot_id, attribute_natural_key)``. Created in alembic
+    # f1a8b3c5d207 — declared here so ``Base.metadata.create_all`` (used
+    # by tests and fresh-DB bootstrapping) produces an identical schema.
+    __table_args__ = (
+        Index(
+            "ix_attr_lineage_source",
+            "snapshot_id",
+            "source_attribute_natural_key",
+        ),
+        Index(
+            "ix_attr_lineage_target",
+            "snapshot_id",
+            "target_attribute_natural_key",
+        ),
     )
