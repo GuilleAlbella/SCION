@@ -15,11 +15,30 @@ initialise, the exception is propagated and the application fails to start,
 ensuring deterministic readiness.
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import v1_router
 from app.engine_registry import get_engine_states, initialise_engines
+
+
+# uvicorn configures its own loggers but doesn't touch the root logger,
+# so `logging.getLogger("app.*")` calls are silently dropped under the
+# default config — including the per-phase timing/progress lines from
+# `dict_persister` and `dict_import` that operators rely on during a
+# multi-minute ingest. Setting basicConfig here once, at module import,
+# makes every `app.*` logger flush to stdout at INFO with a compact,
+# greppable format. uvicorn's own access/error logs are unaffected
+# because their loggers (`uvicorn`, `uvicorn.access`) are configured
+# separately by uvicorn itself.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    datefmt="%H:%M:%S",
+    force=True,
+)
 
 
 app = FastAPI(title="SCION API", version="1.0.0")
