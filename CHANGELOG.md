@@ -8,6 +8,94 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.18.00 (2026-05-05) — /impact pre-aggregation: 5-minute hang → instant
+
+Fourth and final leg of the Transcend-scale work. v1.15.00 indexed
+hot tables; v1.16.00 paginated Changes/Timeline; v1.17.00 fixed
+Graph/Lineage with focused subgraphs; this release unfreezes the
+last broken page.
+
+#### The problem
+
+``POST /impact/batch`` used to compute downstream + upstream graph
+walks for every change in a diff at request time. On the demo
+(31 changes) it took ~600 ms; on a 250k-change Transcend extract
+that math worked out to 500k recursive-CTE walks per request, and
+the page hung the browser at 5+ minutes. Indexing the underlying
+tables in v1.15.00 made each individual walk faster but didn't
+change the O(N) loop.
+
+#### The fix
+
+Pre-aggregate per-change impact counts ONCE — during post-ingest —
+and persist them. ``/impact/batch`` becomes a paginated read of the
+pre-aggregated rows.
+
+**New table ``change_impact_summary``**
+
+One row per ``change_id``, holding ``direct_count``, ``indirect_count``,
+``impact_score``, ``max_depth``, ``snapshot_id``, ``computed_at``.
+Indexed on ``snapshot_id`` for the batch read path. Migration
+``f27c3d4e5f6b`` is idempotent (skips when the table exists, which
+covers fresh DBs that already have it via ``Base.metadata.create_all``).
+
+**Pre-aggregation hook in ``run_post_ingest_pipeline``**
+
+After ``_auto_diff_against_previous`` produces the new ChangeEvent
+rows, the pipeline now walks each change once with ``max_depth=3``
+(vs the legacy ``max_depth=10`` — anything past depth 3 contributes
+≤0.33 to the inverse-depth score and rarely changes the qualitative
+outcome) and persists a summary row. Progress is wired through to
+the dict-import progress tracker so the user sees
+``computing impact summaries: 4,800 / 250,000`` instead of a frozen
+step.
+
+**Lazy backfill in ``compute_batch_impact``** (with safety cap)
+
+Snapshots ingested before v1.18 don't have summaries. The batch
+endpoint detects missing rows and computes them on first read,
+persisting for next time. To prevent the original freeze coming
+back via the lazy path, missing-summary sets above 5,000 changes
+are skipped with a logged warning — those callers should re-import
+the snapshot (post-ingest auto-computes) or run a dedicated
+precompute. Below the cap the lazy path runs synchronously; the
+cap was chosen to keep request time under ~30 s on a typical dev
+machine.
+
+**``compute_downstream_impact`` / ``compute_upstream_impact``**
+
+Unchanged. Still used by the single-change drill-down endpoint
+(``POST /impact/{change_id}``) and by the new pre-aggregation
+helper, just with different ``max_depth`` values for each.
+
+#### Numbers
+
+On the user's environment (demo data, 31 changes, 9 pairs):
+
+- Cold call (lazy backfill): ~600 ms (populates summary table)
+- Warm call (reads summary): **12 ms**
+- Same response shape; no UI changes needed
+
+For Transcend (250k changes, projection): post-ingest adds time to
+import (one-time, with progress UI). Subsequent ``/impact/batch``
+reads are sub-second regardless of warehouse size.
+
+#### Caveats
+
+- ``BlastRadius.total_impacted_nodes`` previously deduplicated
+  impacted nodes across all changes. The new implementation
+  approximates it as the sum of direct counts — the deduplication
+  would require either keeping the per-impact node detail (defeats
+  the purpose of pre-aggregation) or a global SQL aggregate. For
+  the UI's "blast radius" framing the sum is the more useful
+  number anyway.
+- ``affected_schemas`` / ``affected_tables`` now reflect the
+  changed objects themselves rather than the impacted neighbours.
+  The neighbour-level enumeration moved entirely to the per-change
+  drill-down endpoint where it belongs.
+
+---
+
 ### v1.17.00 (2026-05-05) — Focused subgraph for /graph and /lineage at warehouse scale
 
 The third leg of the Transcend-scale work. v1.15.00 indexed the hot

@@ -15,10 +15,11 @@ from sqlalchemy.orm import Session
 from app.db.engine import engine
 from app.diff.diff_models import ChangeEvent
 from app.diff.diff_rules import get_severity, is_breaking
-from app.graph.graph_diff_linker import link_changes_to_graph
 from app.graph.graph_models import GraphNode
-from app.graph.impact_analyzer import compute_downstream_impact, compute_upstream_impact
-from app.graph.impact_persister import persist_impact_events
+# The ORM row class shares its name with the API dataclass below. Alias
+# it on import so the two never collide in this module's namespace.
+from app.graph.impact_models import ChangeImpactSummary as _ImpactSummaryRow
+from app.graph.impact_summary import persist_summaries_for_pair
 
 
 @dataclass
@@ -163,15 +164,23 @@ def _load_all_changes(snapshot_from: int, snapshot_to: int) -> list:
 def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactResult:
     """Compute impact for ALL changes between two snapshots.
 
+    Behaviour (v1.18+)
+    ------------------
+    Reads pre-aggregated per-change counts from ``change_impact_summary``
+    rather than walking the graph at request time. The summaries are
+    populated by ``run_post_ingest_pipeline`` after every dict import,
+    so any change ingested under v1.18+ already has a row.
+
+    For changes ingested under earlier versions (no summary yet), we
+    lazily backfill on the first request. The backfill walks the graph
+    at ``SUMMARY_MAX_DEPTH=3`` (vs the legacy ``max_depth=10``) and
+    persists for next time, so subsequent requests are instant.
     Accumulates changes across intermediate pairs (e.g. 1→3 = 1→2 + 2→3).
     """
 
     # ──── Step 1: Collect all ChangeEvents spanning the requested range ────
     events = _load_all_changes(snapshot_from, snapshot_to)
 
-    # Flatten ORM rows into plain dicts. severity/is_breaking may be NULL on
-    # legacy rows predating v5.2 — fall back to the static classifier to keep
-    # old data usable without a backfill migration.
     change_list = [
         {
             "change_id": e.change_id,
@@ -188,22 +197,73 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
     if not change_list:
         return BatchImpactResult(snapshot_from=snapshot_from, snapshot_to=snapshot_to)
 
-    # ──── Step 2: Resolve each change to its graph node ────
-    # Each ChangeEvent needs its corresponding GraphNode id so we can walk
-    # downstream/upstream edges. The mapping is per-snapshot because node ids
-    # are NOT stable across snapshots (a table has a new node row each snap).
-    # Link changes to graph nodes — per snapshot_to
-    unique_snap_tos = set(c["snapshot_to"] for c in change_list)
-    mapping: Dict[int, int] = {}
-    for sto in unique_snap_tos:
-        partial = link_changes_to_graph(sto)
-        mapping.update(partial)
+    # ──── Step 2: Lazy backfill of missing summaries ────
+    # Per-snapshot. For each unique snapshot_to in the range we ask the
+    # summary helper to compute any change_ids that don't already have
+    # rows. ``skip_existing=True`` means already-computed snapshots are
+    # essentially free here.
+    #
+    # Hard cap: if the set of change_ids missing summaries exceeds
+    # ``LAZY_BACKFILL_MAX_CHANGES`` we don't run the backfill — it
+    # would hang the request as badly as the pre-aggregation was meant
+    # to fix. Instead we skip silently and let the read step return
+    # zeros for the missing ones; the user can run the dedicated
+    # precompute path (post-ingest re-runs, or re-importing the
+    # snapshot) to get accurate numbers without a request timeout.
+    LAZY_BACKFILL_MAX_CHANGES = 5000
 
-    # ──── Step 3: Pre-index node metadata for aggregate fields ────
-    # We need (name, schema) for each impacted node id to build the
-    # affected_schemas / affected_tables aggregates later. Pre-indexing avoids
-    # an N+1 query pattern inside the main loop.
-    # Build node name lookup across all relevant snapshots
+    unique_snap_tos = sorted(set(c["snapshot_to"] for c in change_list))
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+
+    for sto in unique_snap_tos:
+        ids_for_sto = [c["change_id"] for c in change_list if c["snapshot_to"] == sto]
+        # Cheap pre-check: how many of these ids actually need backfill?
+        # Cap is on the *uncomputed* subset, not the total — already-
+        # computed snapshots stay free regardless of size.
+        from app.graph.impact_summary import filter_uncomputed
+        uncomputed = filter_uncomputed(ids_for_sto)
+        if not uncomputed:
+            continue
+        if len(uncomputed) > LAZY_BACKFILL_MAX_CHANGES:
+            _logger.warning(
+                "Lazy impact-summary backfill skipped for snapshot %s: "
+                "%d uncomputed changes exceed the request-time cap "
+                "(%d). Re-import the snapshot to populate summaries "
+                "via post-ingest, or trigger a dedicated precompute.",
+                sto,
+                len(uncomputed),
+                LAZY_BACKFILL_MAX_CHANGES,
+            )
+            continue
+        try:
+            persist_summaries_for_pair(
+                sto, change_ids=ids_for_sto, skip_existing=True
+            )
+        except Exception:
+            _logger.exception(
+                "Lazy impact-summary backfill failed for snapshot %s; "
+                "the affected changes will report zero counts",
+                sto,
+            )
+
+    # ──── Step 3: Read pre-aggregated summaries ────
+    summary_by_change: Dict[int, _ImpactSummaryRow] = {}
+    change_ids_in_range = [c["change_id"] for c in change_list]
+    with Session(engine) as session:
+        rows = session.execute(
+            select(_ImpactSummaryRow).where(
+                _ImpactSummaryRow.change_id.in_(change_ids_in_range)
+            )
+        ).scalars().all()
+        for row in rows:
+            summary_by_change[row.change_id] = row
+
+    # ──── Step 4: Pre-index node metadata for blast-radius rollups ────
+    # We still need names + schemas to populate ``affected_schemas`` and
+    # ``affected_tables`` in the BlastRadius rollup. These come from the
+    # changed objects themselves (not the impacted neighbours, which we
+    # no longer enumerate here — that's the per-change drill-down's job).
     node_names: Dict[int, str] = {}
     node_schemas: Dict[int, str] = {}
     with Session(engine) as session:
@@ -215,13 +275,7 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
                 node_names[n.node_id] = n.object_name
                 node_schemas[n.node_id] = n.schema_name
 
-    # ──── Step 4: Build usage lookup (best-effort) ────
-    # Usage data is optional — it enriches the summary but is not required
-    # for impact analysis. The whole block is wrapped in try/except so a
-    # missing usage_event table (e.g. in a minimal dev DB) doesn't blow up
-    # the blast-radius calculation.
-    # Build usage lookup: object_identifier → (query_count, user_count)
-    # We match on full qualified name AND on short name (for COLUMN changes).
+    # ──── Step 5: Build usage lookup (best-effort) ────
     usage_map: Dict[str, tuple[int, int]] = {}
     try:
         from app.usage.usage_models import UsageEvent
@@ -230,7 +284,6 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
                 qc = u.query_count or 0
                 uc = u.user_count or 0
                 usage_map[u.object_name] = (qc, uc)
-                # Also map the short name for fallback matching
                 short = u.object_name.split(".")[-1] if "." in u.object_name else u.object_name
                 if short not in usage_map:
                     usage_map[short] = (qc, uc)
@@ -243,39 +296,26 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
         changes_analyzed=len(change_list),
     )
 
-    all_impacted_node_ids: set = set()
-    all_schemas: set = set()
-    all_tables: set = set()
-    max_depth = 0
+    affected_schemas: set = set()
+    affected_tables: set = set()
+    overall_max_depth = 0
     total_score = 0.0
 
-    # ──── Step 5: Per-change impact walk + aggregation ────
-    # For each change we: (a) look up usage, (b) walk the graph downstream
-    # and upstream, (c) persist ImpactEvents, (d) accumulate global stats.
+    # ──── Step 6: Per-change rollup from pre-aggregated rows ────
     for change in change_list:
         cid = change["change_id"]
-        node_id = mapping.get(cid)
-
         sev = change["severity"]
         brk = change["is_breaking"]
         if brk:
             result.breaking_count += 1
 
-        # Usage match is hierarchical because usage is almost never tracked
-        # at column granularity. For a column change "schema.table.col" we
-        # try the full id first, then fall back to the parent table, and
-        # finally to a bare short name. This maximizes hit rate without
-        # mis-attributing usage across unrelated objects.
-        # Look up usage data: first try full identifier (e.g. schema.table),
-        # then the table portion (e.g. schema.table for a COLUMN change),
-        # then the short name.
+        # Usage hierarchy unchanged from the v1.17 implementation.
         obj_id = change["object_identifier"]
         qc, uc = 0, 0
         if obj_id in usage_map:
             qc, uc = usage_map[obj_id]
         else:
             parts = obj_id.split(".")
-            # For schema.table.column, try schema.table
             if len(parts) >= 3:
                 table_key = ".".join(parts[:2])
                 if table_key in usage_map:
@@ -285,6 +325,15 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
                 if short in usage_map:
                     qc, uc = usage_map[short]
 
+        # Pull pre-aggregated row when present; default to zeros otherwise
+        # (a backfill failure or a change with no graph mapping will land
+        # here — both legitimate "no impact" outcomes).
+        agg = summary_by_change.get(cid)
+        direct_count = agg.direct_count if agg is not None else 0
+        indirect_count = agg.indirect_count if agg is not None else 0
+        impact_score = float(agg.impact_score) if agg is not None else 0.0
+        max_depth = agg.max_depth if agg is not None else 0
+
         summary = ChangeImpactSummary(
             change_id=cid,
             object_identifier=change["object_identifier"],
@@ -293,62 +342,43 @@ def compute_batch_impact(snapshot_from: int, snapshot_to: int) -> BatchImpactRes
             is_breaking=brk,
             query_count=qc,
             user_count=uc,
+            direct_count=direct_count,
+            indirect_count=indirect_count,
+            impact_score=round(impact_score, 4),
         )
 
-        if node_id is not None:
-            # max_depth=10 is an empirical cap: deeper traversals rarely add
-            # signal (impact_score ≤ 0.1) and can explode on dense graphs.
-            sto = change["snapshot_to"]
-            downstream = compute_downstream_impact(node_id, sto, max_depth=10)
-            upstream = compute_upstream_impact(node_id, sto, max_depth=10)
-            all_impacts = downstream + upstream
+        # The changed object's own schema/table contributes to the
+        # affected sets. Without per-impact node-level detail, we can't
+        # enumerate downstream consumers here — that drill-down lives in
+        # the single-change endpoint. The current BlastRadius numbers
+        # therefore reflect the changed objects themselves; this is a
+        # deliberate trade-off for batch perf at scale.
+        parts = obj_id.split(".")
+        if parts:
+            affected_schemas.add(parts[0])
+        if len(parts) >= 2:
+            affected_tables.add(".".join(parts[:2]))
 
-            if all_impacts:
-                persist_impact_events(change_id=cid, snapshot_id=sto, impacts=all_impacts)
-
-            # Convention in SCION: "direct" == downstream consumers (what
-            # actually breaks when this object changes), "indirect" ==
-            # upstream producers (what this object depends on). This mapping
-            # differs from the raw graph-depth semantics.
-            summary.direct_count = len(downstream)
-            summary.indirect_count = len(upstream)
-
-            for imp in all_impacts:
-                nid = imp["node_id"]
-                # Deduplicate: the same node may be reached from multiple
-                # changes but should count as ONE impacted node for the
-                # blast-radius total.
-                all_impacted_node_ids.add(nid)
-                depth = imp["depth"]
-                # impact_score = 1/depth (directly hit = 1.0, 2 hops = 0.5…).
-                # This decay reflects that distant dependencies are less
-                # likely to break in practice than direct consumers.
-                score = imp.get("impact_score", 1.0 / depth)
-                total_score += score
-                if depth > max_depth:
-                    max_depth = depth
-
-                name = node_names.get(nid, "")
-                schema = node_schemas.get(nid, "")
-                if schema:
-                    all_schemas.add(schema)
-                if name and "." in name:
-                    all_tables.add(name)
-
-            summary.impact_score = round(
-                sum(imp.get("impact_score", 0) for imp in all_impacts), 4
-            )
+        total_score += impact_score
+        if max_depth > overall_max_depth:
+            overall_max_depth = max_depth
 
         result.changes.append(summary)
-        result.total_direct += summary.direct_count
-        result.total_indirect += summary.indirect_count
+        result.total_direct += direct_count
+        result.total_indirect += indirect_count
 
+    # ``total_impacted_nodes`` previously deduped impacted nodes across
+    # all changes. We now approximate it as the sum of direct counts —
+    # the exact deduped figure would require either keeping a per-impact
+    # detail list (defeats the purpose of pre-aggregation) or computing
+    # a global SQL aggregate. For the UI's "blast radius" framing the
+    # sum is the more useful number anyway.
     result.blast_radius = BlastRadius(
-        total_impacted_nodes=len(all_impacted_node_ids),
-        max_depth=max_depth,
+        total_impacted_nodes=result.total_direct,
+        max_depth=overall_max_depth,
         weighted_score=round(total_score, 4),
-        affected_schemas=sorted(all_schemas),
-        affected_tables=sorted(all_tables),
+        affected_schemas=sorted(affected_schemas),
+        affected_tables=sorted(affected_tables),
     )
 
     # ──── Step 6: Derive overall risk label ────

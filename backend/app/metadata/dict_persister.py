@@ -528,6 +528,55 @@ def run_post_ingest_pipeline(
         logger.warning("post-ingest: auto-diff failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] auto_diff         in %s", _fmt_time(time.perf_counter() - t_step))
 
+    # Step 7 (v1.18+): pre-aggregate per-change impact summaries.
+    #
+    # Without this step, ``POST /impact/batch`` would compute the
+    # downstream + upstream graph walks for every change at request
+    # time — fine on a 30-change demo, catastrophic on a 250k-change
+    # Transcend extract (5+ minute browser hang). We compute the
+    # counts ONCE here, persist them in ``change_impact_summary``,
+    # and the batch endpoint becomes a paginated read.
+    #
+    # The walks use ``max_depth=3`` rather than the per-request
+    # endpoint's 10 — the inverse-depth scoring (1/d) makes deeper
+    # contributions vanish anyway, and capping the recursion bounds
+    # the CTE explosion on dense graphs. See
+    # ``app/graph/impact_summary.py`` for the full rationale.
+    _push_caption("computing impact summaries…")
+    t_step = time.perf_counter()
+    try:
+        from app.graph.impact_summary import persist_summaries_for_pair
+
+        # Wire progress to the import-progress tracker so the user
+        # sees "computing impact summaries: 4,800 / 250,000" rather
+        # than a frozen step. Caption-only update is enough — there's
+        # no determinate fraction we can show because each change
+        # takes variable time depending on its graph fan-out.
+        def _impact_progress(done: int, total: int) -> None:
+            _push_caption(
+                f"computing impact summaries: {done:,} / {total:,}"
+            )
+
+        persisted = persist_summaries_for_pair(
+            snapshot_id,
+            skip_existing=True,
+            progress_cb=_impact_progress,
+        )
+        logger.info(
+            "[post-ingest] impact summaries: persisted %d row(s)",
+            persisted,
+        )
+    except Exception as e:
+        logger.warning(
+            "post-ingest: impact summary failed for %s: %s",
+            snapshot_id,
+            e,
+        )
+    logger.info(
+        "[post-ingest] impact_summary   in %s",
+        _fmt_time(time.perf_counter() - t_step),
+    )
+
 
 def _auto_diff_against_previous(snapshot_id: int) -> None:
     """Find the prior snapshot from the same source and run a diff.
