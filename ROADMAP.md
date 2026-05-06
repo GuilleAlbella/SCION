@@ -59,6 +59,14 @@ Goal: close the deploy story and remove future migration risk.
 - **`DATABASE_URL` discipline**: audit that no module hardcodes the
   SQLite path; everything reads from the env var. Add a runtime check
   at boot that the URL is reachable.
+- **`/system/version` fix**: today the endpoint queries the SCION
+  repo's GitHub Releases API, which returns 404 anonymously because
+  the repo is private — so the "update available" pill never lights
+  up. Switch the lookup to `scion-deploy` (public) and either
+  cross-tag releases there from the SCION publish workflow or
+  publish a `LATEST.txt` in `scion-deploy` that the workflow
+  updates. Either way, the banner only matters once there is a
+  newer release than what's installed.
 
 Acceptance: a user clicks "Update" in the UI, the version pill goes
 green, and `grep -RE "INSERT OR (IGNORE|REPLACE)|strftime|julianday"
