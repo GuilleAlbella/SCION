@@ -55,10 +55,45 @@ class VolatilityResponse(BaseModel):
     response_model=SnapshotMetricsResponse,
 )
 def get_snapshot_metrics(snapshot_id: int) -> Dict[str, Any]:
-    """Object counts and structural hash for a single snapshot."""
+    """Object counts and structural hash for a single snapshot.
+
+    Reads the persisted ``Snapshot.structural_hash`` from the DB
+    rather than recomputing it. The hash is calculated once at
+    ingest time (see ``snapshot_finaliser``) and stored — recomputing
+    on every call streams ~9.8M rows for a Transcend-class snapshot
+    and was the cause of the /metrics page hanging when one big
+    snapshot was loaded alongside the demo set: the frontend fetches
+    metrics for every snapshot in series, so one ~30s recompute
+    blocked all the skeletons behind it.
+
+    Falls back to recomputing only when the persisted value is
+    missing (legacy snapshots ingested before the column existed).
+    """
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+    from app.db.engine import engine
+    from app.db.models.snapshot import Snapshot
 
     metrics = compute_snapshot_metrics(snapshot_id)
-    sha = compute_structural_hash(snapshot_id)
+
+    with Session(engine) as session:
+        sha = session.scalar(
+            select(Snapshot.structural_hash).where(
+                Snapshot.snapshot_id == snapshot_id
+            )
+        )
+
+    # Lazy backfill: legacy snapshots ingested before the column was
+    # populated will have NULL here. Compute on demand and persist so
+    # the next call is fast.
+    if not sha:
+        sha = compute_structural_hash(snapshot_id)
+        with Session(engine) as session:
+            row = session.get(Snapshot, snapshot_id)
+            if row is not None:
+                row.structural_hash = sha
+                session.commit()
 
     return {
         **metrics.to_dict(),
