@@ -73,3 +73,13 @@ backend/alembic/versions/__pycache__/
 Parser/**/*.dat
 Parser/**/*.log
 Parser/**/*.json
+
+# Local-only credential / secret notes. Catches casual filenames like
+# `Token Github.txt`, `secrets.md`, `pat.txt`, `credentials.txt` that
+# devs sometimes leave in the repo root while testing. Real secrets
+# belong in a password manager — never in the working tree.
+*[Tt]oken*
+*[Ss]ecret*
+*[Pp]assword*
+*credentials*
+*.pat
