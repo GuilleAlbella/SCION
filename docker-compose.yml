@@ -32,9 +32,11 @@ services:
       SCION_BACKEND_HOST: 0.0.0.0
       SCION_BACKEND_PORT: "8000"
       DATA_REGION: ${DATA_REGION:-unset}
-      AI_PROVIDER: ${AI_PROVIDER:-groq}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}
+      # TAISA AI provider config is baked into the backend image via
+      # backend/app/config/taisa_llm.yaml — no runtime env injection
+      # needed. Set TAISA_API_KEY here only to override the baked key
+      # for development.
+      TAISA_API_KEY: ${TAISA_API_KEY:-}
       API_KEY: ${API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:

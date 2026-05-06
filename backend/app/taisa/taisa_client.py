@@ -468,34 +468,106 @@ class TaisaClient:
                 latest_snap = None
 
             # ── 2. Inventory summary (always — schemas + table counts) ──
+            #
+            # Even the "lightweight" path here was unbounded: at Transcend
+            # scale there are 10 716 schemas, each emitting one line, for
+            # ~500 KB of inventory text on every TAISA call regardless of
+            # the question topic. Cap to the busiest 30 schemas + a tail
+            # summary; that's enough for the LLM to reason about the shape
+            # of the warehouse without flooding the prompt.
+            INVENTORY_TOP_N = 30
             if latest_snap:
-                schemas = session.execute(
-                    select(SchemaSnapshot).where(SchemaSnapshot.snapshot_id == latest_snap)
-                ).scalars().all()
-                if schemas:
-                    inv_lines = []
-                    for sch in schemas:
-                        tbl_count = session.execute(
-                            select(func.count()).select_from(TableSnapshot)
-                            .where(TableSnapshot.schema_id == sch.schema_id)
-                        ).scalar() or 0
-                        inv_lines.append(f"  {sch.schema_name}: {tbl_count} tables/views")
-                    sections.append(f"EDW INVENTORY (snapshot #{latest_snap}):\n" + "\n".join(inv_lines))
+                # Get the schema-level table counts in one grouped query
+                # rather than N+1 per-schema COUNTs.
+                count_rows = session.execute(
+                    select(SchemaSnapshot, func.count(TableSnapshot.table_id))
+                    .outerjoin(
+                        TableSnapshot,
+                        TableSnapshot.schema_id == SchemaSnapshot.schema_id,
+                    )
+                    .where(SchemaSnapshot.snapshot_id == latest_snap)
+                    .group_by(SchemaSnapshot.schema_id)
+                    .order_by(desc(func.count(TableSnapshot.table_id)))
+                ).all()
+                # `schemas` is reused below by the inventory_words branch.
+                schemas = [row[0] for row in count_rows]
+
+                if count_rows:
+                    listed = count_rows[:INVENTORY_TOP_N]
+                    rest = count_rows[INVENTORY_TOP_N:]
+                    inv_lines = [
+                        f"  {sch.schema_name}: {tbl_count} tables/views"
+                        for sch, tbl_count in listed
+                    ]
+                    if rest:
+                        rest_total = sum(c for _, c in rest)
+                        inv_lines.append(
+                            f"  …and {len(rest)} smaller schemas with "
+                            f"{rest_total} tables/views in total"
+                        )
+                    sections.append(
+                        f"EDW INVENTORY (snapshot #{latest_snap}, "
+                        f"{len(count_rows)} schemas total):\n"
+                        + "\n".join(inv_lines)
+                    )
 
                 # Only emit the expensive full-table listing when the question
                 # actually concerns inventory — keyword gate keeps token usage
                 # low for other topics (e.g. questions about risk/impact).
+                #
+                # Hard caps protect against context overrun on Transcend-class
+                # data (10 716 schemas × ~22 tables/schema ≈ 240k rows). Before
+                # the caps, any question containing "what" or "list" pulled
+                # every table name into the prompt and broke the LLM call
+                # (timeout + "no response" symptom).
                 inventory_words = {"table", "tables", "schema", "schemas", "inventory",
                                    "view", "views", "column", "columns", "object", "objects",
-                                   "what", "list", "how many", "which"}
+                                   "list"}
+                # `what` / `which` / `how many` removed — they fire on too many
+                # questions that aren't actually inventory-shaped. Real
+                # inventory questions almost always include one of the nouns
+                # above.
+                MAX_SCHEMAS_LISTED = 25
+                MAX_TABLES_PER_SCHEMA = 40
                 if inventory_words & set(q_lower.split()):
+                    # Pick the most "interesting" schemas: those with the most
+                    # tables. Cap at MAX_SCHEMAS_LISTED, summarise the tail.
+                    schemas_with_count: List[tuple[Any, int]] = []
                     for sch in schemas:
+                        c = session.execute(
+                            select(func.count()).select_from(TableSnapshot)
+                            .where(TableSnapshot.schema_id == sch.schema_id)
+                        ).scalar() or 0
+                        schemas_with_count.append((sch, c))
+                    schemas_with_count.sort(key=lambda x: x[1], reverse=True)
+
+                    listed = schemas_with_count[:MAX_SCHEMAS_LISTED]
+                    rest = schemas_with_count[MAX_SCHEMAS_LISTED:]
+
+                    for sch, total_tables in listed:
                         tables = session.execute(
-                            select(TableSnapshot).where(TableSnapshot.schema_id == sch.schema_id)
+                            select(TableSnapshot)
+                            .where(TableSnapshot.schema_id == sch.schema_id)
+                            .limit(MAX_TABLES_PER_SCHEMA)
                         ).scalars().all()
                         if tables:
                             tbl_names = [f"{t.table_name} ({t.object_type})" for t in tables]
-                            sections.append(f"  {sch.schema_name} tables: {', '.join(tbl_names)}")
+                            tail = (
+                                f", …and {total_tables - len(tables)} more"
+                                if total_tables > len(tables)
+                                else ""
+                            )
+                            sections.append(
+                                f"  {sch.schema_name} tables ({total_tables}): "
+                                f"{', '.join(tbl_names)}{tail}"
+                            )
+                    if rest:
+                        rest_total = sum(c for _, c in rest)
+                        sections.append(
+                            f"  …and {len(rest)} smaller schemas with {rest_total} tables total "
+                            f"(omitted to keep context size manageable; "
+                            f"ask about a specific schema by name to see its tables)"
+                        )
 
             # ── 3. Changes — aggregate summary always, detail if relevant ──
             total_changes = session.execute(
@@ -672,6 +744,22 @@ class TaisaClient:
         """
         provider = get_llm_provider()
         scion_context = self._build_scion_context(question)
+
+        # Defensive cap on the assembled SCION context. Per-section caps
+        # already keep things bounded, but if a future section is added
+        # without proper limits — or if one of the existing caps is
+        # accidentally widened — this guards the LLM call from a runaway
+        # prompt that times out or overflows the model context window.
+        # 80 000 chars ≈ 20k-25k tokens for English/SQL-shaped text,
+        # which leaves plenty of headroom in llama-4-scout's 131k window
+        # for the question + history + system prompt + the model's reply.
+        _MAX_CONTEXT_CHARS = 80_000
+        if len(scion_context) > _MAX_CONTEXT_CHARS:
+            scion_context = (
+                scion_context[:_MAX_CONTEXT_CHARS]
+                + "\n\n[context truncated to keep prompt size manageable; "
+                "ask a more specific question to surface omitted detail]"
+            )
 
         # Only the last 10 turns are kept: enough to preserve short-term
         # references ("be more specific", "and the second one?") without
