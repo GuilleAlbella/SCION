@@ -1,0 +1,97 @@
+# SCION single-VM deploy.
+#
+# Brings up backend (FastAPI/uvicorn), frontend (Next.js standalone),
+# nginx (single public port), and watchtower (auto-pull on new GHCR
+# images, every 6h). SQLite lives on a named volume so rebuilds and
+# image upgrades preserve state.
+#
+# Usage on the VM:
+#   cp .env.example .env   &&   $EDITOR .env
+#   docker compose pull
+#   docker compose up -d
+#
+# To rebuild from source instead of pulling from GHCR:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Environment defaults assume the GHCR images are public.
+
+# Compose project name. Without this, Compose derives the project from
+# the parent directory ("Proyecto Kalido-lite" → "proyectokalido-lite"),
+# which leaks into volume / network names. Pinning to "scion" gives us
+# clean, predictable identifiers regardless of where the repo lives.
+name: scion
+
+services:
+  backend:
+    image: ${SCION_BACKEND_IMAGE:-ghcr.io/guillealbella/scion-backend:latest}
+    container_name: scion-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: sqlite:////data/scion.db
+      SCION_EXECUTION_MODE: docker
+      SCION_BACKEND_HOST: 0.0.0.0
+      SCION_BACKEND_PORT: "8000"
+      DATA_REGION: ${DATA_REGION:-unset}
+      AI_PROVIDER: ${AI_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama3-70b-8192}
+      API_KEY: ${API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - data:/data
+    labels:
+      # Watchtower picks up only containers explicitly opted-in.
+      com.centurylinklabs.watchtower.enable: "true"
+    networks: [default]
+
+  frontend:
+    image: ${SCION_FRONTEND_IMAGE:-ghcr.io/guillealbella/scion-frontend:latest}
+    container_name: scion-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Same-origin via nginx — see docker/nginx.conf.
+      NEXT_PUBLIC_API_URL: /api/v1
+      NEXT_PUBLIC_API_KEY: ${API_KEY:-}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    networks: [default]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: scion-nginx
+    restart: unless-stopped
+    depends_on: [backend, frontend]
+    ports:
+      - "${SCION_PUBLIC_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [default]
+
+  watchtower:
+    # `containrrr/watchtower` is in maintenance mode and v1.7.1 (latest
+    # tagged release, Aug 2023) doesn't support the Docker API exposed
+    # by Docker Engine ≥ 27. `beatkind/watchtower` is a community-
+    # maintained drop-in fork that tracks newer Docker APIs while
+    # keeping the same flags and label conventions.
+    image: beatkind/watchtower:latest
+    container_name: scion-watchtower
+    restart: unless-stopped
+    environment:
+      # Poll GHCR every 6 hours; only touch labelled containers.
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"        # remove old images after upgrade
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_POLL_INTERVAL: "21600"
+      TZ: ${TZ:-UTC}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [default]
+
+volumes:
+  data:
+
+# `default` network is implicit — Compose creates `scion_default`
+# automatically. No need to declare it explicitly.

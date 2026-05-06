@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSelection } from "@/lib/SelectionContext";
 import GlobalSearch from "@/components/shared/GlobalSearch";
 import { useTheme } from "@/lib/ThemeContext";
-import { APP_VERSION, APP_STAGE } from "@/lib/constants";
+import VersionPill from "@/components/layout/VersionPill";
 import { Moon, Sun } from "lucide-react";
 import {
   LayoutDashboard,
@@ -112,11 +112,8 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-white/10 text-[10px] text-white/40">
-        {APP_STAGE && (
-          <span className="bg-td-orange/20 text-td-orange px-1.5 py-0.5 rounded text-[9px] font-bold">{APP_STAGE}</span>
-        )}
-        <span className="ml-1.5">{APP_VERSION}</span>
+      <div className="px-4 py-3 border-t border-white/10">
+        <VersionPill />
       </div>
     </aside>
   );
