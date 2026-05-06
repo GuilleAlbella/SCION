@@ -26,7 +26,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 This combines:
 
 - `docker-compose.yml` — the production stack (backend, frontend,
-  nginx, watchtower) using GHCR images by default.
+  nginx) using GHCR images by default.
 - `docker-compose.build.yml` — an override that swaps the GHCR images
   for local builds against the working tree.
 
@@ -61,11 +61,18 @@ both images to GHCR with tags `X.Y.Z`, `X.Y`, and `latest` (the
 `latest` alias is skipped for `-rc` / `-beta` / `-alpha`).
 
 After publish, the `scion-deploy` repo doesn't need any change for
-the new version to roll out — the installed Watchtower instances
-will pick up the new `:latest` within 6 hours, or users can run
-`update.sh` / `update.ps1` to upgrade immediately.
+the new version to roll out — users run `update.sh` / `update.ps1`
+to pull the new images. The Sidebar's "update available" pill
+(v1.22+) makes that visible from inside SCION itself.
 
 If a deploy-side change is needed too (e.g. a new env var, an extra
-service in compose), update `scion-deploy` first; users on Watchtower
-will keep using the old compose until they re-run the installer or
-manually pull the new compose with `update.sh` / `update.ps1`.
+service in compose), update `scion-deploy` first; users will get the
+new compose the next time they run the update script.
+
+## Security scanning
+
+`.github/workflows/security-scan.yml` runs Docker Scout against the
+published images on the 1st of every month and on demand. It
+surfaces HIGH/CRITICAL CVEs without rebuilding. When new findings
+appear, follow the same pattern as v1.21.4: bump deps, add
+`apt-get upgrade` if needed, push a patch tag, users update.

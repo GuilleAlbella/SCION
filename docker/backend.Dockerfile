@@ -12,7 +12,12 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Build deps for psycopg / etc. — stripped from the runtime image.
+# `apt-get upgrade` pulls the latest Debian security patches on every
+# build, so we don't ship CVEs that were already fixed upstream by
+# the time the image was published. Combined with `--pull` in the
+# publish workflow this guarantees no stale base layers.
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends build-essential gcc \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,7 +48,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # tini = minimal init process; reaps zombies and forwards signals so
 # `docker stop` shuts uvicorn down gracefully instead of SIGKILL.
+# Runtime stage gets the same security upgrade so user code lives on
+# top of fully-patched OS layers, not just the build deps.
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends tini curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 1000 scion \

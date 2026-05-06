@@ -74,6 +74,13 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
+          # `pull: true` forces buildx to re-pull base images on every
+          # build instead of reusing local cache. Without this, Debian
+          # / Alpine security patches that landed upstream after our
+          # previous build don't get pulled in, and CVEs accumulate.
+          # Combined with `apt-get upgrade` in the Dockerfile this
+          # gives us a fresh OS layer on every release.
+          pull: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}

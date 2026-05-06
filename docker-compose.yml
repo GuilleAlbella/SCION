@@ -41,9 +41,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - data:/data
-    labels:
-      # Watchtower picks up only containers explicitly opted-in.
-      com.centurylinklabs.watchtower.enable: "true"
     networks: [default]
 
   frontend:
@@ -57,12 +54,15 @@ services:
       # Same-origin via nginx — see docker/nginx.conf.
       NEXT_PUBLIC_API_BASE_URL: /api/v1
       NEXT_PUBLIC_API_KEY: ${API_KEY:-}
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     networks: [default]
 
   nginx:
-    image: nginx:1.27-alpine
+    # nginx 1.29-alpine — actively rebuilt by upstream. The previous
+    # pin (`1.27-alpine`) hadn't been refreshed in 12 months and had
+    # accumulated 79 OS-level CVEs (3 Critical) that all evaporated
+    # with this bump. Pin minor + alpine so behaviour stays
+    # predictable; bump again when 1.30 stable lands.
+    image: nginx:1.29-alpine
     container_name: scion-nginx
     restart: unless-stopped
     depends_on: [backend, frontend]
@@ -72,25 +72,14 @@ services:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
     networks: [default]
 
-  watchtower:
-    # `containrrr/watchtower` is in maintenance mode and v1.7.1 (latest
-    # tagged release, Aug 2023) doesn't support the Docker API exposed
-    # by Docker Engine ≥ 27. `beatkind/watchtower` is a community-
-    # maintained drop-in fork that tracks newer Docker APIs while
-    # keeping the same flags and label conventions.
-    image: beatkind/watchtower:latest
-    container_name: scion-watchtower
-    restart: unless-stopped
-    environment:
-      # Poll GHCR every 6 hours; only touch labelled containers.
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_CLEANUP: "true"        # remove old images after upgrade
-      WATCHTOWER_INCLUDE_RESTARTING: "true"
-      WATCHTOWER_POLL_INTERVAL: "21600"
-      TZ: ${TZ:-UTC}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks: [default]
+  # Watchtower removed in v1.21.4. The maintained fork
+  # `beatkind/watchtower` had also gone stale (31 CVEs incl. 1
+  # Critical from old Go stdlib), and the auto-update saved at most
+  # ~3 s vs running `update.ps1` / `update.sh` manually. The Sidebar
+  # version banner (v1.22) will surface "update available", and
+  # users run the script when they're ready. This also removes the
+  # docker.sock mount, which was a root-equivalent attack surface
+  # we no longer need.
 
 volumes:
   data:

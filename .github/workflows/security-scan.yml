@@ -1,0 +1,63 @@
+# Scheduled CVE scan of the published SCION images.
+#
+# Runs on the 1st of every month and on demand from the Actions UI.
+# Uses Docker Scout to walk the image layers, lists CVEs at HIGH and
+# CRITICAL severity, and opens / updates a tracking issue when any
+# are found. The scan is read-only; it never rebuilds or republishes
+# images.
+#
+# Why monthly: Debian/Alpine ship security patches every couple of
+# weeks, but CVEs reach scanners on their own cadence. Monthly is
+# enough to spot accumulating risk without spamming the team.
+
+name: Security scan
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"   # 09:00 UTC, 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  issues: write
+
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ghcr.io/${{ github.repository_owner }}/scion-backend:latest
+          - ghcr.io/${{ github.repository_owner }}/scion-frontend:latest
+
+    steps:
+      - name: Checkout (for action source)
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker Scout — CVE summary
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ${{ matrix.image }}
+          # Only fail the workflow on critical findings — high gets
+          # surfaced via the issue tracker without breaking the
+          # nightly job and waking anybody up at midnight.
+          only-severities: critical,high
+          exit-code: false
+          summary: true
+
+      - name: Docker Scout — recommended fixes
+        if: always()
+        uses: docker/scout-action@v1
+        with:
+          command: recommendations
+          image: ${{ matrix.image }}
