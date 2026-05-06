@@ -79,5 +79,5 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
           build-args: |
-            NEXT_PUBLIC_API_URL=/api/v1
+            NEXT_PUBLIC_API_BASE_URL=/api/v1
             SCION_VERSION=${{ steps.meta.outputs.version }}

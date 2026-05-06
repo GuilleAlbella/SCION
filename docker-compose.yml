@@ -53,7 +53,7 @@ services:
         condition: service_healthy
     environment:
       # Same-origin via nginx — see docker/nginx.conf.
-      NEXT_PUBLIC_API_URL: /api/v1
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
       NEXT_PUBLIC_API_KEY: ${API_KEY:-}
     labels:
       com.centurylinklabs.watchtower.enable: "true"

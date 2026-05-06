@@ -26,8 +26,8 @@ COPY frontend/ ./
 
 # Build-time API URL — baked into the static bundle. nginx routes
 # /api/* to the backend, so a same-origin path is the safe default.
-ARG NEXT_PUBLIC_API_URL=/api/v1
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 
 RUN npm run build
 
