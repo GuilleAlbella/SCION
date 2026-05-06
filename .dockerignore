@@ -1,0 +1,50 @@
+# Keeps the build context small and free of host-only artefacts.
+
+# Git / IDE
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Node / Next
+**/node_modules
+**/.next
+**/.turbo
+**/npm-debug.log*
+
+# Local SQLite + WAL files (the volume provides a clean DB).
+*.db
+*.db-wal
+*.db-shm
+kalido_lite.db*
+
+# Docker artefacts themselves
+docker-compose*.override.yml
+.env
+.env.local
+
+# Repo docs / scratch dirs that aren't needed in the image
+Transcripciones
+screenshots
+screen
+extracted_images
+img
+docs
+Parser
+tools
+CHANGELOG.md
+ROADMAP.md
+README.md
+CONTRIBUTING.md

@@ -1,0 +1,19 @@
+# Override file: build images locally instead of pulling from GHCR.
+# Used when iterating on Dockerfiles or before the first GHCR publish.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: scion-backend:dev
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api/v1
+    image: scion-frontend:dev
