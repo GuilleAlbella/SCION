@@ -11,19 +11,20 @@ Rahul's extractor produces six files per extraction run:
   5. partitioningconstraintsv_*_export.rendered.dat — DBC.PartitioningConstraintsV
   6. tabletextv_*_export.rendered.dat              — DBC.TableTextV (special)
 
-The first five share a **fixed 16-column layout** (`col_01`..`col_16`)
+The first four share a **fixed 16-column layout** (`col_01`..`col_16`)
 designed for TPT's DataConnector consumer. Unused trailing slots are
 left blank (`§§§`) so every record has the same arity. This is by
-design — it lets one TPT script handle all five views.
+design — it lets one TPT script handle those four views.
 
-`tabletextv` is the odd one out: a single concatenated record column
-terminated by `ENDREC`, because the `RequestText` payload contains
-embedded newlines that would otherwise break record boundaries.
+`tabletextv` and `partitioningconstraintsv` use a **9-column layout**
+with `ENDREC` as the record terminator, because both views contain
+fields (`RequestText`, `ConstraintText`) that may have embedded
+newlines which would otherwise break record boundaries.
 
 Field-level encoding (per Rahul's README):
 - delimiter: `§` (U+00A7)
 - escape:    `\` — literal `§` in data is rendered `\§`
-- terminator (tabletext only): `ENDREC`
+- terminator (tabletext + partitioning): `ENDREC`
 - text:      UTF-8
 
 Design principles
@@ -57,7 +58,8 @@ _STANDARD_TECH_FIELDS = [
     "extracted_at_utc",     # col_03: current_timestamp(6) at extract time
     "snapshot_date",        # col_04: cast(current_timestamp as date)
 ]
-_STANDARD_FIELD_COUNT = 16  # col_01..col_16 — fixed by TPT job template
+_STANDARD_FIELD_COUNT = 16       # col_01..col_16 — fixed by TPT job template
+_PARTITIONING_FIELD_COUNT = 9   # col_01..col_09 — ENDREC layout (constraint_text may have newlines)
 
 # ──── Per-view mapping: position-in-16-col-row -> dataclass attribute ──
 # Only positions actually populated by Rahul's `_export.sql` are listed.
@@ -121,14 +123,18 @@ _INDICES_FIELDS = {
     12: "column_position",
 }
 
-_PARTITIONING_FIELDS = {
-    # col_05..col_09, col_10..col_16 are blank fillers
-    5: "database_name",
-    6: "table_name",
-    7: "constraint_type",
-    8: "constraint_text",
-    9: "create_timestamp",
-}
+_PARTITIONING_FIELDS = [
+    # 9-col ENDREC layout — same 4 tech fields + 5 business fields, no blank fillers
+    "source_system_name",   # col_01
+    "extract_run_id",       # col_02
+    "extracted_at_utc",     # col_03
+    "snapshot_date",        # col_04
+    "database_name",        # col_05
+    "table_name",           # col_06
+    "constraint_type",      # col_07
+    "constraint_text",      # col_08 — may contain embedded newlines
+    "create_timestamp",     # col_09
+]
 
 # ──── TableTextV — special 9-column layout, ENDREC terminator ────
 # README §"TableTextV extract (single record column)": the export still
@@ -624,17 +630,35 @@ def read_partitioning(
     path: Path,
     delimiter: str = DEFAULT_FIELD_DELIMITER,
     escape: str = DEFAULT_ESCAPE_CHARACTER,
+    terminator: str = DEFAULT_RECORD_TERMINATOR,
 ) -> List[PartitioningRecord]:
-    """Parse a `partitioningconstraintsv_*_export.rendered.dat` file."""
+    """Parse a `partitioningconstraintsv_*_export.rendered.dat` file.
+
+    Usa layout de 9 campos com terminador ENDREC (igual ao tabletextv)
+    porque constraint_text pode conter quebras de linha.
+    """
     out: List[PartitioningRecord] = []
-    for f in _parse_standard(path, delimiter, escape):
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    for idx, record in enumerate(_split_records(raw, terminator), start=1):
+        fields = _split_fields(record, delimiter, escape)
+        if len(fields) != _PARTITIONING_FIELD_COUNT:
+            raise DictFlatFileError(
+                f"{path.name}:record#{idx}: expected {_PARTITIONING_FIELD_COUNT} fields "
+                f"(partitioning layout), got {len(fields)}. First 200 chars: "
+                f"{record[:200]!r}"
+            )
         out.append(PartitioningRecord(
-            tech=_tech_from_standard(f),
-            database_name=f[4],
-            table_name=f[5],
-            constraint_type=_get(f, 7),
-            constraint_text=_get(f, 8),
-            create_timestamp=_get(f, 9),
+            tech=TechFields(
+                source_system_name=fields[0],
+                extract_run_id=fields[1],
+                extracted_at_utc=fields[2],
+                snapshot_date=fields[3],
+            ),
+            database_name=fields[4],
+            table_name=fields[5],
+            constraint_type=_nn(fields[6]),
+            constraint_text=_nn(fields[7]),
+            create_timestamp=_nn(fields[8]),
         ))
     return out
 
