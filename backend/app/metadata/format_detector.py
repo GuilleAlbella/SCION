@@ -166,8 +166,9 @@ def _detect_flat_file_content(
       1. Filename prefix (`tablesv_`, `columnsv_`, ...) is the most
          reliable signal — Rahul's templates produce predictable names.
       2. Fallback: count fields in the first record. 16 fields → one
-         of the 5 standard views (we still need filename to disambiguate);
-         9 fields → tabletext.
+         of the 4 standard views (we still need filename to disambiguate);
+         9 fields → tabletextv OR partitioningconstraintsv (ambiguous
+         without filename).
     """
     # Try filename first.
     if filename:
@@ -189,11 +190,16 @@ def _detect_flat_file_content(
     first_line = head_str.split("\n", 1)[0]
     field_count = first_line.count("§") + 1
     if field_count == 9:
+        # Both tabletextv and partitioningconstraintsv use 9-field + ENDREC layout.
+        # Cannot disambiguate without a filename — caller must provide one.
         return DetectionResult(
             format=Format.FLAT_FILE,
-            content_type=ContentType.DICT_TABLETEXT,
-            confidence="medium",
-            reason=f"Flat-file with {field_count} fields per record — tabletext layout.",
+            content_type=ContentType.UNKNOWN,
+            confidence="low",
+            reason=(
+                "9-field flat-file — could be tabletextv or partitioningconstraintsv; "
+                "upload with the original filename to disambiguate."
+            ),
         )
     if field_count == 16:
         # Can't disambiguate without a filename. Caller has to decide.
