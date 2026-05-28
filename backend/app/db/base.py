@@ -31,3 +31,5 @@ import app.graph.graph_models  # noqa: F401
 import app.graph.impact_models  # noqa: F401
 import app.taisa.taisa_models  # noqa: F401
 import app.usage.usage_models  # noqa: F401
+# PDCR DBQL query log table (Pipeline 3, added v1.21.6).
+import app.usage.dbql_models  # noqa: F401
