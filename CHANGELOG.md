@@ -8,6 +8,180 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.5 (2026-05-18) — partitioningconstraintsv 9-col + ENDREC layout fix
+
+Helton Guedes landed two changes:
+
+- **Reader fix.** `partitioningconstraintsv` was failing on the new
+  Transcend exporter output because the `constraint_text` field can
+  contain embedded newlines, breaking the standard 16-col `\n`-
+  terminated layout. Realigned to the same 9-col + `ENDREC`
+  terminator pattern that `tabletextv` already uses. Batches from
+  2026-05-15 and 2026-05-26 now process cleanly; the 2026-05-21
+  batch that arrived without `ENDREC` was reported back to the
+  extraction team.
+- **`tools/validate_only.py`.** Standalone pre-flight validator
+  that reuses the official backend readers (`dict_flat_file_reader`,
+  `dict_batch_validator`, `teradata_parser`) to verify files before
+  upload without touching the DB. Emits TXT + JSON reports next to
+  the files; multilingual (pt-br / es / en); covers the 6
+  dictionary files + the parser-lineage JSON + heuristic checks
+  for DBQL / Object Usage. Caught the 2026-05-21 layout regression
+  exactly as designed.
+
+Fixture and test alignment for the new partitioning layout shipped
+separately in PR #38.
+
+---
+
+### v1.21.4 (2026-05-06) — security release: ~165 CVEs eliminated
+
+Three Docker Scout scans surfaced an unmanageable backlog of
+inherited CVEs (4 Critical, 16 High, plus tail) across backend,
+frontend, and nginx, mostly from stale base layers and one
+unmaintained sidecar. Cleared the whole pile in one cut.
+
+- **Backend.** `apt-get upgrade -y` added in both build and runtime
+  stages of `docker/backend.Dockerfile` so Debian patches roll in
+  on every release rather than waiting for a base-image bump.
+  Bumped `fastapi 0.115.0 → 0.115.6` to pull in `starlette ≥0.41`
+  (fixes CVE-2024-47874, multipart DoS, HIGH).
+- **Frontend.** `npm audit fix` cleared the axios CVE cluster.
+  Added `overrides` block in `package.json` forcing
+  `picomatch ≥4.0.4`, `brace-expansion ≥2.0.3`, `ip-address ≥10.1.1`,
+  `postcss ≥8.5.10` so transitive deps land on patched versions.
+  `npm audit` now reports zero vulnerabilities.
+- **Infra.** nginx pinned tag bumped `1.27-alpine → 1.29-alpine`.
+  The 1.27 pin had not been rebuilt by upstream in ~12 months and
+  had accumulated 79 OS-level CVEs (3 Critical, 13 High); 1.29 is
+  actively maintained.
+- **Watchtower removed.** The `beatkind/watchtower` fork had also
+  gone stale (31 CVEs including 1 Critical, all from old Go
+  stdlib), and the auto-update only saved ~3 s vs running
+  `update.ps1` / `update.sh` manually. Also dropped the
+  `docker.sock` mount, which was a root-equivalent attack surface.
+  Users now upgrade explicitly when the Sidebar version pill
+  shows an update is available.
+- **CI.** `publish-images.yml` now passes `pull: true` to
+  `docker/build-push-action` so base layers are always re-fetched.
+  New workflow `security-scan.yml` runs Docker Scout against the
+  published images monthly (1st of every month, 09:00 UTC) and on
+  demand, surfacing HIGH/CRITICAL findings without rebuilding.
+
+---
+
+### v1.21.3 (2026-05-06) — TAISA context bounds + scrub vendor name from public surface
+
+Two fixes to the assistant and the deploy surface.
+
+- **TAISA context overflow.** On Transcend-class data (10 716
+  schemas) the `_build_scion_context` helper was emitting one line
+  per schema in the EDW INVENTORY section unconditionally
+  (~500 KB), plus listing every table when the question contained
+  common words like *"what"*. Result: TAISA appeared to hang on
+  every other question. Fixes: top-30 schemas in the always-on
+  inventory, 25 schemas × 40 tables in the on-demand expansion,
+  and a defensive 80 000-char total cap on the assembled context
+  right before the LLM call. Measured: context dropped from
+  363 KB → 48 KB on inventory questions, 328 KB → 13 KB on impact
+  questions.
+- **Public surface cleanup.** Removed `AI_PROVIDER`,
+  `GROQ_API_KEY`, `GROQ_MODEL` env vars from `docker-compose.yml`
+  and `.env.example` — TAISA config is baked into the backend
+  image via `taisa_llm.yaml`, no runtime injection needed. Sweep
+  removed all user-visible mentions of the upstream LLM vendor's
+  name from installer prompts, scripts, and README.
+
+---
+
+### v1.21.2 (2026-05-06) — fix dockerised frontend backend connection
+
+The v1.21.0 frontend image was built with the wrong env var name
+(`NEXT_PUBLIC_API_URL` instead of `NEXT_PUBLIC_API_BASE_URL`) baked
+into the standalone bundle. Since Next.js bakes `NEXT_PUBLIC_*`
+vars at build time, the dockerised frontend always fell back to
+the dev default `http://localhost:8000` and surfaced
+*"Cannot connect to backend API"* on every page. Fix is build-time:
+rename ARG + ENV in `docker/frontend.Dockerfile`, fix the build-arg
+in `publish-images.yml`, fix the compose env vars in both repos.
+Re-publishing produced a working frontend image.
+
+---
+
+### v1.21.1 (2026-05-06) — fix /metrics page hang on large snapshots
+
+The `/api/v1/metrics/snapshot/{id}` endpoint was recomputing the
+SHA-256 `structural_hash` from scratch on every call — streaming
+all columns of the snapshot through hashlib. That's ~9.8M rows for
+a Transcend-class snapshot, costing 30-60 s per call. The
+Structural Metrics page fetches metrics for every snapshot in
+series, so one slow recompute blocked the loading skeletons of
+every snapshot fetched after it, and the page never finished
+loading when any large snapshot was present.
+
+`Snapshot.structural_hash` is already persisted at ingest time.
+The endpoint now reads that column and only falls back to
+recomputing + persisting when the value is NULL (legacy snapshots
+ingested before the column existed).
+
+Measured on demo + Transcend:
+
+```
+snap  1 (demo, ~600 cols)         0.16 s   was ~0.5 s
+snap  5 (demo, ~600 cols)         0.09 s   was ~0.5 s
+snap 10 (demo, ~600 cols)         0.13 s   was ~0.5 s
+snap 11 (Transcend, 9.8M cols)    0.76 s   was ~30-60 s
+```
+
+---
+
+### v1.21.0 (2026-05-06) — containerised deploy + one-liner installer + version banner
+
+End-to-end Docker stack so SCION can be deployed on a fresh Linux
+VM with a single `curl … | bash` command. Companion installer
+`install.ps1` ships for Windows / Docker Desktop machines used by
+the early testers. Confirmed in Reunion 9 that the deploy targets
+are 8c/32GB CloudBolt for test environments and 8c/64GB Azure AKS
+for the eventual production tier.
+
+Three image-layer artefacts:
+
+- `ghcr.io/guillealbella/scion-backend` — FastAPI + uvicorn,
+  multi-stage Python 3.12-slim, ~350 MB. Idempotent `db_init.py
+  init` runs in the entrypoint before uvicorn so fresh / managed /
+  legacy DB states all converge to head.
+- `ghcr.io/guillealbella/scion-frontend` — Next.js standalone
+  build on `node:22-alpine`, ~285 MB.
+- `nginx:1.27-alpine` — single public port; routes `/api/*` to the
+  backend and everything else to the frontend.
+
+Companion repo: a new **`GuilleAlbella/scion-deploy`** (public)
+holds `docker-compose.yml`, `nginx.conf`, `.env.example`, and the
+six installer / updater / uninstaller scripts. The application
+source stays in the private SCION repo; the deploy artefacts are
+public so the one-liner doesn't need authentication.
+
+Read-only **version banner** added to the Sidebar footer:
+`/api/v1/system/version` compares the local `APP_VERSION` against
+the GitHub Releases API and the pill goes green when an upgrade is
+available. The actual upgrade is user-driven (`update.sh` /
+`update.ps1`) — the in-app "Update now" button arrives in v1.22.
+
+Decisions worth recording for later readers:
+
+- Compose project name pinned to `scion` so the named volume lands
+  as `scion_data` (not `proyectokalido-lite_scion-data`) regardless
+  of the parent directory's name.
+- Watchtower introduced as a sidecar to auto-pull new images every
+  6 h. **This was removed in v1.21.4** when the security cost was
+  reassessed — the v1.21.0 design intent was "set and forget", the
+  v1.21.4 conclusion was "let users opt in explicitly".
+- `/system/version` is the only `/api/v1/*` route that is not
+  gated by `X-API-Key`. The pill needs to render before the user
+  authenticates and is also useful as an uptime probe.
+
+---
+
 ### v1.20.00 (2026-05-05) — /graph: click-to-expand interactive subgraph exploration
 
 The previous releases focused on making the graph readable at scale.
