@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Project SCION — Structural Change Intelligence",
+  title: "Project SCION — Structural Change Intelligence & Observability Node",
   description: "Monitor structural changes, assess impact, and get AI-powered risk recommendations across your data warehouse.",
 };
 
