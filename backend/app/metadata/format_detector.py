@@ -33,11 +33,14 @@ class Format(str, Enum):
 class ContentType(str, Enum):
     """Logical pipeline the file belongs to.
 
-    Today the mapping is:
+    Mapping today:
       - PARSER_LINEAGE  ← `lineage-mvp.json` style (parser pipeline)
       - DICT_DATABASES, DICT_TABLES, DICT_COLUMNS, DICT_INDICES,
         DICT_PARTITIONING, DICT_TABLETEXT  ← Rahul's data dictionary
         flat-file extracts (six-file batch)
+      - USAGE_DBQL, USAGE_OBJECT  ← PDCR usage extracts (Pipeline 3,
+        added v1.21.6). DBQL captures SQL query log; OBJECT captures
+        per-object usage counters and last-access timestamps.
 
     Both pipelines could in theory swap formats in the future; that's
     why detection is two-step (format → content-type) instead of one.
@@ -49,6 +52,8 @@ class ContentType(str, Enum):
     DICT_INDICES = "dict_indices"
     DICT_PARTITIONING = "dict_partitioning"
     DICT_TABLETEXT = "dict_tabletext"
+    USAGE_DBQL = "usage_dbql"
+    USAGE_OBJECT = "usage_object"
     UNKNOWN = "unknown"
 
 
@@ -72,6 +77,10 @@ _DICT_FILENAME_PREFIXES = {
     "indicesv_":   ContentType.DICT_INDICES,
     "partitioningconstraintsv_": ContentType.DICT_PARTITIONING,
     "tabletextv_": ContentType.DICT_TABLETEXT,
+    # PDCR usage extracts (Pipeline 3 — readers + persisters land in
+    # later PRs; this detector only routes the upload).
+    "pdcr_log_":          ContentType.USAGE_DBQL,
+    "pdcr_object_usage_": ContentType.USAGE_OBJECT,
 }
 
 
@@ -160,15 +169,24 @@ def _detect_flat_file_content(
     content: bytes,
     filename: Optional[str],
 ) -> DetectionResult:
-    """Identify which of the 6 dict views this flat-file represents.
+    """Identify which of the 8 known flat-file content types this is.
 
     Strategy:
-      1. Filename prefix (`tablesv_`, `columnsv_`, ...) is the most
-         reliable signal — Rahul's templates produce predictable names.
-      2. Fallback: count fields in the first record. 16 fields → one
-         of the 4 standard views (we still need filename to disambiguate);
-         9 fields → tabletextv OR partitioningconstraintsv (ambiguous
-         without filename).
+      1. Filename prefix (`tablesv_`, `columnsv_`, `pdcr_log_`, ...) is
+         the most reliable signal — Rahul's templates produce
+         predictable names. High confidence.
+      2. Fallback: count fields in the first record. Arity → set of
+         candidates. When the set has one element we return it with
+         medium confidence; otherwise UNKNOWN with a reason that names
+         the candidates.
+
+    ENDREC awareness: `tabletextv`, `partitioningconstraintsv`, and
+    `pdcr_log` all use the `ENDREC` record terminator because their
+    text-bearing fields can contain newlines. Counting fields in the
+    *first line* of those files undercounts (the SQL text in
+    `pdcr_log` for example breaks across multiple lines). We detect
+    the ENDREC convention by probing for the literal in a generous
+    head window, then split there instead of on `\n`.
     """
     # Try filename first.
     if filename:
@@ -179,19 +197,35 @@ def _detect_flat_file_content(
                     format=Format.FLAT_FILE,
                     content_type=ct,
                     confidence="high",
-                    reason=f"Filename starts with `{prefix}` — matches dict view.",
+                    reason=f"Filename starts with `{prefix}` — matches known content type.",
                 )
 
     # Fallback: count fields in first record.
+    # 16 KB head is enough to contain at least one full record even for
+    # `pdcr_log` SQL bodies, which is the largest text-bearing payload
+    # we see in practice.
     try:
-        head_str = content[:4096].decode("utf-8", errors="replace")
+        head_str = content[:16384].decode("utf-8", errors="replace")
     except Exception:
         head_str = ""
-    first_line = head_str.split("\n", 1)[0]
-    field_count = first_line.count("§") + 1
+
+    # If the head contains `ENDREC` we are in one of the 3 ENDREC-
+    # terminated layouts (tabletextv / partitioningconstraintsv /
+    # pdcr_log). Split by ENDREC to get a real record; otherwise fall
+    # back to newline-based splitting for the 16-col dict layouts.
+    if "ENDREC" in head_str:
+        first_record = head_str.split("ENDREC", 1)[0].lstrip("\n\r")
+        terminator_label = "ENDREC"
+    else:
+        first_record = head_str.split("\n", 1)[0]
+        terminator_label = "\\n"
+    field_count = first_record.count("§") + 1
+
+    # Map arity → candidates. When a value has a single candidate the
+    # detector returns it with medium confidence (still less than
+    # filename-derived high confidence). The 9-field case is the only
+    # truly ambiguous arity we have today.
     if field_count == 9:
-        # Both tabletextv and partitioningconstraintsv use 9-field + ENDREC layout.
-        # Cannot disambiguate without a filename — caller must provide one.
         return DetectionResult(
             format=Format.FLAT_FILE,
             content_type=ContentType.UNKNOWN,
@@ -201,8 +235,34 @@ def _detect_flat_file_content(
                 "upload with the original filename to disambiguate."
             ),
         )
+    if field_count == 10:
+        # Unique to pdcr_log among the known layouts. Medium confidence
+        # because we're inferring from arity rather than filename — a
+        # future content type could collide, in which case promote to
+        # ambiguous like the 9-field case.
+        return DetectionResult(
+            format=Format.FLAT_FILE,
+            content_type=ContentType.USAGE_DBQL,
+            confidence="medium",
+            reason=(
+                "10-field flat-file with ENDREC terminator — pdcr_log "
+                "(DBQL query log). Upload with the original filename "
+                "to lift confidence to high."
+            ),
+        )
+    if field_count == 12:
+        # Unique to pdcr_object_usage.
+        return DetectionResult(
+            format=Format.FLAT_FILE,
+            content_type=ContentType.USAGE_OBJECT,
+            confidence="medium",
+            reason=(
+                "12-field flat-file with ENDREC terminator — "
+                "pdcr_object_usage (per-object usage counters). "
+                "Upload with the original filename to lift confidence."
+            ),
+        )
     if field_count == 16:
-        # Can't disambiguate without a filename. Caller has to decide.
         return DetectionResult(
             format=Format.FLAT_FILE,
             content_type=ContentType.UNKNOWN,
@@ -217,7 +277,8 @@ def _detect_flat_file_content(
         content_type=ContentType.UNKNOWN,
         confidence="low",
         reason=(
-            f"Flat-file with unexpected field count ({field_count}). "
-            "Layout drift or corruption — manual review required."
+            f"Flat-file with unexpected field count ({field_count}, "
+            f"terminator={terminator_label}). Layout drift or corruption "
+            "— manual review required."
         ),
     )
