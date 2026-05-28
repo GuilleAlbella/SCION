@@ -108,7 +108,13 @@ def test_flat_file_with_known_filename_high_confidence():
 
 
 def test_flat_file_each_view_filename_routes_correctly():
-    """All 6 view filenames should map to their right ContentType."""
+    """All 8 known content types should map from their filename prefix.
+
+    Six dictionary views + two PDCR usage extracts (Pipeline 3,
+    added v1.21.6). PDCR filenames carry a timestamp window in the
+    suffix (`pdcr_log_<from>_<to>.dat`) — the prefix is enough to
+    identify the content type even without the dates.
+    """
     cases = [
         ("databasesv_full_export.rendered.dat", ContentType.DICT_DATABASES),
         ("tablesv_full_export.rendered.dat", ContentType.DICT_TABLES),
@@ -116,11 +122,14 @@ def test_flat_file_each_view_filename_routes_correctly():
         ("indicesv_full_export.rendered.dat", ContentType.DICT_INDICES),
         ("partitioningconstraintsv_full_export.rendered.dat", ContentType.DICT_PARTITIONING),
         ("tabletextv_full_export.rendered.dat", ContentType.DICT_TABLETEXT),
+        ("pdcr_log_20260512_000000_to_20260513_000000.dat", ContentType.USAGE_DBQL),
+        ("pdcr_object_usage_20260512_000000_to_20260513_000000.dat", ContentType.USAGE_OBJECT),
     ]
     row = _flat_row()
     for fname, expected in cases:
         r = detect(row, filename=fname)
         assert r.content_type is expected, f"{fname} routed to wrong type: {r.content_type}"
+        assert r.confidence == "high", f"{fname} should be high confidence (filename match)"
 
 
 def test_flat_file_filename_case_insensitive():
@@ -161,13 +170,70 @@ def test_flat_file_no_filename_9_fields_is_ambiguous():
     assert "partitioning" in r.reason.lower()
 
 
+def test_flat_file_no_filename_10_fields_is_dbql():
+    """10 fields is unique to pdcr_log (DBQL query log) among the
+    known content types. The detector returns USAGE_DBQL with medium
+    confidence even without a filename — there's only one candidate
+    for arity 10, so it's safe to route. A filename would lift this
+    to high confidence."""
+    r = detect(_flat_row(view_count=6), filename=None)  # 4 tech + 6 = 10
+    assert r.format is Format.FLAT_FILE
+    assert r.content_type is ContentType.USAGE_DBQL
+    assert r.confidence == "medium"
+    assert "pdcr_log" in r.reason.lower() or "dbql" in r.reason.lower()
+
+
+def test_flat_file_no_filename_12_fields_is_object_usage():
+    """12 fields is unique to pdcr_object_usage. Same reasoning as
+    the 10-field case — single candidate, medium confidence without
+    filename, high with."""
+    r = detect(_flat_row(view_count=8), filename=None)  # 4 tech + 8 = 12
+    assert r.format is Format.FLAT_FILE
+    assert r.content_type is ContentType.USAGE_OBJECT
+    assert r.confidence == "medium"
+    assert "object_usage" in r.reason.lower() or "object" in r.reason.lower()
+
+
 def test_flat_file_unexpected_arity_returns_unknown():
-    """Some other field count (8, 10, 17, …) means layout drift or
-    corruption. We must flag it loudly, not guess."""
-    r = detect(_flat_row(view_count=8), filename=None)  # 12-field row
+    """Some other field count (8, 11, 13, 17, …) means layout drift or
+    corruption: no known content type uses that arity, so we flag it
+    loudly rather than guess. Note: 9, 10, 12, 16 are all valid arities
+    today (covered by their own tests), so this test must pick a value
+    outside that set.
+    """
+    r = detect(_flat_row(view_count=7), filename=None)  # 4 tech + 7 = 11
     assert r.format is Format.FLAT_FILE
     assert r.content_type is ContentType.UNKNOWN
     assert "unexpected" in r.reason.lower() or "drift" in r.reason.lower() or "review" in r.reason.lower()
+
+
+def test_flat_file_pdcr_log_endrec_aware_arity_counting():
+    """Regression: `pdcr_log` records have SQL text in field 7 that
+    may contain embedded newlines. If the detector counts fields in
+    the first *line* it sees 7 fields (truncated mid-record) and
+    misroutes to UNKNOWN. With ENDREC-aware splitting it sees the
+    full 10-field record and routes correctly.
+
+    This is the exact bug that surfaced when Rahul shipped his first
+    real `pdcr_log_*.dat` against SCION v1.21.5.
+    """
+    # Build a pdcr_log-shaped record: 10 §-separated fields, field 7
+    # has an embedded newline (simulating multi-line SqlTextInfo), and
+    # the record is terminated by `ENDREC`.
+    sql_with_newline = "create multiset volatile table foo\n(col1 INTEGER)\nprimary index (col1)"
+    fields = [
+        "TestSrc", "2026/05/12", "12345",
+        "2026-05-12 00:06:43.123456", "111222333", "1",
+        sql_with_newline, "DEFAULT_DB", "", "",
+    ]
+    record = "§".join(fields) + "ENDREC\n"
+    r = detect(record.encode("utf-8"), filename=None)
+    assert r.format is Format.FLAT_FILE
+    assert r.content_type is ContentType.USAGE_DBQL, (
+        f"ENDREC-aware splitter should see 10 fields and route to USAGE_DBQL; "
+        f"got {r.content_type} with reason: {r.reason}"
+    )
+    assert r.confidence == "medium"
 
 
 def test_filename_wins_over_arity_when_both_disagree():
