@@ -1,8 +1,8 @@
 # SCION — Technical Specification
 
-> **Version:** 1.21.5-spec-phase-2
+> **Version:** 1.21.5-spec-final
 > **Last Updated:** 2026-05-28
-> **Status:** Phases 1-2 of 3 — Sections 1-8 (Executive, Goals, Architecture, Stack, FRs, NFRs, Data Models, Interfaces)
+> **Status:** Complete — all 14 sections + 2 appendices
 > **Author:** Guillermo Albella, with AI-assisted drafting
 
 ---
@@ -27,14 +27,14 @@
 6. [Non-Functional Requirements](#6-non-functional-requirements)
 7. [Data Models](#7-data-models)
 8. [Interface Contracts](#8-interface-contracts)
-9. Golden Examples *(Phase 3)*
-10. Test Scenarios & Edge Cases *(Phase 3)*
-11. Reference Benchmarking *(Phase 3)*
-12. Acceptance Criteria *(Phase 3)*
-13. Deliverables *(Phase 3)*
-14. Risk Assessment *(Phase 3)*
-15. Appendix A: Glossary *(Phase 3)*
-16. Appendix B: References *(Phase 3)*
+9. [Golden Examples](#9-golden-examples)
+10. [Test Scenarios & Edge Cases](#10-test-scenarios--edge-cases)
+11. [Reference Benchmarking](#11-reference-benchmarking)
+12. [Acceptance Criteria](#12-acceptance-criteria)
+13. [Deliverables](#13-deliverables)
+14. [Risk Assessment](#14-risk-assessment)
+15. [Appendix A: Glossary](#appendix-a-glossary)
+16. [Appendix B: References](#appendix-b-references)
 
 ---
 
@@ -1047,10 +1047,634 @@ flows (ingest, snapshot, diff, impact, graph, simulation).
 
 ---
 
+## 9. Golden Examples
+
+> Each example below is an **input → expected output** pair that any
+> SCION implementation must produce identically. They double as smoke
+> tests when reviewing a new release and as anchor scenarios when a
+> contributor needs to ground a question.
+
+### 9.1 Ingest the 6-file demo extract
+
+**Input:**
+
+```
+POST /api/v1/dict-import
+Content-Type: multipart/form-data
+
+files=@databasesv_full_export.rendered.dat
+files=@tablesv_full_export.rendered.dat
+files=@columnsv_full_export.rendered.dat
+files=@indicesv_full_export.rendered.dat
+files=@partitioningconstraintsv_full_export.rendered.dat
+files=@tabletextv_full_export.rendered.dat
+```
+
+**Expected outcome:**
+
+```
+HTTP 200
+{
+  "snapshot_id": <int>,
+  "object_count": <int>,
+  "structural_hash": "<64-char hex>",
+  "source_system_name": "Transcend-DevTest",
+  "source_extract_run_id": "20260429T135225Z_1eeaac…",
+  "post_ingest": {
+    "diff_changes_emitted": <int>,
+    "graph_nodes_built": <int>,
+    "graph_edges_built": <int>,
+    "impact_summaries_persisted": <int>,
+    "proactive_alerts_persisted": <int>
+  }
+}
+```
+
+Re-uploading the same 6 files produces a snapshot with **the same
+`structural_hash`** as the first ingest and is correctly skipped by
+the duplicate-detection check (FR-2).
+
+### 9.2 Diff two snapshots
+
+**Input:**
+
+```
+GET /api/v1/diff/details?snapshot_from=1&snapshot_to=10&limit=2
+```
+
+**Expected outcome shape:**
+
+```json
+{
+  "items": [
+    {
+      "change_id": 12345,
+      "snapshot_from": 1,
+      "snapshot_to": 10,
+      "change_type": "DROPPED",
+      "object_type": "COLUMN",
+      "object_identifier": "ACC_TED_TBL.customer_orders.legacy_status",
+      "severity": "HIGH",
+      "is_breaking": true,
+      "before_value": "VARCHAR(20) NULL",
+      "after_value": null
+    },
+    {
+      "change_id": 12346,
+      "snapshot_from": 1,
+      "snapshot_to": 10,
+      "change_type": "ALTERED",
+      "object_type": "COLUMN",
+      "object_identifier": "ACC_TED_TBL.customer_orders.amount",
+      "severity": "MEDIUM",
+      "is_breaking": false,
+      "before_value": "DECIMAL(10,2)",
+      "after_value": "DECIMAL(12,2)"
+    }
+  ],
+  "total": 487,
+  "has_more": true,
+  "summary": {
+    "by_change_type": { "ADDED": 142, "DROPPED": 89, "ALTERED": 256 },
+    "by_object_type": { "COLUMN": 412, "TABLE": 45, "VIEW": 30 },
+    "by_schema": { "ACC_TED_TBL": 218, "raw_metricstreaming_TBL": 102 },
+    "total_breaking": 89
+  }
+}
+```
+
+The same call with `limit=2&offset=2` returns the next 2 items; the
+`summary` block is **stable across pages** (computed on the filtered
+set, not the page slice).
+
+### 9.3 Blast radius of a DROP COLUMN
+
+**Setup:** snapshot 10 dropped `customer_orders.legacy_status`
+(change_id = 12345 in the previous example).
+
+**Input:**
+
+```
+GET /api/v1/impact/change/12345
+```
+
+**Expected outcome:**
+
+```json
+{
+  "change_id": 12345,
+  "object_identifier": "ACC_TED_TBL.customer_orders.legacy_status",
+  "summary": {
+    "impacted_object_count": 23,
+    "max_depth": 4,
+    "weight_impact": 17.5,
+    "by_severity": { "HIGH": 4, "MEDIUM": 11, "LOW": 8 },
+    "by_object_type": { "VIEW": 18, "TABLE": 3, "MACRO": 2 },
+    "by_breaking": { "true": 4, "false": 19 }
+  },
+  "items": [
+    {
+      "impacted_node_id": 78901,
+      "impacted_identifier": "rpt_marts.customer_status_view",
+      "depth": 1,
+      "impact_level": "BREAKING",
+      "via_edge_type": "FEEDS"
+    }
+    // ... more
+  ]
+}
+```
+
+The summary numbers are read from `change_impact_summary` (pre-computed
+at ingest time, FR-1.4 step 4), so the page paints in <500 ms on
+Transcend.
+
+### 9.4 TAISA Q&A grounded on real data
+
+**Input:**
+
+```
+POST /api/v1/reasoning/answer
+{
+  "question": "What's the riskiest change between snapshot 1 and snapshot 10?",
+  "history": []
+}
+```
+
+**Expected behaviour:**
+
+```
+- The backend builds a bounded context (top-N changes, top-N impact
+  rows, latest reasoning, algorithm KB) — never more than ~80k chars.
+- The LLM is called once, with the question + bounded context.
+- The response is persisted to reasoning_event with classification
+  and risk_level.
+- The response style names a specific change, explains why it's risky
+  in steward language (downstream consumers, breaking-or-not), and
+  references the change_id so the user can navigate to it.
+```
+
+**Anti-example (must NOT happen):**
+
+```
+- The LLM is asked a question with the entire dictionary in context.
+- The model hallucinates a change_id that doesn't exist.
+- The response references a vendor or model name.
+- A 500 from the LLM provider bubbles up to the UI.
+```
+
+### 9.5 Focus subgraph from a hub node
+
+**Input:**
+
+```
+GET /api/v1/graph/focus?node_id=78901&hops=1&max_nodes=50
+```
+
+**Expected outcome:** a `FocusedGraphResponse` containing the anchor
+node, all direct neighbours up to `max_nodes`, and the edges between
+them — enough for the frontend to render and offer further expansion
+with a second `/focus` call from any newly visible node.
+
+If the same call would exceed `max_nodes`, the response is truncated
+deterministically (by node centrality desc, then by node_id asc) and
+the truncated flag is set so the UI can offer "show more".
+
+---
+
+## 10. Test Scenarios & Edge Cases
+
+### 10.1 Test Categories
+
+| Category | Location | Purpose |
+|---|---|---|
+| **Unit** | `backend/tests/{snapshot,diff,graph,taisa,api,metadata}/` | Test individual functions / engines in isolation |
+| **Schema parity** | `backend/tests/test_schema_parity.py` | Compare `Base.metadata.create_all()` against `alembic upgrade head` — guards every PR |
+| **Real-sample integration** | `backend/tests/metadata/test_dict_real_sample.py` | Parse the 6-file fixture set under `Parser/Data extract 2/Sample 1/` end-to-end |
+| **Scale** | `backend/tests/metadata/test_snapshot_metrics_scale.py` | Verify that aggregate computations stay within the SQLite host-parameter limit |
+| **Format detection** | `backend/tests/metadata/test_format_detector.py` | Detect the 6 content types from filename + arity + bytes |
+| **Multiline records** | `backend/tests/metadata/test_multiline_records.py` | Embedded newlines in `tabletextv` and `partitioningconstraintsv` (the ENDREC case) |
+| **Frontend type strictness** | `frontend` via `npm run lint` + tsc strict | Block any drift in the TS contract |
+
+There are **36 backend test files** as of v1.21.5. Coverage targets
+are in §12.1.
+
+### 10.2 Ingest Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| ING-001 | All 6 files present, consistent extract_run_id | Snapshot finalised, post-ingest pipeline runs |
+| ING-002 | Missing one of the 6 files | Reject before persisting anything (400 + detail) |
+| ING-003 | Files share filename but different extract_run_id | Reject (batch_validator) |
+| ING-004 | `partitioningconstraintsv` in old 16-col layout | Reject with explicit "expected 9 fields … got 16" message |
+| ING-005 | `partitioningconstraintsv` missing ENDREC terminator | Reject and report to the extraction team |
+| ING-006 | `tabletextv` with embedded newlines inside RequestText | Parse correctly via ENDREC splitter |
+| ING-007 | UTF-8 BOM at file start | Strip and parse |
+| ING-008 | Latin-1 encoded file with non-ASCII bytes | Decode with `errors='replace'`, log warning |
+| ING-009 | 9.8M-column extract (Transcend) | Stream, don't buffer; complete in <15 min |
+| ING-010 | Re-upload of identical 6 files | Snapshot.structural_hash matches; new snapshot row is skipped |
+
+### 10.3 Diff Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| DIFF-001 | Same snapshot vs itself | Zero changes, structural_hash equal |
+| DIFF-002 | Object renamed (heuristic match) | One RENAMED event, not separate ADDED + DROPPED |
+| DIFF-003 | Column dropped that appears in any view's RequestText | `is_breaking = true` |
+| DIFF-004 | 250k changes between two Transcend snapshots | First `/diff/details` page returns in <2s; summary aggregates over full set |
+| DIFF-005 | Pagination consistency | `summary` block identical across pages |
+| DIFF-006 | Filter combinations (severity + is_breaking + object_q) | All applied server-side; client never filters in JS |
+
+### 10.4 Graph & Impact Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| GRAPH-001 | Graph with cycles | BFS terminates; cycle detection via path string |
+| GRAPH-002 | Orphan node (no edges) | Appears in proactive_alert (orphan detector) |
+| GRAPH-003 | Hub node with 10k+ neighbours | `/graph/focus` respects max_nodes cap |
+| GRAPH-004 | Empty graph_edge table | `/impact` returns zero-summary; UI shows empty state, not error |
+| IMP-001 | Single change → batch impact for 250k changes | Pre-aggregated; reads from change_impact_summary |
+| IMP-002 | IN-clause IDs exceed 999 (SQLite param limit) | Chunked at 900 in every fan-out site |
+| IMP-003 | What-if change for an object that doesn't exist | Reject with clear 404 |
+
+### 10.5 TAISA Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| TAISA-001 | Question on demo data (10 snapshots, ~600 cols total) | Context <50k chars; LLM responds in <10s |
+| TAISA-002 | Question on Transcend (10k+ schemas) with "what tables" keyword | Inventory section capped at top-30 schemas; context stays <80k chars |
+| TAISA-003 | LLM provider unreachable (network) | Endpoint returns disabled-state response within timeout; UI shows graceful disabled |
+| TAISA-004 | LLM context-window overflow defence | Defensive 80k char cap applied before LLM call; truncation marker appended |
+| TAISA-005 | Prompt injection in user question | Question is treated as data, never as instruction; context is system-built only |
+| TAISA-006 | Conversation history >10 turns | Only last 10 kept; older messages dropped silently |
+| TAISA-007 | Vendor name in model output | Filter / mask before persistence and display |
+
+### 10.6 Scale Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| SCALE-001 | SQLite host-parameter limit (999/32 766) | Every fan-out chunks at 900 |
+| SCALE-002 | `structural_hash` on 9.8M columns | Streaming hasher; sub-30s wall time, no memory spike |
+| SCALE-003 | `compute_snapshot_metrics` with 240k tables | GROUP BY query, no per-row Python loop |
+| SCALE-004 | dict_persister concurrent reads during write | WAL mode; readers see consistent snapshot, no blocking |
+| SCALE-005 | Frontend graph render with 500 nodes | Dagre layout completes in <1s; React stays responsive |
+
+### 10.7 Deploy Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| DEP-001 | Port 80 already in use | Installer prompts and uses the chosen port; nginx restarts on the new mapping |
+| DEP-002 | Docker Desktop not running on Windows | `install.ps1` detects and fails fast with clear message |
+| DEP-003 | No GHCR PAT and no env var set | Interactive secure prompt; `docker login` cached after success |
+| DEP-004 | Expired GHCR PAT | `update.ps1` bails with "GHCR auth expired" + recovery instructions |
+| DEP-005 | Re-run installer on existing install | `.env` preserved; compose + nginx config refreshed |
+| DEP-006 | Docker Engine version < 24 | Watchtower would have failed on Docker 27+ — moot as of v1.21.4 (Watchtower removed) |
+
+### 10.8 Multi-platform Edge Cases
+
+| Test ID | Scenario | Expected behaviour |
+|---|---|---|
+| MPLAT-001 | Line endings on shell scripts committed from Windows | `.gitattributes` forces `eol=lf` on `*.sh` in scion-deploy |
+| MPLAT-002 | `Microsoft/` PowerShell cache dropped in repo root | Listed in `.gitignore` (added v1.21.5) |
+| MPLAT-003 | Path separators in `Parser/Data extract 2/Sample 1/` | Test uses `pathlib.Path` exclusively, never string concat |
+| MPLAT-004 | UTF-8 BOM written by Notepad when editing `.env` | Installer writes `.env` via `UTF8Encoding(false)` — no BOM |
+
+### 10.9 Test Coverage Targets
+
+| Component | Target | Critical paths |
+|---|---|---|
+| Dict ingest (readers + persister) | ≥85% | All 6 readers, batch validator, post-ingest pipeline |
+| Diff engine | ≥85% | ADDED/DROPPED/ALTERED/RENAMED detection, severity, is_breaking |
+| Graph / impact | ≥80% | BFS, blast radius, alert detectors |
+| TAISA client | ≥75% | Context builder caps, graceful failure |
+| API routers (FastAPI) | ≥70% | Auth boundary, paginate envelope shape |
+| Schema parity | 100% (binary) | Test must be GREEN on every PR |
+
+---
+
+## 11. Reference Benchmarking
+
+### 11.1 Approach
+
+SCION's accuracy is measured against **two types of references** the
+project owns and controls:
+
+1. **Schema parity** — the ORM models (`Base.metadata`) and the
+   Alembic migration head must produce identical schemas. The test
+   compares them column-by-column and fails on any drift.
+
+2. **Real-sample fixtures** — the 6-file extracts under
+   `Parser/Data extract 2/Sample 1/` are checked into the repo and
+   parsed by every test run. Any reader regression (layout shift,
+   delimiter change, terminator change) breaks these tests.
+
+> SCION does **not** maintain accuracy-against-Kalido reference pairs
+> the way DataDNA does — SCION isn't doing extraction, it's doing
+> structural comparison. The accuracy guarantee is "two runs over the
+> same input produce identical persisted state and identical diffs",
+> not "the output matches an external standard".
+
+### 11.2 Reference Test Framework
+
+```
+backend/tests/
+├── fixtures/
+│   └── dict_extracts/                  # canonical 6-file demo set
+│       ├── databasesv_full.txt
+│       ├── tablesv_full.txt
+│       ├── columnsv_full.txt
+│       ├── indicesv_full.txt
+│       ├── partitioningconstraintsv_full.txt
+│       └── tabletextv_full.txt
+├── metadata/
+│   ├── test_format_detector.py         # detect content-type from bytes + filename
+│   ├── test_dict_real_sample.py        # end-to-end parse of fixture set
+│   ├── test_multiline_records.py       # ENDREC + embedded newline handling
+│   ├── test_snapshot_metrics_scale.py  # host-parameter chunking
+│   ├── test_batch_temporal_coherence.py
+│   ├── test_runner_readonly.py
+│   ├── test_templates.py
+│   └── test_adapters_sqlite.py
+├── snapshot/                           # snapshot engine tests
+├── diff/                               # diff engine tests
+├── graph/                              # graph + impact engine tests
+├── taisa/                              # TAISA client tests
+├── api/                                # API router tests
+└── test_schema_parity.py               # the keystone — see §11.3
+```
+
+`Parser/Data extract 2/Sample 1/` holds the larger real-sample
+extracts the integration tests load via `_SAMPLE_DIR` in
+`test_dict_real_sample.py`.
+
+### 11.3 Accuracy Metrics
+
+| Metric | Target | Measurement |
+|---|---|---|
+| **Schema parity** | 100% | `tests/test_schema_parity.py` exits 0 |
+| **Idempotent ingest** | 100% | Two runs on same 6-file set → same `structural_hash` |
+| **Deterministic diff** | 100% | `diff(A, B)` ≡ `diff(A, B)` across runs |
+| **Reader regression** | 0 failures | `pytest backend/tests/metadata/` exits 0 on every PR |
+| **Frontend type safety** | 0 errors | `npm run lint` and `tsc --strict` exit 0 |
+| **Docker Scout HIGH/CRITICAL** | 0 | Monthly scan + every tag |
+
+### 11.4 How AI Assistants Should Use This Spec
+
+> **For Claude Code (and any future AI assistant):**
+> 1. Before changing any FR-X.Y behaviour, read the corresponding
+>    section and the test that anchors it.
+> 2. When adding a new endpoint, follow the paginate envelope (§7.2)
+>    and the auth boundary (§8.1) — don't invent new conventions.
+> 3. When touching ingest, never break `tests/test_schema_parity.py`
+>    or `tests/metadata/test_dict_real_sample.py`. Both are
+>    repository keystones.
+> 4. When raising image vulnerabilities, apply the v1.21.4 pattern
+>    (`apt-get upgrade -y`, `pull: true`, dep bump, Docker Scout) —
+>    documented in §6.4 + §FR-12.
+> 5. When the spec and the code disagree, **assume the spec is
+>    correct and surface the gap to the maintainer** — don't silently
+>    "fix" the spec to match suspicious code.
+
+---
+
+## 12. Acceptance Criteria
+
+### 12.1 Definition of Done (per release)
+
+| Criterion | Verification |
+|---|---|
+| All backend tests pass | `pytest backend/tests/` exits 0 |
+| Schema parity test passes | Included in the test suite; CI gate |
+| Frontend builds in strict mode | `npm run build` + `npm run lint` exit 0 |
+| Docker images build cleanly | `docker compose -f docker-compose.yml -f docker-compose.build.yml build` succeeds with no warnings |
+| Smoke test on demo data passes | `install.sh` / `install.ps1` end-to-end on a clean VM, ingest demo extract, observe healthy state |
+| No HIGH/CRITICAL CVEs in published images | Docker Scout post-publish check (`security-scan.yml`) |
+| CHANGELOG.md entry exists | One section per release, never amended after publish |
+| ROADMAP.md is consistent | Any roadmap item this release delivers is moved out of "planned" |
+
+### 12.2 Acceptance Test Matrix
+
+| Test ID | Goal | Verification |
+|---|---|---|
+| AT-001 | G1 — ingest 6-file extract at scale | `dict-import` of Transcend completes in <15 min on 8c/32GB |
+| AT-002 | G2 — typed change detection | Diff between snapshots 1 and 10 produces non-zero events with all 4 types represented |
+| AT-003 | G3 — bounded blast radius | `/impact` first page <2s on Transcend regardless of total changes |
+| AT-004 | G4 — interactive graph | `/graph/focus` from a hub node returns <500 ms with hops=1 max_nodes=100 |
+| AT-005 | G5 — TAISA grounding | Question "what's the riskiest change?" produces a response referencing a real `change_id` from the data |
+| AT-006 | G8 — one-liner install | `install.sh` on a fresh Ubuntu 22.04 VM brings up the stack in <10 min |
+| AT-007 | G9 — security posture | Scout reports 0 Critical, 0 High at release tag |
+| AT-008 | G11 — graceful LLM failure | Pull the LLM provider's plug; reasoning endpoints return disabled-state, UI navigation unaffected |
+| AT-009 | G13 — deterministic hash | Re-ingest same 6-file set → identical `structural_hash` |
+| AT-010 | G14 — proactive alerts | After ingest of a snapshot that drops a hub object, `/alerts` lists the alert without manual trigger |
+
+---
+
+## 13. Deliverables
+
+### 13.1 Repositories
+
+```
+GuilleAlbella/SCION (private)
+├── backend/
+│   ├── app/                    # FastAPI application
+│   │   ├── api/v1/             # 24 routers
+│   │   ├── snapshot/           # snapshot engine
+│   │   ├── diff/               # diff engine + diff_models
+│   │   ├── graph/              # graph + impact engine + impact_models
+│   │   ├── taisa/              # TAISA client + reasoning_event
+│   │   ├── usage/              # usage_event + criticality_engine
+│   │   ├── metadata/           # readers (dict + parser) + format_detector
+│   │   ├── parser_ingest/      # parser feed ingest
+│   │   ├── llm/                # provider abstractions
+│   │   ├── db/                 # SQLAlchemy engine + models/
+│   │   ├── config/             # static configs (taisa_llm.yaml)
+│   │   ├── engine_registry.py  # eager init at startup
+│   │   ├── main.py             # FastAPI ASGI entrypoint
+│   │   └── ...
+│   ├── requirements/           # base.txt / prod.txt / dev.txt / ai.txt / teradata.txt
+│   ├── tests/                  # 36 test files (see §11.2)
+│   └── tools/                  # db_init.py, validate_only.py, ...
+├── frontend/
+│   ├── src/
+│   │   ├── app/                # Next.js App Router pages
+│   │   ├── components/         # layout, shared, page-local
+│   │   └── lib/                # api/, hooks/, contexts
+│   ├── package.json
+│   └── next.config.ts          # output: "standalone" for Docker
+├── docker/                     # Dockerfiles, entrypoint, nginx.conf (dev copy)
+├── alembic/                    # migrations
+├── alembic.ini
+├── docs/                       # this SPEC.md, plus internal docs
+├── .github/workflows/          # ci.yml + publish-images.yml + security-scan.yml
+└── CLAUDE.md / ROADMAP.md / CHANGELOG.md / README.md
+
+GuilleAlbella/scion-deploy (public)
+├── docker-compose.yml          # references private GHCR images
+├── nginx.conf                  # canonical reverse-proxy config
+├── .env.example                # deploy configuration template
+├── install.sh / install.ps1    # one-liner installers (Linux + Windows)
+├── update.sh  / update.ps1     # upgrade helpers
+├── uninstall.sh / uninstall.ps1
+├── .gitignore  / .gitattributes
+└── README.md                   # end-user deploy guide
+
+ghcr.io/guillealbella (private packages)
+├── scion-backend              # FastAPI + uvicorn image
+└── scion-frontend             # Next.js standalone image
+```
+
+### 13.2 Documentation Surface
+
+```
+docs/SPEC.md                    # this document (canonical spec)
+docs/handover.md                # operator-oriented runbook
+docs/dictionary_integration.md  # extract layout reference
+docs/ingestion_pipelines.md     # ingest internals
+docs/internal_roadmap.md        # internal milestone tracking
+docs/release_policy.md          # how tags / releases flow
+docs/use_cases.md               # customer-shaped scenarios
+
+ROADMAP.md                      # forward-looking plan (v1.22 → v1.25)
+CHANGELOG.md                    # one section per release, append-only
+README.md                       # repo entrypoint
+CLAUDE.md                       # AI-assistant context (you're reading
+                                #   the canonical spec; CLAUDE.md is
+                                #   the lightweight operating guide)
+
+scion-deploy/README.md          # public deploy guide
+docker/README.md                # build / dev smoke-test guide
+```
+
+### 13.3 CI / Release Artefacts
+
+```
+.github/workflows/ci.yml                  # backend pytest + frontend strict TS
+                                            on every PR
+.github/workflows/publish-images.yml      # build + push GHCR on every v* tag
+.github/workflows/security-scan.yml       # monthly Docker Scout +
+                                            on-demand dispatch
+```
+
+---
+
+## 14. Risk Assessment
+
+### 14.1 Technical Risks
+
+| Risk | Probability | Impact | Mitigation |
+|---|---|---|---|
+| **SQLite ceiling at multi-tenant** | High (will happen) | High (writes serialise) | v1.25 Postgres migration; v1.22 ANSI SQL hygiene paves the way |
+| **Parser feed never arrives** | Medium | Medium (lineage stays FK-only) | FK-heuristic is already shipping value; parser feed is additive |
+| **LLM provider budget cap** | Medium | Low (TAISA disables gracefully) | Bounded context (§FR-6); monitor token usage in `reasoning_event` |
+| **`structural_hash` performance regression** | Low | High (hangs `/metrics` page) | Test caught at scale once (v1.21.1); persistence + lazy backfill prevents recurrence |
+| **`partitioningconstraintsv` layout drift again** | Medium | Medium | Pre-flight `validate_only.py` (Helton, v1.21.5) catches before upload |
+| **GHCR PAT leak** | Low | Medium (private images downloadable, key inside) | One-click revoke; rotate immediately; restrict scope to `read:packages` |
+| **Docker base-image vulnerability accumulation** | High (always happening) | Medium | Monthly Scout + `apt-get upgrade` + `pull: true` on every release |
+| **Watchtower-style auto-update reintroduction** | Low | High (root via `docker.sock`) | NG8 makes this explicit; reviewer reading the spec sees the prohibition |
+
+### 14.2 Project Risks
+
+| Risk | Probability | Impact | Mitigation |
+|---|---|---|---|
+| **Single-maintainer bus factor** | High | High | This spec; ROADMAP.md; CHANGELOG.md; `tools/db_init.py` as canonical lifecycle |
+| **Scope creep from "while we're at it" requests** | Medium | Medium | Explicit non-goals (§2.2) and scope guards in FRs |
+| **Drift between SCION and DataDNA contracts** | Medium | High | §1.5 boundary diagram + scope guard in FR-1.1; coordinate parser-feed JSON spec with Rahul |
+| **Customer-data leakage through TAISA prompt** | Low | High | Bounded context, no user input in context (§FR-6); `reasoning_event` audit trail |
+| **Production deployment without HTTPS** | Medium | Medium | nginx config supports TLS termination; document in scion-deploy README when first customer ships |
+
+### 14.3 Mitigation Strategies
+
+1. **Spec-first for new surfaces.** Any new FR enters this document
+   before the code. Reviewers can compare the diff to the
+   shipped behaviour.
+2. **Schema-parity test is sacred.** Any PR that turns it red blocks
+   merge until resolved — even if the maintainer believes the
+   migration is right and the metadata is wrong (or vice versa).
+3. **Pre-flight validation external to backend.** `tools/validate_only.py`
+   uses the same readers but runs without a DB; extraction team can
+   catch layout drift before upload.
+4. **Tag every release.** `vX.Y.Z` triggers publish; bug fixes get
+   patch tags (e.g. v1.21.1, v1.21.2, v1.21.3, v1.21.4, v1.21.5 in
+   a single week is fine when each is small and well-scoped).
+5. **No silent secrets.** Anything secret enters `.env` (gitignored) or
+   the private GHCR image. Casual files like `Token.txt` are caught
+   by `.gitignore` patterns.
+
+---
+
+## Appendix A: Glossary
+
+| Term | Definition |
+|---|---|
+| **SCION** | **S**tructural **C**hange **I**ntelligence & **O**bservability **N**ode. This product. |
+| **DataDNA** | Rahul's SQL parser. Sits upstream of SCION (see §1.5). |
+| **Snapshot** | Immutable record of warehouse structure at a point in time. Owns `structural_hash` and the related per-schema/table/column rows. |
+| **ChangeEvent** | One typed difference between two snapshots (ADDED / DROPPED / ALTERED / RENAMED) with severity and `is_breaking`. |
+| **Blast radius** | Set of downstream objects affected by a ChangeEvent. Computed by walking `graph_edge` from the changed object. |
+| **GraphNode** | Snapshot-scoped graph vertex. One row per logical object (schema, table, view, macro). |
+| **GraphEdge** | Lineage / dependency edge. `edge_type ∈ {FEEDS, DEPENDS_ON, …}`. Source = `fk_heuristic` or `parser_feed`. |
+| **TAISA** | Teradata AI Solution Assistant — the LLM-backed Q&A engine inside SCION. |
+| **Tier-1 / Tier-2 / Tier-3 lineage** | DataDNA's terminology for query-block / statement / dataset lineage. SCION ingests the Tier-3 dataset-level edges. |
+| **FK heuristic** | The bootstrap method for edges: when a foreign key references another table, an edge is emitted. Limited (no view/macro lineage) but always available without a parser feed. |
+| **Parser feed** | The lineage JSON produced by DataDNA. When ingested, fills the gaps the FK heuristic can't see (view → base tables, ETL flows, …). |
+| **WAL** | SQLite's Write-Ahead Logging journal mode. Lets readers see a consistent snapshot during a writer transaction. |
+| **Watchtower** | Container that polled GHCR and auto-upgraded SCION. **Removed in v1.21.4** due to 31 inherited CVEs and `docker.sock` exposure (NG8). |
+| **GHCR** | GitHub Container Registry. Hosts the SCION images (private). |
+| **PAT** | Personal Access Token. The credential that authenticates `docker login` to private GHCR (`read:packages` scope only). |
+| **`docker.sock`** | UNIX socket the Docker daemon listens on. Mounting it into a container is equivalent to giving that container root on the host. SCION no longer does this (NG8). |
+| **Transcend / Transcend-DevTest** | Customer-scale reference dataset (10 716 schemas / 240k tables / 9.8M columns) used to validate scale targets. |
+| **Demo extract** | Synthetic small dataset shipped with SCION for tutorials and tests. Lives under `Parser/Data extract*/`. |
+
+---
+
+## Appendix B: References
+
+### Teradata documentation
+
+1. Teradata Data Dictionary Views — `databasesv`, `tablesv`, `columnsv`,
+   `indicesv`, `partitioningconstraintsv`, `tabletextv`.
+2. Teradata QryLogV / QryLogSQLV — DBQL query log views.
+3. PDCR History tables — `PDCRInfo.DBQLogTbl_Hst` / `DBQLSQLTbl_Hst`.
+
+### Frameworks & libraries
+
+4. FastAPI — <https://fastapi.tiangolo.com/>
+5. SQLAlchemy 2.0 — <https://docs.sqlalchemy.org/en/20/>
+6. Alembic — <https://alembic.sqlalchemy.org/>
+7. Pydantic v2 — <https://docs.pydantic.dev/>
+8. Next.js App Router — <https://nextjs.org/docs/app>
+9. React 19 — <https://react.dev/>
+10. xyflow (`@xyflow/react`) — <https://reactflow.dev/>
+11. Dagre — <https://github.com/dagrejs/dagre>
+
+### Standards & lineage
+
+12. OpenLineage spec — <https://openlineage.io/>
+13. ANTLR4 (used by DataDNA, referenced here for context) —
+    <https://www.antlr.org/>
+
+### Operational
+
+14. Docker Compose v2 — <https://docs.docker.com/compose/>
+15. nginx 1.29 — <https://nginx.org/en/docs/>
+16. Docker Scout — <https://docs.docker.com/scout/>
+17. GitHub Container Registry — <https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry>
+
+### Internal cross-references
+
+- `ROADMAP.md` — Forward-looking plan (v1.22 → v1.25 + backlog).
+- `CHANGELOG.md` — Per-release changes, append-only.
+- `docs/handover.md` — Operator runbook.
+- `docs/dictionary_integration.md` — Detailed extract layout reference.
+- `docs/ingestion_pipelines.md` — Internals of the ingest pipeline.
+- `docs/use_cases.md` — Customer-shaped narrative scenarios.
+
+---
+
 ## Document Control
 
 - **Created:** 2026-05-28
 - **Last Modified:** 2026-05-28
-- **Phase:** 2 of 3 — sections 1-8 (current scope of this PR)
-- **Next phase:** Sections 9-14 + appendices (Golden Examples, Test Scenarios, Reference Benchmarking, Acceptance Criteria, Deliverables, Risk Assessment, Glossary, References)
+- **Phase:** Complete — all 14 sections + 2 appendices (Phases 1-3 delivered in this PR)
 - **Review status:** Awaiting maintainer review
+- **Next review:** When v1.22 ships, sweep the Acceptance section and ROADMAP cross-references
