@@ -6,6 +6,16 @@ Accepts the 6-file batch Rahul's extractor produces (databases /
 tables / columns / indices / partitioning / tabletext) and persists
 them as one SCION snapshot keyed by `extract_run_id`.
 
+As of v1.21.6 (Pipeline 3, PR-D) the same endpoint also accepts the
+2 PDCR usage extracts (`pdcr_log_*.dat`, `pdcr_object_usage_*.dat`).
+Files are partitioned by content type after detection: dict files
+flow through the existing snapshot pipeline (parse / validate /
+persist / post-ingest); PDCR files are persisted afterwards via the
+usage persisters, resolving object identifiers case-insensitively
+against the just-created snapshot. A dict-only batch is fully
+supported (existing behaviour); a PDCR-only batch is rejected with
+a clean 400 because PDCR rows have no snapshot to resolve against.
+
 The endpoint is **format-agnostic at the wire level** — files are
 received as multipart upload regardless of extension. The format
 detector classifies each file by content (and filename as tiebreaker)
@@ -41,13 +51,16 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
+from app.db.models.snapshot import Snapshot
 from app.metadata import (
     dict_flat_file_reader,
     dict_batch_validator,
     dict_persister,
     format_detector,
 )
+from app.metadata import pdcr_flat_file_reader
 from app.metadata.format_detector import ContentType, Format
+from app.usage import pdcr_persister
 from app.api.v1 import import_progress
 
 
@@ -111,6 +124,28 @@ class DictImportResponse(BaseModel):
     partitioning_seen: int
     tabletext_seen: int
     files_received: int
+    # ──── PDCR routing (Pipeline 3, PR-D) ────
+    # All optional / default 0 so callers that only upload dict files
+    # see the same response shape they've always seen. The fields land
+    # in the response payload when the mixed-batch route persists
+    # `pdcr_log_*.dat` / `pdcr_object_usage_*.dat` alongside the dict.
+    dbql_inserted: int = 0
+    dbql_skipped_duplicate: int = 0
+    dbql_skipped_invalid: int = 0
+    object_usage_inserted: int = 0
+    object_usage_skipped_unmapped_type: int = 0
+    object_usage_skipped_orphan: int = 0
+    object_usage_skipped_invalid: int = 0
+    # Per-PDCR-type count of unmapped-type skips (e.g. {"UDF": 54, "SP": 22}).
+    # Surfaced so operators see exactly what coverage we're missing —
+    # FR-13 graceful out-of-scope handling.
+    object_usage_skipped_by_type: Dict[str, int] = {}
+    # Snapshot used for case-insensitive resolution of object_usage
+    # rows. Defaults to the snapshot just created from the same batch;
+    # falls back to the most recent existing snapshot when this batch
+    # contains only PDCR files; None when there's no snapshot at all
+    # (every row is then accepted blindly).
+    pdcr_resolved_against_snapshot_id: Optional[int] = None
 
 
 # ──── Streaming helpers ────
@@ -233,6 +268,10 @@ def _content_type_to_category(ct: ContentType) -> Optional[str]:
     Returns None for content types this endpoint doesn't accept (e.g.
     parser JSON), letting the caller raise a clean 400 instead of
     routing it to the wrong pipeline.
+
+    PDCR usage files are valid here as of PR-D (Pipeline 3). They are
+    routed to the PDCR persisters after the dict pipeline finishes —
+    see ``_DICT_CATEGORIES`` / ``_PDCR_CATEGORIES`` for the partitions.
     """
     return {
         ContentType.DICT_DATABASES: "databases",
@@ -241,7 +280,20 @@ def _content_type_to_category(ct: ContentType) -> Optional[str]:
         ContentType.DICT_INDICES: "indices",
         ContentType.DICT_PARTITIONING: "partitioning",
         ContentType.DICT_TABLETEXT: "tabletext",
+        ContentType.USAGE_DBQL: "dbql_log",
+        ContentType.USAGE_OBJECT: "object_usage",
     }.get(ct)
+
+
+# Partition tables used by the handler to route each detected file
+# into the right pipeline. Keeping them as module-level constants
+# (rather than literals in the handler body) means a future reviewer
+# spotting "is X dict or PDCR?" has a single place to look.
+_DICT_CATEGORIES = {
+    "databases", "tables", "columns",
+    "indices", "partitioning", "tabletext",
+}
+_PDCR_CATEGORIES = {"dbql_log", "object_usage"}
 
 
 # ──── The endpoint ────
@@ -303,10 +355,14 @@ def import_dict_batch(
     files: List[UploadFile] = File(
         ...,
         description=(
-            "1 to 6 dict extract files in any combination. The endpoint "
-            "auto-detects which view each file represents. Filenames "
-            "matching Rahul's templates (e.g. `tablesv_full_export.rendered.dat`) "
-            "are detected with high confidence."
+            "Up to 8 extract files in any combination — the 6 dict views "
+            "(databases, tables, columns, indices, partitioning, "
+            "tabletext) plus the 2 PDCR usage extracts "
+            "(pdcr_log_*, pdcr_object_usage_*). The endpoint auto-detects "
+            "which view each file represents by content; filenames matching "
+            "Rahul's templates are detected with high confidence. PDCR "
+            "files are routed to the usage persisters after the dict "
+            "snapshot commits — see Pipeline 3 in docs/SPEC.md."
         ),
     ),
     force: bool = Form(
@@ -396,6 +452,11 @@ def import_dict_batch(
     temp_paths: List[Path] = []
     paths_by_category: Dict[str, Path] = {}
     filenames_by_category: Dict[str, str] = {}
+    # PDCR routing (PR-D): separate buckets so the dict pipeline never
+    # sees `pdcr_log_*` / `pdcr_object_usage_*` files. They run after
+    # the dict snapshot commits (or alone, if the batch is PDCR-only).
+    pdcr_paths_by_category: Dict[str, Path] = {}
+    pdcr_filenames_by_category: Dict[str, str] = {}
 
     try:
         t_upload = time.perf_counter()
@@ -438,8 +499,12 @@ def import_dict_batch(
                     ),
                 )
 
-            paths_by_category[category] = tmp_path
-            filenames_by_category[category] = upload.filename or category
+            if category in _PDCR_CATEGORIES:
+                pdcr_paths_by_category[category] = tmp_path
+                pdcr_filenames_by_category[category] = upload.filename or category
+            else:
+                paths_by_category[category] = tmp_path
+                filenames_by_category[category] = upload.filename or category
             sizes_by_category[category] = size
             logger.info(
                 "[ingest] uploaded %-13s %10s in %s  (%s)",
@@ -457,6 +522,22 @@ def import_dict_batch(
             "upload",
             caption=f"{len(files)} files · {_fmt_bytes(total_uploaded_bytes)}",
         )
+
+        # ──── PDCR-only batch guard ────
+        # PR-D scope is mixed batches (dict + PDCR) and dict-only.
+        # PDCR-only batches need a snapshot to resolve identifiers
+        # against; supporting them properly is deferred to a later
+        # PR. Surface a clean 400 here rather than letting the
+        # validator raise its less-helpful "empty batch" error.
+        if not paths_by_category and pdcr_paths_by_category:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "PDCR-only batches aren't supported yet. Upload the "
+                    "PDCR files (pdcr_log_*, pdcr_object_usage_*) "
+                    "together with the 6 dict extracts they belong to."
+                ),
+            )
 
         # ──── Step 2: parse the small views eagerly (fits in memory) ────
         # databases ≤ 50k rows, tables ≤ 500k, partitioning ≤ 50k —
@@ -711,6 +792,92 @@ def import_dict_batch(
             # checklist would show one step stuck on the spinner.
             _progress_end("post_ingest", caption="skipped (snapshot already exists)")
 
+        # ──── Step 6: PDCR usage ingest (Pipeline 3, PR-D) ────
+        # Runs in its own session so a failure here doesn't roll back
+        # the dict snapshot that already committed. The persisters
+        # use natural-key idempotency, so a retry of just the PDCR
+        # half is safe.
+        dbql_result = pdcr_persister.PDCRPersistResult()
+        obj_result = pdcr_persister.PDCRPersistResult()
+        pdcr_snapshot_id: Optional[int] = None
+
+        if pdcr_paths_by_category:
+            t_pdcr = time.perf_counter()
+            _progress_start(
+                "persist_pdcr",
+                caption=f"{len(pdcr_paths_by_category)} PDCR file(s)…",
+            )
+            # The just-created dict snapshot is the resolution target.
+            # `result.snapshot_id` is populated even on idempotent
+            # re-imports (the persister returns the matching existing
+            # snapshot_id rather than creating a new one).
+            pdcr_snapshot_id = result.snapshot_id
+            with Session(bind=engine) as pdcr_session:
+                try:
+                    if "dbql_log" in pdcr_paths_by_category:
+                        dbql_records = pdcr_flat_file_reader.read_dbql_log(
+                            pdcr_paths_by_category["dbql_log"]
+                        )
+                        dbql_result = pdcr_persister.persist_dbql_log(
+                            dbql_records, pdcr_session,
+                        )
+                    if "object_usage" in pdcr_paths_by_category:
+                        obj_records = pdcr_flat_file_reader.read_object_usage(
+                            pdcr_paths_by_category["object_usage"]
+                        )
+                        obj_result = pdcr_persister.persist_object_usage(
+                            obj_records, pdcr_session,
+                            snapshot_id=pdcr_snapshot_id,
+                        )
+                    pdcr_session.commit()
+                except pdcr_flat_file_reader.PDCRFlatFileError as e:
+                    pdcr_session.rollback()
+                    if import_id is not None:
+                        import_progress.mark_finished(
+                            import_id, ok=False,
+                            error_message=f"PDCR parse error: {e}",
+                        )
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"PDCR parse error: {e}",
+                    )
+                except Exception as e:
+                    pdcr_session.rollback()
+                    if import_id is not None:
+                        import_progress.mark_finished(
+                            import_id, ok=False,
+                            error_message=f"Failed to persist PDCR data: {e}",
+                        )
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to persist PDCR data: {e}",
+                    )
+            timings["6_persist_pdcr"] = time.perf_counter() - t_pdcr
+            logger.info(
+                "[ingest] PDCR persisted in %s — "
+                "dbql inserted=%d dup=%d invalid=%d · "
+                "object_usage inserted=%d unmapped=%d orphan=%d invalid=%d",
+                _fmt_time(timings["6_persist_pdcr"]),
+                dbql_result.inserted, dbql_result.skipped_duplicate,
+                dbql_result.skipped_invalid,
+                obj_result.inserted, obj_result.skipped_unmapped_type,
+                obj_result.skipped_orphan, obj_result.skipped_invalid,
+            )
+            _progress_end(
+                "persist_pdcr",
+                caption=(
+                    f"{dbql_result.inserted:,} queries · "
+                    f"{obj_result.inserted:,} usage rows"
+                ),
+            )
+        else:
+            # No PDCR files in this batch — mark the step as a no-op
+            # so the UI checklist doesn't sit on a spinner forever.
+            _progress_end(
+                "persist_pdcr",
+                caption="skipped (no PDCR files in batch)",
+            )
+
         if import_id is not None:
             import_progress.mark_finished(import_id, ok=True)
 
@@ -746,6 +913,15 @@ def import_dict_batch(
             partitioning_seen=result.partitioning_seen,
             tabletext_seen=result.tabletext_seen,
             files_received=len(files),
+            dbql_inserted=dbql_result.inserted,
+            dbql_skipped_duplicate=dbql_result.skipped_duplicate,
+            dbql_skipped_invalid=dbql_result.skipped_invalid,
+            object_usage_inserted=obj_result.inserted,
+            object_usage_skipped_unmapped_type=obj_result.skipped_unmapped_type,
+            object_usage_skipped_orphan=obj_result.skipped_orphan,
+            object_usage_skipped_invalid=obj_result.skipped_invalid,
+            object_usage_skipped_by_type=dict(obj_result.skipped_by_type),
+            pdcr_resolved_against_snapshot_id=pdcr_snapshot_id,
         )
 
     finally:

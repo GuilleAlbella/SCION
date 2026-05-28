@@ -300,4 +300,8 @@ DICT_IMPORT_STEPS: List[tuple[str, str]] = [
     ("validate_identity", "Validate batch identity"),
     ("persist_data", "Persist data"),
     ("post_ingest", "Build graph & metrics"),
+    # PDCR usage ingest (Pipeline 3, PR-D). The step is always shown
+    # so the UI checklist has stable shape; the handler marks it as
+    # skipped (with a caption) when the batch has no PDCR files.
+    ("persist_pdcr", "Ingest PDCR usage extracts"),
 ]
