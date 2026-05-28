@@ -66,8 +66,10 @@ export default function Sidebar() {
           <span className="text-white text-lg font-light tracking-[0.15em]">PROJECT</span>
           <span className="text-td-orange text-lg font-bold tracking-[0.08em] ml-1.5">SCION</span>
         </div>
-        <p className="text-[9px] text-white/40 mt-1.5 tracking-[0.2em] uppercase">
+        <p className="text-[9px] text-white/40 mt-1.5 tracking-[0.2em] uppercase leading-snug">
           Structural Change Intelligence
+          <br />
+          & Observability Node
         </p>
       </div>
 

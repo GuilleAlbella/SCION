@@ -775,7 +775,7 @@ class TaisaClient:
 
         qa_prompt = (
             "You are TAISA, the AI reasoning engine inside SCION (Structural Change Intelligence "
-            "Platform) built by Teradata. You have full access to SCION's data, shown below.\n\n"
+            "& Observability Node) built by Teradata. You have full access to SCION's data, shown below.\n\n"
             "Rules:\n"
             "- Answer in the SAME LANGUAGE the user writes in. If they write Spanish, answer in Spanish.\n"
             "- Answer in plain, conversational language.\n"

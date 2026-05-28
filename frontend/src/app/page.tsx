@@ -65,7 +65,7 @@ export default function DashboardPage() {
   const changeCount = changes?.changes.length ?? 0;
 
   return (
-    <PageShell title="Dashboard" subtitle="SCION — Structural Change Intelligence Platform">
+    <PageShell title="Dashboard" subtitle="SCION — Structural Change Intelligence & Observability Node">
       {/* ──── Hero banner ──── Welcome + running snapshot count + active diff link */}
       <div className="bg-gradient-to-r from-td-navy to-td-navy-light rounded-xl p-6 mb-6 text-white">
         <div className="flex items-center justify-between">

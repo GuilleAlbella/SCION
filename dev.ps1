@@ -51,18 +51,18 @@ function Get-AppVersion {
 Clear-Host
 $version = Get-AppVersion
 Write-Host ""
-Write-Host "  ===============================================================" -ForegroundColor DarkCyan
-Write-Host "  ||                                                           ||" -ForegroundColor DarkCyan
-Write-Host "  ||    SSSSS  CCCCC  III  OOO   N   N                         ||" -ForegroundColor Cyan
-Write-Host "  ||    S      C       I  O   O  NN  N                         ||" -ForegroundColor Cyan
-Write-Host "  ||    SSSSS  C       I  O   O  N N N                         ||" -ForegroundColor Cyan
-Write-Host "  ||        S  C       I  O   O  N  NN                         ||" -ForegroundColor Cyan
-Write-Host "  ||    SSSSS  CCCCC  III  OOO   N   N                         ||" -ForegroundColor Cyan
-Write-Host "  ||                                                           ||" -ForegroundColor DarkCyan
-Write-Host "  ||    Structural Change Intelligence Platform   " -NoNewline -ForegroundColor White
+Write-Host "  ===========================================================================" -ForegroundColor DarkCyan
+Write-Host "  ||                                                                       ||" -ForegroundColor DarkCyan
+Write-Host "  ||    SSSSS  CCCCC  III  OOO   N   N                                     ||" -ForegroundColor Cyan
+Write-Host "  ||    S      C       I  O   O  NN  N                                     ||" -ForegroundColor Cyan
+Write-Host "  ||    SSSSS  C       I  O   O  N N N                                     ||" -ForegroundColor Cyan
+Write-Host "  ||        S  C       I  O   O  N  NN                                     ||" -ForegroundColor Cyan
+Write-Host "  ||    SSSSS  CCCCC  III  OOO   N   N                                     ||" -ForegroundColor Cyan
+Write-Host "  ||                                                                       ||" -ForegroundColor DarkCyan
+Write-Host "  ||    Structural Change Intelligence & Observability Node    " -NoNewline -ForegroundColor White
 Write-Host $version.PadRight(12) -NoNewline -ForegroundColor DarkGray
 Write-Host "||" -ForegroundColor DarkCyan
-Write-Host "  ===============================================================" -ForegroundColor DarkCyan
+Write-Host "  ===========================================================================" -ForegroundColor DarkCyan
 Write-Host ""
 
 # ---- Pre-flight checks ---------------------------------------------

@@ -167,7 +167,7 @@ def _build_html_report(
     </div>
 </div>
 <div class="footer">
-    SCION — Structural Change Intelligence Platform &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
+    SCION — Structural Change Intelligence &amp; Observability Node &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
 </div>
 </body>
 </html>"""
