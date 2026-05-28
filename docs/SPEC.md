@@ -42,7 +42,7 @@
 
 ### 1.1 Purpose
 
-**SCION (Structural Change Intelligence)** is a web-based observability tool for Teradata data warehouses. It takes periodic *dictionary snapshots* of a customer's schema and surfaces — through a single interface — the answers a data steward, DBA, or governance lead needs but currently has to assemble manually:
+**SCION** — **S**tructural **C**hange **I**ntelligence & **O**bservability **N**ode — is a web-based observability tool for Teradata data warehouses. It takes periodic *dictionary snapshots* of a customer's schema and surfaces — through a single interface — the answers a data steward, DBA, or governance lead needs but currently has to assemble manually:
 
 - **What changed** between two points in time? (added / dropped / altered tables, views, columns)
 - **What's the blast radius** of a proposed change? (which downstream objects break if I drop this column?)
