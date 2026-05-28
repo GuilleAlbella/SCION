@@ -83,3 +83,12 @@ Parser/**/*.json
 *[Pp]assword*
 *credentials*
 *.pat
+
+# Windows / PowerShell module-analysis cache that the shell drops in
+# the repo root when commands are run from this directory. Never
+# code, always regenerated.
+Microsoft/
+
+# Internal meeting transcripts — kept locally for context but not
+# part of the source tree.
+Transcripciones/
