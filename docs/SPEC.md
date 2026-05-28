@@ -1,8 +1,12 @@
 # SCION — Technical Specification
 
-> **Version:** 1.21.5-spec-final
-> **Last Updated:** 2026-05-28
-> **Status:** Complete — all 14 sections + 2 appendices
+> **Version:** 1.21.5-spec-r10-update
+> **Last Updated:** 2026-05-28 (post-Reunion 10 follow-up)
+> **Status:** Complete — all 14 sections + 2 appendices, with the
+> Reunion 10 outcomes integrated (FR-13 graceful out-of-scope
+> handling, §10.10 end-user scenario testing, §11.5 cross-team
+> test-plan commitment, §13.4 handover-doc requirements, NG13
+> agentic AI explicitly out of scope)
 > **Author:** Guillermo Albella, with AI-assisted drafting
 
 ---
@@ -169,6 +173,7 @@ The two meet when DataDNA ships a lineage JSON to SCION's `/parser-import` endpo
 | **NG10** | SCION will **never include a built-in user/role model** in v1.x | SSO / RBAC arrives only when the first multi-user customer needs it. Until then, the deploy is single-tenant single-key. Premature flexibility = unused code = drift. |
 | **NG11** | SCION will **never bundle customer data in container images** | Demo seed is generated synthetically; real customer extracts are mounted into the volume at runtime, never copied into a layer. |
 | **NG12** | SCION is **not a notification platform** | No Slack/email/SMS integrations. The UI surfaces alerts; the user decides what to do with them. Notifications are a per-customer concern, not a product concern. |
+| **NG13** | SCION is **not an agentic AI** in v1.x | TAISA today is a Q&A engine grounded on real data — it answers questions, it doesn't take actions. Building autonomous loops, tool-calling, or write-back behaviour is a different product class. Flagged as a possible future extension during Reunion 10 (Jon Brightling, 1:03:01) but explicitly out of scope until the read-only product is mature. |
 
 ---
 
@@ -723,6 +728,74 @@ MUST rebuild base images with `apt-get upgrade -y` and `pull: true`
 on every tagged release so Debian/Alpine security patches roll in
 without needing a separate "security release".
 ```
+
+### FR-13 — Graceful Out-of-Scope Handling
+
+> **Added 2026-05-28 after Reunion 10.** Jon Brightling raised this
+> as a first-class requirement that needs to be coded in, not assumed:
+> *"the parser recognises a scenario it doesn't support, marks it
+> somehow, declares 'I can't process this'. You can then quantify
+> how many of those there are."* The principle generalises beyond
+> the parser — every SCION surface that receives input or computes
+> a result MUST make its capability boundary observable rather than
+> silently degrading.
+
+```
+MUST never fail silently when given an input that falls outside the
+documented capability:
+  - Ingest:       reject the upload with a 400 + actionable detail
+                  ("expected 9 fields, got 16 — partitioningconstraintsv
+                  format changed; ask the extraction team for an
+                  ENDREC-formatted file").
+  - Format
+    detector:    return ContentType.UNKNOWN with a `reason` string
+                 naming the candidates (e.g. "9-field flat-file —
+                 could be tabletextv or partitioningconstraintsv;
+                 upload with the original filename to disambiguate").
+  - Diff:        skip object kinds it doesn't understand; log a
+                 WARN with the count of skipped rows so operators
+                 see the gap.
+  - Graph:       missing parser-feed edges → graph is sparser, not
+                 wrong. The UI MUST surface "lineage edges available:
+                 fk-heuristic only" so users don't read absence as
+                 truth.
+  - TAISA:       LLM unreachable → endpoint returns disabled-state
+                 payload, never a 500. The Sidebar pill cannot block
+                 page render.
+  - Deploy:      `docker compose pull` against expired GHCR auth
+                 must bail with "GHCR auth expired or missing.
+                 Re-running install.ps1 will refresh it." — never
+                 a cryptic exit code.
+
+MUST surface per-surface "what was skipped and why" telemetry where
+the data is at scale:
+  - Reader-level rejections are logged at WARN with the offending
+    record's first 200 chars so the extraction team has something to
+    grep for.
+  - When a batch import skips N records, the final response includes
+    `skipped: { count, reasons: [...] }` so the operator can decide
+    whether to escalate.
+
+MUST make capability boundaries discoverable from the running system,
+not only from the spec:
+  - `GET /api/v1/health/ready` carries the engine-state map (which
+    engines are up, which aren't).
+  - `GET /api/v1/system/version` carries `current`, `latest`,
+    `update_available`. It NEVER tries to convey capability — that
+    lives in /health/ready.
+
+MUST treat out-of-scope as a positive design property, not a fallback:
+  - Adding a new content-type, lineage edge type, or change type
+    requires updating the detector + the corresponding test case
+    asserting "input X is recognised as unsupported, with reason Y".
+  - The spec section the test enforces (§10.x) is the contract.
+```
+
+> **Anti-pattern (must not happen):** SCION silently succeeds on a
+> malformed input by producing partial / mostly-empty output. A
+> reviewer reading the response can't tell the difference between
+> "the warehouse really is empty" and "we couldn't parse most of
+> the file". Every SCION endpoint must distinguish these.
 
 ---
 
@@ -1350,6 +1423,46 @@ are in §12.1.
 | API routers (FastAPI) | ≥70% | Auth boundary, paginate envelope shape |
 | Schema parity | 100% (binary) | Test must be GREEN on every PR |
 
+### 10.10 End-User / Scenario Testing (planned)
+
+> Added after Reunion 10. Rahul Kulkarni and Jon Brightling agreed
+> that functional and component tests are necessary but not
+> sufficient — at some point a real ETL process with known lineage
+> must be walked end-to-end through SCION (and DataDNA upstream of
+> it) so a domain user can visually confirm that the output matches
+> what they know the ETL does.
+
+```
+Status: Planned. Pending the parser-feed JSON from DataDNA (v1.24)
+and a small reference ETL process from Rahul's team.
+
+When the reference ETL is available, the test pack MUST:
+
+  1. Be small enough that one person can hold the full expected
+     lineage in their head — Kindy's phrasing: "small subset that
+     somebody can manually look at" (Reunion 10, ~0:24).
+  2. Touch ~10 source/target tables, ideally including:
+     - direct table-to-table flow,
+     - at least one view in the middle,
+     - at least one transformation that exercises the parser's
+       column-mapping (UNION, COALESCE, CASE),
+     - at least one statement that's out of scope for the parser
+       (to verify FR-13 graceful handling).
+  3. Ship as a fixture under `backend/tests/end_to_end/scenarios/<name>/`:
+       - input dictionary extract (the 6 files)
+       - input parser-feed lineage (JSON)
+       - expected_changes.json
+       - expected_impact.json for a chosen DROP
+       - expected_lineage.json for a chosen object
+       - README.md explaining what the ETL does in plain language
+  4. Be runnable via `pytest backend/tests/end_to_end/` and
+     verified by a human at least once per release tag.
+
+The reference ETL is **owned jointly** by the SCION team and
+Rahul's team. SCION asserts the impact / lineage shape; DataDNA
+asserts the parsed SQL shape; the fixture binds the two contracts.
+```
+
 ---
 
 ## 11. Reference Benchmarking
@@ -1434,6 +1547,46 @@ extracts the integration tests load via `_SAMPLE_DIR` in
 > 5. When the spec and the code disagree, **assume the spec is
 >    correct and surface the gap to the maintainer** — don't silently
 >    "fix" the spec to match suspicious code.
+
+### 11.5 Cross-Team End-to-End Test Plan (Reunion 10 commitment)
+
+In Reunion 10 (2026-05-27) the team agreed that SCION and DataDNA
+share a meaningful chunk of end-to-end testing — a customer-facing
+flow that starts with a parsed ETL process and ends with a SCION
+impact / lineage visualisation can't be tested correctly by either
+team in isolation. The agreed deliverables on the SCION side are:
+
+```
+1. The SCION team shares the canonical functional requirements
+   document (THIS FILE — docs/SPEC.md) with Rahul + Jon + Kindy +
+   Prajakta so the cross-team test plan is anchored on a single
+   contract per product.
+
+2. One named representative from the SCION team participates in
+   the joint test-plan effort with Rahul's team and Prajakta Satav.
+   Owner: Guillermo Albella (default) or alternate from Pilar's
+   sub-team.
+
+3. SCION contributes the impact / diff / lineage half of every
+   reference ETL fixture; DataDNA contributes the parser-feed
+   half. Both halves live under
+   `backend/tests/end_to_end/scenarios/<name>/` per §10.10.
+
+4. The first reference ETL is a hypothetical Transcend-style flow
+   touching ~10 tables (Rahul's example in Reunion 10). The user
+   who knows the flow validates the SCION rendering at least once
+   before the v1.24 release tag.
+
+5. Out-of-scope handling (FR-13) is covered by deliberately
+   including at least one statement the parser cannot parse, so
+   the test confirms the system marks it rather than silently
+   dropping it.
+```
+
+The test plan itself is a joint artefact — not part of this spec —
+maintained by Rahul (lead) with input from the SCION + DataDNA
+sides. SCION owns its own component-level testing (§10.1-§10.9);
+the cross-team layer extends rather than replaces those.
 
 ---
 
@@ -1555,6 +1708,42 @@ docker/README.md                # build / dev smoke-test guide
                                             on-demand dispatch
 ```
 
+### 13.4 Handover Documentation Requirements
+
+> Added after Reunion 10. Kindy Flyvholm framed this as the
+> "win the lottery" test: *"If tomorrow we all win the lottery and
+> we're not here, what is it that you're handing over?"* The
+> deliverables below are what must exist before SCION can be
+> considered safely handover-ready to a maintainer who has never
+> seen the codebase.
+
+| Artefact | Status | Owner | Covers |
+|---|---|---|---|
+| `docs/SPEC.md` | ✅ Complete (v1.21.5-r10) | this doc | What SCION is, what it does, what it never does, every contract |
+| `ROADMAP.md` | ✅ Maintained | maintainer | Where SCION is going (v1.22 → v1.25 + backlog) |
+| `CHANGELOG.md` | ✅ Maintained | maintainer | What changed in every release |
+| `docker/README.md` + `scion-deploy/README.md` | ✅ Complete | maintainer | How to deploy + how to upgrade |
+| `docs/handover.md` | ⚠️ Operator-shaped, needs review | maintainer | Day-to-day operator runbook |
+| `docs/dictionary_integration.md` | ✅ Complete | maintainer | Extract layout details |
+| **Security architecture doc** | ❌ Missing (todo) | maintainer | Auth, secrets, GHCR, threat model |
+| **Operations / on-call runbook** | ❌ Missing (todo) | maintainer | What to do when something fails in prod |
+| **Customer onboarding guide** | ❌ Missing (todo) | maintainer + sales-eng | What a customer-side deployer needs to know |
+| `CLAUDE.md` | ✅ Maintained | maintainer | Lightweight AI-assistant context (this spec is the heavy one) |
+
+A new maintainer arriving cold should be able to:
+
+1. Read `README.md` + `docs/SPEC.md` §1-§4 — understand SCION
+   end-to-end in ~30 minutes.
+2. Read `docker/README.md` + `scion-deploy/README.md` —
+   bring up a local stack in ~10 minutes.
+3. Read `ROADMAP.md` + `CHANGELOG.md` — know where the product is
+   in its lifecycle in ~10 minutes.
+4. Use `docs/SPEC.md` §5-§8 + the code as the working reference
+   for any change.
+
+The three "missing" items above are tracked in the ROADMAP backlog
+and are pre-GA blockers for any customer-facing deploy.
+
 ---
 
 ## 14. Risk Assessment
@@ -1576,11 +1765,14 @@ docker/README.md                # build / dev smoke-test guide
 
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| **Single-maintainer bus factor** | High | High | This spec; ROADMAP.md; CHANGELOG.md; `tools/db_init.py` as canonical lifecycle |
+| **Single-maintainer bus factor** | High | High | This spec; ROADMAP.md; CHANGELOG.md; `tools/db_init.py` as canonical lifecycle; §13.4 handover requirements track the still-missing docs |
 | **Scope creep from "while we're at it" requests** | Medium | Medium | Explicit non-goals (§2.2) and scope guards in FRs |
-| **Drift between SCION and DataDNA contracts** | Medium | High | §1.5 boundary diagram + scope guard in FR-1.1; coordinate parser-feed JSON spec with Rahul |
+| **Drift between SCION and DataDNA contracts** | Medium | High | §1.5 boundary diagram + scope guard in FR-1.1; coordinate parser-feed JSON spec with Rahul; cross-team test plan (§11.5) anchored on shared fixtures |
+| **Cross-team test plan stalls before v1.24** | Medium | Medium | §11.5 commits one named SCION rep; reference ETL fixture lives in the repo under `backend/tests/end_to_end/`; gate the v1.24 release on at least one passing scenario |
 | **Customer-data leakage through TAISA prompt** | Low | High | Bounded context, no user input in context (§FR-6); `reasoning_event` audit trail |
+| **Silent failure on out-of-scope input** | Medium | High | FR-13 codifies graceful out-of-scope handling across every surface; tests in §10.10 assert the behaviour for each new content-type / change-type |
 | **Production deployment without HTTPS** | Medium | Medium | nginx config supports TLS termination; document in scion-deploy README when first customer ships |
+| **Missing handover docs at GA** | High (today) | High | §13.4 enumerates the three gaps (security architecture, on-call runbook, customer onboarding); blocked items tracked in ROADMAP backlog |
 
 ### 14.3 Mitigation Strategies
 
@@ -1624,6 +1816,10 @@ docker/README.md                # build / dev smoke-test guide
 | **`docker.sock`** | UNIX socket the Docker daemon listens on. Mounting it into a container is equivalent to giving that container root on the host. SCION no longer does this (NG8). |
 | **Transcend / Transcend-DevTest** | Customer-scale reference dataset (10 716 schemas / 240k tables / 9.8M columns) used to validate scale targets. |
 | **Demo extract** | Synthetic small dataset shipped with SCION for tutorials and tests. Lives under `Parser/Data extract*/`. |
+| **Reference ETL** | The shared cross-team test fixture (§10.10, §11.5): a small ETL process with known lineage that both SCION and DataDNA validate against. Pending Rahul's selection of the candidate flow. |
+| **Out-of-scope (graceful)** | The principle (FR-13) that every SCION surface must explicitly mark, count, and report inputs it cannot handle — never silently degrade. Articulated by Jon Brightling in Reunion 10. |
+| **"Win the lottery" test** | Kindy Flyvholm's framing in Reunion 10 for handover-readiness: *if every current maintainer left tomorrow, what does the next person have to work with?* Drives §13.4. |
+| **Agentic AI** | An AI system that takes actions, not just answers questions. SCION's TAISA is Q&A-shaped; agentic behaviour is NG13 in v1.x. |
 
 ---
 
@@ -1674,7 +1870,10 @@ docker/README.md                # build / dev smoke-test guide
 ## Document Control
 
 - **Created:** 2026-05-28
-- **Last Modified:** 2026-05-28
-- **Phase:** Complete — all 14 sections + 2 appendices (Phases 1-3 delivered in this PR)
-- **Review status:** Awaiting maintainer review
-- **Next review:** When v1.22 ships, sweep the Acceptance section and ROADMAP cross-references
+- **Last Modified:** 2026-05-28 (post-Reunion 10 follow-up)
+- **Revisions:**
+  - 2026-05-28 — Phases 1-3 merged via PR #39.
+  - 2026-05-28 — SCION acronym expanded to canonical name across UI + docs (PR #40).
+  - 2026-05-28 — Reunion 10 outcomes integrated: NG13 (no agentic AI in v1.x), FR-13 (graceful out-of-scope handling), §10.10 (end-user scenario testing), §11.5 (cross-team test-plan commitment), §13.4 (handover-doc requirements), §14.2 expanded with three new risks, glossary additions.
+- **Next review:** When v1.22 ships, sweep the Acceptance section and ROADMAP cross-references; when the cross-team reference ETL is selected, fold the specific contract into §10.10.
+- **Distribution (post-Reunion 10):** This document is the canonical SCION functional requirements artefact that Pilar / Helton committed to share with Rahul, Jon, Kindy, and Prajakta for the joint test-plan effort.
