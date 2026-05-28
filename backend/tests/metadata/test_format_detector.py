@@ -142,12 +142,23 @@ def test_flat_file_no_filename_16_fields_returns_unknown():
     assert "16-field" in r.reason or "filename" in r.reason
 
 
-def test_flat_file_no_filename_9_fields_is_tabletext():
-    """9 fields is unique to tabletext — disambiguates without
-    filename hint, medium confidence (we trust the arity alone)."""
+def test_flat_file_no_filename_9_fields_is_ambiguous():
+    """9 fields used to uniquely mean tabletextv, but since v1.21.5
+    partitioningconstraintsv also uses a 9-col + ENDREC layout (its
+    constraint_text field can contain embedded newlines, same shape
+    as tabletextv.RequestText). Without a filename hint we therefore
+    can't disambiguate, and the detector returns UNKNOWN with a
+    low-confidence reason that names both candidates so the operator
+    knows what to do.
+    """
     r = detect(_flat_row(view_count=5), filename=None)  # 4 tech + 5 = 9
-    assert r.content_type is ContentType.DICT_TABLETEXT
-    assert r.confidence == "medium"
+    assert r.format is Format.FLAT_FILE
+    assert r.content_type is ContentType.UNKNOWN
+    assert r.confidence == "low"
+    # The reason should mention both candidates so the operator can
+    # re-upload with the original filename to disambiguate.
+    assert "tabletext" in r.reason.lower()
+    assert "partitioning" in r.reason.lower()
 
 
 def test_flat_file_unexpected_arity_returns_unknown():
