@@ -8,6 +8,76 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.6 (2026-05-29) — Pipeline 3: PDCR usage ingest end-to-end
+
+Closes the planned-since-v1.0 gap on FR-1.3: SCION now ingests
+Rahul's PDCR usage extracts (`pdcr_log_*.dat`,
+`pdcr_object_usage_*.dat`) through the same `/dict-import` endpoint
+that handles the 6 dictionary files. Six PRs landed in sequence:
+
+- **PR-A (#43) — format detector.** Recognises PDCR layouts by
+  ENDREC-aware arity counting: arity 10 → `USAGE_DBQL`, arity 12 →
+  `USAGE_OBJECT`. Filename prefixes `pdcr_log_` and
+  `pdcr_object_usage_` boost confidence to HIGH. Fixed a regression
+  in `test_flat_file_unexpected_arity_returns_unknown` along the way.
+- **PR-B (#44) — readers.** `iter_dbql_log` / `read_dbql_log` and
+  `iter_object_usage` / `read_object_usage` in a new
+  `app/metadata/pdcr_flat_file_reader.py`. Reuses the byte-level
+  helpers from the dict reader (`_split_records`, `_split_fields`,
+  `_parse_int`, `_nn`). Includes `reassemble_query()` that joins
+  per-(QueryID, SqlRowNo) fragments back into full SQL — needed
+  because SqlTextInfo carries multi-line statements.
+- **PR-C (#45) — persisters + dbql_query table.** New
+  `DBQLQuery` ORM model and Alembic migration
+  `b49e5f6c7d8e_add_dbql_query_table.py` (idempotent, snapshot-
+  independent, natural key `(query_id, collect_timestamp)`).
+  `persist_dbql_log` reassembles SQL and writes one row per query;
+  `persist_object_usage` maps 6 PDCR types to SCION vocabulary
+  (`Col`→COLUMN, `Tab`→TABLE, `Viw`→VIEW, `Idx`→INDEX,
+  `Mac`→MACRO, `Vol`→VOLATILE) and case-insensitively resolves
+  identifiers against `graph_node` via `build_node_index`. 14 PDCR
+  types skipped explicitly with per-type counters (FR-13
+  graceful out-of-scope). End-to-end on the 2026-05-28 Transcend
+  extract: 44 540 DBQL queries + 77 619 / 78 049 (99.45%) usage
+  rows persisted.
+- **PR-D (#46) — endpoint routing.** `/dict-import` partitions
+  uploaded files into dict vs PDCR buckets by detected content
+  type. Dict files flow through the existing snapshot pipeline
+  untouched; PDCR files persist in their own session/transaction
+  so a PDCR failure can't roll back the dict snapshot.
+  `DictImportResponse` grows 9 optional fields (all default
+  zero/empty) so dict-only clients see the same shape they always
+  did. New `persist_pdcr` step in `DICT_IMPORT_STEPS` for UI
+  progress.
+- **PR-E (#47) — usage-weighted criticality.** After PDCR
+  object_usage lands, re-runs `compute_criticality(force=True,
+  usage_available=True)` so the cache reflects the 60/40 usage +
+  graph fragility formula instead of the graph-only fallback the
+  post-ingest pipeline writes. Gated on `obj_result.inserted > 0`;
+  best-effort (failures logged, not fatal). Response surfaces the
+  new HIGH/MEDIUM/LOW band counts.
+- **PR-F (this one) — SPEC.md.** FR-1.3 moved from "planned" to
+  "implemented (Pipeline 3, v1.21.6)"; FR-1.4 step 6 documents
+  the two-pass criticality flow; data model inventory updated to
+  20 tables (added `dbql_query`); §1.4 scope-boundary table
+  reflects PDCR ingest landed; DataDNA boundary mnemonic updated
+  to mention the QueryID correlation point.
+
+Tests: 117 passed across the backend suite (+17 persister, +7 +1
+endpoint-routing, +regression fix in format detector). Schema-
+parity test still green: `Base.metadata.create_all()` produces a
+schema identical to `alembic upgrade head`.
+
+What's still open (post-Pipeline-3):
+
+- `usage_event` has no unique key today, so re-uploading the same
+  `pdcr_object_usage_*.dat` double-counts. Deferred to v1.22.
+- `dbql_query` retention strategy not finalised (Rahul to confirm
+  whether SCION keeps the full DBQL history or rolls daily).
+- Object-type coverage: adding UDF + SP to the mapping would
+  recover ~76 rows / 0.1% extra coverage on Transcend-scale data —
+  not blocking, tracked in the persister docstring.
+
 ### v1.21.5 (2026-05-18) — partitioningconstraintsv 9-col + ENDREC layout fix
 
 Helton Guedes landed two changes:
