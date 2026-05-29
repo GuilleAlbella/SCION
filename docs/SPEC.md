@@ -71,7 +71,7 @@ Existing tooling (Kalido legacy, ad-hoc scripts, internal Teradata-built dashboa
 
 SCION solves these problems through a five-stage pipeline:
 
-1. **Ingest** dictionary extracts (6 `*v_*` flat files) + optional parser lineage feed (JSON from DataDNA) + optional usage signals (DBQL/PDCR). Everything offline, all formats validated.
+1. **Ingest** dictionary extracts (6 `*v_*` flat files) + PDCR usage extracts (`pdcr_log_*.dat`, `pdcr_object_usage_*.dat`, Pipeline 3) + optional parser lineage feed (JSON from DataDNA). Everything offline, all formats validated, single endpoint routes by content type.
 2. **Snapshot** the structure into a versioned, hashable, queryable representation. Snapshots are immutable; each one is the canonical "state of the warehouse at time T".
 3. **Diff** any two snapshots to produce a typed list of `ChangeEvent`s with severity + breaking-or-not classification.
 4. **Reason** over the changes: graph-based blast radius, criticality scoring, proactive alerts, and natural-language explanations from an LLM (TAISA) grounded on the actual data.
@@ -83,15 +83,16 @@ Everything ships as **two public-facing containers + one private installer** tha
 
 > **Critical reading for newcomers.** SCION is intentionally a narrow product. The boundary below is what keeps it from becoming "the next over-scoped data platform". When in doubt, **default to "out of scope"**.
 
-| ✅ Does TODAY (v1.21.4) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
+| ✅ Does TODAY (v1.21.6) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
 |---|---|---|
 | Ingest 6-file dictionary extract from Rahul's exporter | In-app "Update now" button (v1.22) | Parse SQL, scripts, BTEQ, or KSH — that's **DataDNA** |
-| Snapshot + diff + structural hash | Pipeline 3 — DBQL / Object Usage ingestion (v1.22 if Rahul confirms JSON; later if PDCR `.dat`) | Connect to a live Teradata over JDBC/ODBC |
-| Server-side paginated change feed (Changes page) | Multi-region awareness (`DATA_REGION`, v1.23) | Capture lineage in real time from running queries |
-| Blast-radius computation + impact summaries | Parser lineage feed integration when Rahul ships it (v1.24) | Edit the warehouse — no DDL emitted, no DML, no GRANT |
-| Click-to-expand graph exploration (`/graph/focus`) | Postgres migration when multi-tenant arrives (v1.25) | Store row-level customer data — only metadata |
-| TAISA Q&A grounded on real metadata, bounded context | SSO / RBAC when first multi-user deploy lands (backlog) | Replace the steward — assists, never decides |
-| Usage signals + criticality scoring (from seeded data today) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Provide a query optimizer or recommend index changes |
+| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, v1.21.6) | Multi-region awareness (`DATA_REGION`, v1.23) | Connect to a live Teradata over JDBC/ODBC |
+| Snapshot + diff + structural hash | Parser lineage feed integration when Rahul ships it (v1.24) | Capture lineage in real time from running queries |
+| Server-side paginated change feed (Changes page) | Postgres migration when multi-tenant arrives (v1.25) | Edit the warehouse — no DDL emitted, no DML, no GRANT |
+| Blast-radius computation + impact summaries | SSO / RBAC when first multi-user deploy lands (backlog) | Store row-level customer data — only metadata |
+| Click-to-expand graph exploration (`/graph/focus`) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Replace the steward — assists, never decides |
+| TAISA Q&A grounded on real metadata, bounded context | DataDNA correlation against `dbql_query.sql_text` (backlog, depends on Rahul's parser shipping the QueryID join key) | Provide a query optimizer or recommend index changes |
+| Usage signals + usage-weighted criticality scoring (real PDCR data, Pipeline 3) | | |
 | Snapshot-pair simulation ("what if I make this change?") | Export streaming / CSV pagination (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
 | Containerised deploy (one-liner installer Linux + Windows) | Naming audit final sweep (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
 | TAISA pre-configured in private image, no per-user setup | TAISA batch-reasoning cap (backlog) | Stream from Kafka, listen on webhooks, or push notifications externally |
@@ -115,21 +116,29 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
                │                                                 │
    ┌───────────┴────────────┐                       ┌────────────┴───────────┐
    │ SQL / BTEQ / KSH files │                       │ Dictionary extracts:   │
-   │ DBQL / PDCR flat files │                       │   databasesv_*         │
-   │                        │                       │   tablesv_*            │
+   │ DBQL SqlTextInfo       │                       │   databasesv_*         │
+   │ (statements to parse)  │                       │   tablesv_*            │
    │                        │                       │   columnsv_*           │
    │                        │                       │   indicesv_*           │
    │                        │                       │   partitioningv_*      │
    │                        │                       │   tabletextv_*         │
+   │                        │                       │ PDCR usage extracts:   │
+   │                        │                       │   pdcr_log_*           │
+   │                        │                       │   pdcr_object_usage_*  │
    └────────────────────────┘                       └────────────────────────┘
 ```
 
 **Mnemonic for the team:**
 
 - DataDNA looks at the **code** (SQL) — answers "what does this query do?"
-- SCION looks at the **structure** (dictionary) — answers "what does the warehouse look like and what's changing in it?"
+- SCION looks at the **structure** (dictionary + usage metadata) — answers "what does the warehouse look like, what's changing in it, and what's actually being used?"
 
-The two meet when DataDNA ships a lineage JSON to SCION's `/parser-import` endpoint — that's the only data crossing the boundary, and it crosses in **one direction only**.
+The two meet at two points:
+
+1. **Lineage flows DataDNA → SCION** via `/parser-import` — DataDNA emits parsed-SQL lineage JSON; SCION persists it as graph edges.
+2. **Query correlation flows SCION → DataDNA** via shared QueryID — SCION's `dbql_query.sql_text` (Pipeline 3) holds the verbatim statements; DataDNA joins by QueryID to enrich its own lineage with the actual SQL Teradata ran.
+
+PDCR's per-object counters land in SCION's UsageEvent table without ever being parsed — that's the FR-1.3 boundary: SCION counts accesses, DataDNA interprets statements.
 
 ---
 
@@ -417,16 +426,59 @@ MUST chunk inserts at 900 rows to stay under the SQLite host-parameter
   supporting).
 ```
 
-#### FR-1.3 Usage import — planned
+#### FR-1.3 Usage import — implemented (Pipeline 3, v1.21.6)
 
 ```
-PLANNED (v1.22 if Rahul confirms JSON; later if PDCR .dat is the canonical
-source — decision pending as of 2026-05-28). When implemented:
-  - JSON path: extend ingest_usage_json() with a thin /usage-import endpoint
-  - PDCR path: add readers for pdcr_log_* and pdcr_object_usage_*
-    layouts (10/11 and 12 fields respectively) and route through the
-    same dict-import pipeline with new ContentType.DBQL and
-    ContentType.OBJECT_USAGE
+IMPLEMENTED. The canonical source is PDCR `.dat` extracts (decision
+made 2026-05-28 once Rahul shipped real samples — see Pipeline 3
+plan in docs/internal_roadmap.md). The same endpoint that handles
+the 6-file dict batch (POST /api/v1/dict-import) also accepts:
+
+  - pdcr_log_<from>_<to>.dat — DBQL query log, 10 fields per row,
+    ENDREC-terminated, SqlTextInfo may contain embedded newlines.
+    One file = many fragments per (QueryID, SqlRowNo); the reader
+    reassembles into full SQL by QueryID and the persister writes
+    one row per query into `dbql_query`.
+
+  - pdcr_object_usage_<from>_<to>.dat — per-object usage counters,
+    12 fields per row. Persister maps 6 PDCR types to SCION graph
+    vocabulary (Col→COLUMN, Tab→TABLE, Viw→VIEW, Idx→INDEX,
+    Mac→MACRO, Vol→VOLATILE), case-insensitively resolves
+    `(database, object)` against the snapshot's `graph_node`, and
+    writes UsageEvent rows. 14 PDCR types are skipped explicitly
+    with per-type counters reported back (FR-13 graceful out-of-
+    scope).
+
+MUST detect content type by content + filename head (Pipeline 3
+PR-A): the format detector recognises USAGE_DBQL by arity 10
+(ENDREC-aware) and USAGE_OBJECT by arity 12.
+
+MUST be idempotent: re-uploading the same `pdcr_log_*.dat` produces
+zero new dbql_query rows (unique on `(query_id, collect_timestamp)`).
+Per-object usage doesn't have a unique key today (deferred to a
+v1.22 follow-up); operators see this in the response counters.
+
+MUST partition files into dict vs PDCR buckets at routing time so
+PDCR files never enter the dict snapshot pipeline. PDCR persistence
+runs in its own session/transaction so a PDCR failure can't roll
+back a dict snapshot that already committed.
+
+MUST re-compute criticality with `usage_available=True` after PDCR
+object_usage rows land (Pipeline 3 PR-E). The post-ingest pipeline
+ran with `usage_available=False` because no UsageEvent rows existed
+yet; the second pass uses `force=True` to bypass the cache-check
+and write usage-weighted scores (60% usage + 40% graph fragility).
+
+End-to-end validation against real Transcend extract (2026-05-28):
+  - DBQL: 44 540 queries persisted; idempotency confirmed.
+  - Object Usage: 77 619 / 78 049 = 99.45% inserted; 430 skipped
+    (top: DB 262, UDF 54, JIx 36, SP 22).
+  - 109 backend tests pass at PR-C; 117 at PR-E.
+
+PDCR-only batches return a clean 400 — PDCR rows need a snapshot to
+resolve identifiers against, and supporting a snapshot-less mode is
+a follow-up PR (low priority; operators always upload dict + PDCR
+together in practice).
 ```
 
 #### FR-1.4 Post-ingest pipeline (`run_post_ingest_pipeline`)
@@ -447,6 +499,11 @@ per stage:
   5. Proactive alerts: persist_proactive_alerts (broken_lineage,
      orphan, hub_changed checks, all capped)
   6. Criticality: usage_event × graph_node centrality → ObjectCriticality
+     - Initial pass runs with usage_available=False (graph-only fallback)
+       because PDCR usage hasn't been persisted yet for this snapshot
+     - When the same request also brings PDCR usage (FR-1.3), a second
+       pass runs with usage_available=True + force=True so the cache
+       reflects real query counts (60/40 usage+graph)
 
 MUST log per-phase progress at INFO level so operators see where time is spent.
 MAY use batch_validator pre-flight cache to skip already-validated batches.
@@ -926,7 +983,7 @@ the backend container via compose).
 
 ### 7.1 ORM Table Inventory
 
-There are **19 ORM tables** + the standard `alembic_version` metadata table.
+There are **20 ORM tables** + the standard `alembic_version` metadata table.
 Group by purpose:
 
 #### Snapshot core (8 tables)
@@ -966,12 +1023,13 @@ Group by purpose:
 | `proactive_alert` | `app/graph/impact_models.py` | One row per detector × snapshot finding (broken_lineage, orphan, hub_changed). |
 | `reasoning_event` | `app/taisa/taisa_models.py` | TAISA call audit — question, response, classification, risk_level, change_id (when scoped). |
 
-#### Usage + criticality (2 tables)
+#### Usage + criticality (3 tables)
 
 | Table | Module | Purpose |
 |---|---|---|
-| `usage_event` | `app/usage/usage_models.py` | Query count + user count per (snapshot, object). |
-| `object_criticality` | `app/usage/usage_models.py` | Combined criticality score derived from usage_event × graph centrality. |
+| `usage_event` | `app/usage/usage_models.py` | Query count + user count per object. Populated from PDCR `pdcr_object_usage_*.dat` (Pipeline 3); also accepts the legacy JSON-seed path used by demo data. |
+| `object_criticality` | `app/usage/usage_models.py` | Combined criticality score derived from usage_event × graph centrality. Recomputed with usage-weighted scoring after PDCR ingest (FR-1.3 / FR-1.4). |
+| `dbql_query` | `app/usage/dbql_models.py` | One row per reassembled SQL query from `pdcr_log_*.dat` (Pipeline 3, v1.21.6). Snapshot-independent — DBQL is operational, not structural. Natural key `(query_id, collect_timestamp)` provides idempotency. Owns `sql_text` so DataDNA can correlate by QueryID. |
 
 ### 7.2 Key Pydantic Response Shapes
 
@@ -1635,8 +1693,8 @@ GuilleAlbella/SCION (private)
 │   │   ├── diff/               # diff engine + diff_models
 │   │   ├── graph/              # graph + impact engine + impact_models
 │   │   ├── taisa/              # TAISA client + reasoning_event
-│   │   ├── usage/              # usage_event + criticality_engine
-│   │   ├── metadata/           # readers (dict + parser) + format_detector
+│   │   ├── usage/              # usage_event + dbql_query + criticality_engine + pdcr_persister
+│   │   ├── metadata/           # readers (dict + parser + PDCR) + format_detector
 │   │   ├── parser_ingest/      # parser feed ingest
 │   │   ├── llm/                # provider abstractions
 │   │   ├── db/                 # SQLAlchemy engine + models/
