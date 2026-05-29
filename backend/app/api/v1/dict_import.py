@@ -16,6 +16,14 @@ against the just-created snapshot. A dict-only batch is fully
 supported (existing behaviour); a PDCR-only batch is rejected with
 a clean 400 because PDCR rows have no snapshot to resolve against.
 
+PR-E (Pipeline 3) re-runs ``compute_criticality(usage_available=
+True)`` after PDCR object_usage rows land, so the criticality cache
+reflects real query/access counts instead of the graph-only
+fallback the post-ingest pipeline writes. The re-compute is gated
+on ``obj_result.inserted > 0`` and is best-effort (failures are
+logged but don't fail the import — the dict snapshot already
+committed).
+
 The endpoint is **format-agnostic at the wire level** — files are
 received as multipart upload regardless of extension. The format
 detector classifies each file by content (and filename as tiebreaker)
@@ -61,6 +69,7 @@ from app.metadata import (
 from app.metadata import pdcr_flat_file_reader
 from app.metadata.format_detector import ContentType, Format
 from app.usage import pdcr_persister
+from app.usage.criticality_engine import compute_criticality
 from app.api.v1 import import_progress
 
 
@@ -146,6 +155,20 @@ class DictImportResponse(BaseModel):
     # contains only PDCR files; None when there's no snapshot at all
     # (every row is then accepted blindly).
     pdcr_resolved_against_snapshot_id: Optional[int] = None
+    # ──── Criticality re-compute (Pipeline 3, PR-E) ────
+    # The post-ingest pipeline calls ``compute_criticality(usage_available=
+    # False)`` because at that moment no PDCR usage rows exist yet for
+    # the snapshot. After PR-D wires PDCR ingest into the same request,
+    # we re-run it with ``usage_available=True`` so the criticality
+    # cache reflects real query/access counts instead of pure graph
+    # fragility. ``criticality_recomputed`` is True when the second
+    # pass ran; the three count fields are the resulting HIGH /
+    # MEDIUM / LOW totals so the response surfaces what the operator
+    # would otherwise have to fetch from /usage/criticality.
+    criticality_recomputed: bool = False
+    criticality_high_count: int = 0
+    criticality_medium_count: int = 0
+    criticality_low_count: int = 0
 
 
 # ──── Streaming helpers ────
@@ -800,6 +823,10 @@ def import_dict_batch(
         dbql_result = pdcr_persister.PDCRPersistResult()
         obj_result = pdcr_persister.PDCRPersistResult()
         pdcr_snapshot_id: Optional[int] = None
+        criticality_recomputed = False
+        criticality_high = 0
+        criticality_medium = 0
+        criticality_low = 0
 
         if pdcr_paths_by_category:
             t_pdcr = time.perf_counter()
@@ -863,11 +890,70 @@ def import_dict_batch(
                 obj_result.inserted, obj_result.skipped_unmapped_type,
                 obj_result.skipped_orphan, obj_result.skipped_invalid,
             )
+
+            # ──── Step 6b: criticality re-compute with usage (PR-E) ────
+            # The post-ingest pipeline ran ``compute_criticality`` with
+            # ``usage_available=False`` because no UsageEvent rows
+            # existed for this snapshot yet. Now that PR-D persisted
+            # them, re-run the engine with ``usage_available=True`` so
+            # the criticality cache reflects real query / access
+            # counts. ``force=True`` is mandatory because the post-
+            # ingest pass already populated rows for this snapshot —
+            # without it, the cache-check at the top of
+            # ``compute_criticality`` would return early.
+            #
+            # Gate on ``obj_result.inserted > 0`` so we don't pay the
+            # full re-compute when the batch only carried DBQL (which
+            # doesn't feed UsageEvent — see persister docstrings).
+            if obj_result.inserted > 0:
+                _progress_update(
+                    "persist_pdcr",
+                    caption="recomputing criticality with usage data…",
+                )
+                t_crit = time.perf_counter()
+                try:
+                    crit_rows = compute_criticality(
+                        pdcr_snapshot_id, force=True, usage_available=True,
+                    )
+                    criticality_recomputed = True
+                    for r in crit_rows:
+                        lvl = r["criticality_level"]
+                        if lvl == "HIGH":
+                            criticality_high += 1
+                        elif lvl == "MEDIUM":
+                            criticality_medium += 1
+                        else:
+                            criticality_low += 1
+                    timings["6b_recompute_criticality"] = (
+                        time.perf_counter() - t_crit
+                    )
+                    logger.info(
+                        "[ingest] criticality re-computed with usage in %s — "
+                        "HIGH=%d MEDIUM=%d LOW=%d (total=%d)",
+                        _fmt_time(timings["6b_recompute_criticality"]),
+                        criticality_high, criticality_medium,
+                        criticality_low, len(crit_rows),
+                    )
+                except Exception as e:
+                    # Don't fail the whole import over a criticality
+                    # re-compute glitch — the dict snapshot + PDCR
+                    # rows are already committed, and the on-demand
+                    # /usage/criticality endpoint will recompute on
+                    # next request. Log and continue.
+                    logger.warning(
+                        "[ingest] criticality re-compute failed for %s: %s",
+                        pdcr_snapshot_id, e,
+                    )
+
             _progress_end(
                 "persist_pdcr",
                 caption=(
                     f"{dbql_result.inserted:,} queries · "
                     f"{obj_result.inserted:,} usage rows"
+                    + (
+                        f" · criticality HIGH={criticality_high:,}"
+                        if criticality_recomputed else ""
+                    )
                 ),
             )
         else:
@@ -922,6 +1008,10 @@ def import_dict_batch(
             object_usage_skipped_invalid=obj_result.skipped_invalid,
             object_usage_skipped_by_type=dict(obj_result.skipped_by_type),
             pdcr_resolved_against_snapshot_id=pdcr_snapshot_id,
+            criticality_recomputed=criticality_recomputed,
+            criticality_high_count=criticality_high,
+            criticality_medium_count=criticality_medium,
+            criticality_low_count=criticality_low,
         )
 
     finally:

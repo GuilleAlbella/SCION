@@ -138,6 +138,40 @@ def test_response_pdcr_fields_default_to_zero():
     assert r.object_usage_skipped_invalid == 0
     assert r.object_usage_skipped_by_type == {}
     assert r.pdcr_resolved_against_snapshot_id is None
+    # PR-E criticality re-compute fields default to "not run".
+    assert r.criticality_recomputed is False
+    assert r.criticality_high_count == 0
+    assert r.criticality_medium_count == 0
+    assert r.criticality_low_count == 0
+
+
+def test_response_criticality_recompute_fields_round_trip():
+    """PR-E criticality fields populate and survive round-trip.
+
+    The handler sets these after re-running ``compute_criticality``
+    with ``usage_available=True``. The frontend reads them straight
+    out of the response to update the Criticality KPI cards without
+    having to re-fetch ``/usage/criticality``.
+    """
+    r = DictImportResponse(
+        snapshot_id=1,
+        skipped_existing=False,
+        source_system_name="x",
+        extract_run_id="y",
+        schemas_created=0, tables_created=0, columns_created=0,
+        indices_created=0, partitioning_created=0, ddl_text_created=0,
+        indices_seen=0, partitioning_seen=0, tabletext_seen=0,
+        files_received=8,
+        criticality_recomputed=True,
+        criticality_high_count=120,
+        criticality_medium_count=4500,
+        criticality_low_count=235_000,
+    )
+    rebuilt = DictImportResponse(**r.model_dump())
+    assert rebuilt.criticality_recomputed is True
+    assert rebuilt.criticality_high_count == 120
+    assert rebuilt.criticality_medium_count == 4500
+    assert rebuilt.criticality_low_count == 235_000
 
 
 def test_response_pdcr_fields_round_trip():
