@@ -5,7 +5,7 @@
  * Bump this on every release and the Sidebar footer + home hero pill
  * update automatically. README.md still has to be bumped separately
  * (it lives outside the frontend bundle). */
-export const APP_VERSION = "v1.21.6";
+export const APP_VERSION = "v1.21.7";
 export const APP_STAGE = "BETA"; // "BETA" | "RC" | "" when GA
 
 /** Internal SCION objects to filter out from graph/impact visualizations.

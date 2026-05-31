@@ -8,6 +8,29 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.7 (2026-05-31) — dev.ps1 brings schema to HEAD before launch
+
+Bug fix surfaced while testing Pipeline 3 on a real Transcend
+extract: uploading the 8-file batch (dict + PDCR) failed mid-import
+with `sqlite3.OperationalError: no such table: dbql_query`.
+
+Root cause: the FastAPI startup hook only verifies DB connectivity —
+it never runs migrations. The Docker `entrypoint.sh` brings the
+schema to HEAD via `db_init.py init`, but the local dev launcher
+`dev.ps1` did not. So pulling code that adds a migration (here,
+Pipeline 3's `dbql_query` table at revision b49e5f6c7d8e) left the
+running DB one revision behind, and the first request to touch the
+new table died.
+
+Fix: `dev.ps1` now runs `backend/tools/db_init.py init` before
+launching uvicorn when the DB file exists — the same idempotent
+step the Docker entrypoint already runs (no-op when already at
+HEAD, fails loudly on a legacy/inconsistent DB). Local dev and
+container deploys now share one schema-upgrade contract.
+
+No backend code changed; no migration added. Existing local DBs are
+upgraded automatically on the next `dev.ps1` run.
+
 ### v1.21.6 (2026-05-29) — Pipeline 3: PDCR usage ingest end-to-end
 
 Closes the planned-since-v1.0 gap on FR-1.3: SCION now ingests
