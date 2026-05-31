@@ -86,11 +86,26 @@ if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
 Write-Ok "Node modules ready"
 
 $dbFile = Join-Path $root "kalido_lite.db"
+$dbInit = Join-Path $root "backend\tools\db_init.py"
 if (-not (Test-Path $dbFile)) {
     Write-Warn "kalido_lite.db not found -- run '.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed' for a fresh DB + demo data"
 } else {
     $dbSize = [math]::Round((Get-Item $dbFile).Length / 1KB, 1)
     Write-Ok "Demo database present (${dbSize} KB)"
+
+    # Bring the schema to HEAD before launching uvicorn -- the same
+    # idempotent step the Docker entrypoint runs. Without this, pulling
+    # code that adds a migration (e.g. Pipeline 3's dbql_query table)
+    # leaves the running DB one revision behind, and the first request
+    # that touches the new table dies with "no such table". `init` is a
+    # no-op when already current.
+    Write-Info "Bringing database schema to HEAD (alembic upgrade)..."
+    & $venvPython $dbInit init
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "db_init failed -- the DB may be in a legacy/inconsistent state. See output above."
+        exit 1
+    }
+    Write-Ok "Database schema at HEAD"
 }
 
 # Port availability: if either is busy we bail early instead of letting
