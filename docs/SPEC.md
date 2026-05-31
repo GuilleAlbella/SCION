@@ -1,9 +1,9 @@
 # SCION — Technical Specification
 
-> **Version:** 1.21.5-spec-r10-update
-> **Last Updated:** 2026-05-28 (post-Reunion 10 follow-up)
+> **Version:** 1.21.6-spec-r11-sdd-ddd-cleanup
+> **Last Updated:** 2026-05-29 (SDD/DDD review cleanup)
 > **Status:** Complete — all 14 sections + 2 appendices, with the
-> Reunion 10 outcomes integrated (FR-13 graceful out-of-scope
+> Reunion 10 outcomes and Pipeline 3 usage ingest integrated (FR-13 graceful out-of-scope
 > handling, §10.10 end-user scenario testing, §11.5 cross-team
 > test-plan commitment, §13.4 handover-doc requirements, NG13
 > agentic AI explicitly out of scope)
@@ -71,7 +71,7 @@ Existing tooling (Kalido legacy, ad-hoc scripts, internal Teradata-built dashboa
 
 SCION solves these problems through a five-stage pipeline:
 
-1. **Ingest** dictionary extracts (6 `*v_*` flat files) + PDCR usage extracts (`pdcr_log_*.dat`, `pdcr_object_usage_*.dat`, Pipeline 3) + optional parser lineage feed (JSON from DataDNA). Everything offline, all formats validated, single endpoint routes by content type.
+1. **Ingest** dictionary extracts (6 `*v_*` flat files) + PDCR usage extracts (`pdcr_log_*.dat`, `pdcr_object_usage_*.dat`, Pipeline 3) via `/dict-import`, plus optional parser lineage feed (JSON from DataDNA) via `/parser-import`. Everything is offline and all formats are validated before persistence.
 2. **Snapshot** the structure into a versioned, hashable, queryable representation. Snapshots are immutable; each one is the canonical "state of the warehouse at time T".
 3. **Diff** any two snapshots to produce a typed list of `ChangeEvent`s with severity + breaking-or-not classification.
 4. **Reason** over the changes: graph-based blast radius, criticality scoring, proactive alerts, and natural-language explanations from an LLM (TAISA) grounded on the actual data.
@@ -104,7 +104,7 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
 ```
    ┌────────────────────────┐                       ┌────────────────────────┐
    │       DATADNA          │ ─── lineage JSON ───▶ │         SCION          │
-   │     (Rahul's Parser)   │      via dict-import  │     (this system)      │
+   │     (Rahul's Parser)   │     via parser-import │     (this system)      │
    ├────────────────────────┤                       ├────────────────────────┤
    │ Parses Teradata SQL    │                       │ Snapshots dictionary   │
    │ Builds AST via ANTLR4  │                       │ Diffs versions         │
@@ -249,7 +249,7 @@ External Inputs                        SCION Internal Processing                
 │  extract     │ │
 │  (.dat)      │ │
 └──────────────┘ │     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-                 ├────▶│  dict-import    │────▶│  snapshot       │────▶│  /snapshots     │
+                 ├────▶│  ingest routers │────▶│  snapshot       │────▶│  /snapshots     │
 ┌──────────────┐ │     │  endpoint       │     │  finaliser:     │     │  list, detail   │
 │  Parser      │ │     │  validate +     │     │  hash, count,   │     │                 │
 │  lineage     │─┤     │  persist        │     │  finalise       │     │                 │
@@ -258,8 +258,8 @@ External Inputs                        SCION Internal Processing                
                  │              ▼                       ▼              │                 │
 ┌──────────────┐ │     ┌─────────────────┐     ┌─────────────────┐     │                 │
 │  Usage feed  │─┘     │  graph builder  │     │  diff engine    │     │  /changes       │
-│  (planned    │       │  edges from FK  │     │  paired         │────▶│  /diff/details  │
-│   v1.22-23)  │       │  + parser feed  │     │  snapshots →    │     │  paginated      │
+│  (PDCR,      │       │  edges from FK  │     │  paired         │────▶│  /diff/details  │
+│   v1.21.6)   │       │  + parser feed  │     │  snapshots →    │     │  paginated      │
 └──────────────┘       └────────┬────────┘     │  ChangeEvent[]  │     │                 │
                                 │              └────────┬────────┘     │                 │
                                 │                       │              │                 │
@@ -280,6 +280,22 @@ External Inputs                        SCION Internal Processing                
 Every box on the left only runs once per ingest. Every box on the right responds to user navigation in <2 s on Transcend-class data because every aggregate (impact summaries, alerts, criticality, blast radius) is **pre-computed at ingest time** and cached in dedicated tables. The page itself is never doing the heavy SQL.
 
 This pre-aggregation choice is the single biggest architectural decision in SCION and the one that makes the difference between "works on demo data" and "works on a real customer".
+
+Implementation note: the diagram groups ingest routing for readability. Dictionary and PDCR files enter through `/dict-import`; DataDNA parser lineage JSON enters through `/parser-import` and lands as graph edges, not as a dictionary snapshot.
+
+### 3.3 Domain Context Map
+
+SCION uses five bounded contexts. They share one database in the single-VM product, but the contracts below define the ownership boundaries so the model can move cleanly toward Postgres and multi-user deployments later.
+
+| Bounded context | Owns | Consumes from | Relationship |
+|---|---|---|---|
+| Structure | `Snapshot`, dictionary snapshot tables, `structural_hash` | Dictionary extract files | Upstream source of truth for all other SCION contexts |
+| Process | `process`, `step`, parser-derived process shape | DataDNA parser feed | Customer-supplier with DataDNA; SCION conforms to the parser JSON contract |
+| Change | `ChangeEvent`, diff classification | Structure | Customer of Structure; emits domain events used by impact and alerts |
+| Intelligence | impact summaries, graph traversal, alerts, TAISA reasoning | Structure, Change, Process, Usage | Shared-kernel vocabulary through `graph_node`, `graph_edge`, `change_event` |
+| Usage | `UsageEvent`, `dbql_query`, `ObjectCriticality` | PDCR extracts and Structure | Customer of Structure for identifier resolution; provider of usage weights to Intelligence |
+
+Cross-context calls SHOULD go through the public engines listed in §8.2, not by reaching directly into another context's persistence details. Direct ORM access is still allowed inside a context; repository interfaces are a planned v1.22-v1.25 hardening step before the Postgres migration.
 
 ---
 
@@ -766,7 +782,7 @@ MUST gate every /api/v1/* route with an X-API-Key header check
 
 MUST never include secrets in any artefact that crosses a trust
 boundary:
-  - GROQ / TAISA API key is baked into the private backend image
+  - The TAISA API key is baked into the private backend image
     via taisa_llm.yaml; GHCR is private, so the artefact never
     leaves Teradata-controlled hands
   - The user-side X-API-Key is auto-generated by the installer
@@ -1003,8 +1019,8 @@ Group by purpose:
 
 | Table | Module | Purpose |
 |---|---|---|
-| `process` | `app/db/models/process.py` | Logical process inferred from script / parser feed. |
-| `step` | `app/db/models/step.py` | Step inside a process. |
+| `process` | `app/db/models/process.py` | Logical process inferred from the DataDNA parser feed. Reserved for parser-derived process visualisation; no standalone SCION workflow owns it today. |
+| `step` | `app/db/models/step.py` | Step inside a process. Reserved with `process` until the v1.24 parser-feed integration ships its first end-to-end fixture. |
 
 #### Diff + impact (5 tables)
 
@@ -1387,7 +1403,7 @@ the truncated flag is set so the UI can offer "show more".
 | **Multiline records** | `backend/tests/metadata/test_multiline_records.py` | Embedded newlines in `tabletextv` and `partitioningconstraintsv` (the ENDREC case) |
 | **Frontend type strictness** | `frontend` via `npm run lint` + tsc strict | Block any drift in the TS contract |
 
-There are **36 backend test files** as of v1.21.5. Coverage targets
+There are **36 backend test files** as of v1.21.6. Coverage targets
 are in §12.1.
 
 ### 10.2 Ingest Edge Cases
@@ -1665,18 +1681,18 @@ the cross-team layer extends rather than replaces those.
 
 ### 12.2 Acceptance Test Matrix
 
-| Test ID | Goal | Verification |
+| Test ID | Goal | Acceptance statement |
 |---|---|---|
-| AT-001 | G1 — ingest 6-file extract at scale | `dict-import` of Transcend completes in <15 min on 8c/32GB |
-| AT-002 | G2 — typed change detection | Diff between snapshots 1 and 10 produces non-zero events with all 4 types represented |
-| AT-003 | G3 — bounded blast radius | `/impact` first page <2s on Transcend regardless of total changes |
-| AT-004 | G4 — interactive graph | `/graph/focus` from a hub node returns <500 ms with hops=1 max_nodes=100 |
-| AT-005 | G5 — TAISA grounding | Question "what's the riskiest change?" produces a response referencing a real `change_id` from the data |
-| AT-006 | G8 — one-liner install | `install.sh` on a fresh Ubuntu 22.04 VM brings up the stack in <10 min |
-| AT-007 | G9 — security posture | Scout reports 0 Critical, 0 High at release tag |
-| AT-008 | G11 — graceful LLM failure | Pull the LLM provider's plug; reasoning endpoints return disabled-state, UI navigation unaffected |
-| AT-009 | G13 — deterministic hash | Re-ingest same 6-file set → identical `structural_hash` |
-| AT-010 | G14 — proactive alerts | After ingest of a snapshot that drops a hub object, `/alerts` lists the alert without manual trigger |
+| AT-001 | G1 — ingest 6-file extract at scale | WHEN `/dict-import` receives the Transcend 6-file dictionary extract on an 8c/32GB VM, THEN SCION SHALL finalise the snapshot in <15 min, AND SHALL produce a 64-char hex `structural_hash`. |
+| AT-002 | G2 — typed change detection | WHEN diffing snapshots 1 and 10 from the reference dataset, THEN SCION SHALL produce non-zero `ChangeEvent` rows, AND SHALL include ADDED, DROPPED, ALTERED, and RENAMED event types. |
+| AT-003 | G3 — bounded blast radius | WHEN `/impact` is opened for a Transcend-class snapshot pair, THEN the first page SHALL return in <2 s regardless of the total number of changes. |
+| AT-004 | G4 — interactive graph | WHEN `/graph/focus` is requested from a hub node with `hops=1` and `max_nodes=100`, THEN SCION SHALL return the focused subgraph in <500 ms. |
+| AT-005 | G5 — TAISA grounding | WHEN a user asks "what's the riskiest change?", THEN TAISA SHALL answer from the bounded SCION context, AND SHALL reference at least one real `change_id` from the current data. |
+| AT-006 | G8 — one-liner install | WHEN `install.sh` runs on a fresh Ubuntu 22.04 VM, THEN the full SCION stack SHALL be healthy and reachable in <10 min. |
+| AT-007 | G9 — security posture | WHEN Docker Scout scans the published release images, THEN the scan SHALL report 0 Critical and 0 High CVEs at the release tag. |
+| AT-008 | G11 — graceful LLM failure | WHEN the configured LLM provider is unavailable, THEN reasoning endpoints SHALL return a disabled-state response, AND normal UI navigation SHALL remain unaffected. |
+| AT-009 | G13 — deterministic hash | WHEN the same 6-file dictionary set is ingested twice, THEN both finalised snapshots SHALL have the same `structural_hash`. |
+| AT-010 | G14 — proactive alerts | WHEN ingest creates a change that drops a hub object, THEN `/alerts` SHALL list the generated alert without any manual trigger. |
 
 ---
 
@@ -1777,7 +1793,7 @@ docker/README.md                # build / dev smoke-test guide
 
 | Artefact | Status | Owner | Covers |
 |---|---|---|---|
-| `docs/SPEC.md` | ✅ Complete (v1.21.5-r10) | this doc | What SCION is, what it does, what it never does, every contract |
+| `docs/SPEC.md` | ✅ Complete (v1.21.6-r11) | this doc | What SCION is, what it does, what it never does, every contract |
 | `ROADMAP.md` | ✅ Maintained | maintainer | Where SCION is going (v1.22 → v1.25 + backlog) |
 | `CHANGELOG.md` | ✅ Maintained | maintainer | What changed in every release |
 | `docker/README.md` + `scion-deploy/README.md` | ✅ Complete | maintainer | How to deploy + how to upgrade |
