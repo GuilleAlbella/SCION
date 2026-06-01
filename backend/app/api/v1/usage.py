@@ -114,6 +114,93 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
     return {"items": items, "total": len(items), "snapshot_id": snapshot_id}
 
 
+@router.get("/object/{snapshot_id}", status_code=status.HTTP_200_OK)
+def get_object_usage_detail(snapshot_id: int, object: str) -> Dict[str, Any]:
+    """Full usage + criticality profile for ONE object in a snapshot.
+
+    Powers the Usage page's per-object drill-down — click a row, or arrive
+    via ``/usage?object=X`` from a Changes row. Unlike ``/summary`` and
+    ``/criticality`` (which return top-N rankings), this resolves a
+    specific object even when it sits far outside the top of either list,
+    so the drill-down works for any object the user navigates to.
+
+    Name resolution. ``object_criticality`` stores the qualified
+    ``schema.object`` identifier (it's built from ``graph_node``), while
+    ``usage_event`` stores the bare object name plus a separate
+    ``schema_name`` (PDCR layout). We match both encodings and, when the
+    caller passes a qualified name, disambiguate the bare match by schema
+    so we don't sum a same-named table from another database.
+    """
+    from sqlalchemy import and_, func, or_, select
+    from sqlalchemy.orm import Session
+    from app.db.engine import engine
+    from app.usage.usage_models import ObjectCriticality, UsageEvent
+
+    qualified = object
+    leaf = object.split(".")[-1]
+    schema = object.split(".")[0] if "." in object else None
+
+    with Session(bind=engine) as session:
+        # Case-insensitive match: PDCR emits identifiers in UPPERCASE while
+        # the dictionary preserves the CREATE-statement case, so an exact
+        # compare would miss most real usage rows (the same reason the
+        # PDCR persister resolves case-insensitively against graph_node).
+        usage_filter = or_(
+            func.lower(UsageEvent.object_name) == qualified.lower(),
+            and_(
+                func.lower(UsageEvent.object_name) == leaf.lower(),
+                or_(
+                    schema is None,
+                    func.lower(UsageEvent.schema_name) == schema.lower(),
+                ),
+            ),
+        )
+        total_queries, max_users, last_accessed, usage_obj_type = session.execute(
+            select(
+                func.sum(UsageEvent.query_count),
+                func.max(UsageEvent.user_count),
+                func.max(UsageEvent.last_accessed),
+                func.max(UsageEvent.object_type),
+            ).where(usage_filter)
+        ).one()
+
+        crit = (
+            session.execute(
+                select(ObjectCriticality).where(
+                    ObjectCriticality.snapshot_id == snapshot_id,
+                    ObjectCriticality.object_name == qualified,
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+    has_usage = total_queries is not None
+    return {
+        "snapshot_id": snapshot_id,
+        "object": qualified,
+        "found": bool(has_usage or crit),
+        "object_type": usage_obj_type,
+        "schema_name": schema,
+        "usage": {
+            "query_count": int(total_queries or 0),
+            "user_count": int(max_users or 0),
+            "last_accessed": last_accessed.isoformat() if last_accessed else None,
+            "has_data": has_usage,
+        },
+        "criticality": (
+            {
+                "usage_score": crit.usage_score,
+                "graph_score": crit.graph_score,
+                "combined_score": crit.combined_score,
+                "criticality_level": crit.criticality_level,
+            }
+            if crit
+            else None
+        ),
+    }
+
+
 @router.get(
     "/criticality/{snapshot_id}",
     status_code=status.HTTP_200_OK,

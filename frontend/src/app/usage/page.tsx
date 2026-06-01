@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import PageShell from "@/components/layout/PageShell";
 import KpiCard from "@/components/shared/KpiCard";
 import DonutChart from "@/components/shared/DonutChart";
@@ -10,9 +11,10 @@ import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { getUsageSummary, getCriticality } from "@/lib/api/usage";
+import { getUsageSummary, getCriticality, getObjectUsageDetail } from "@/lib/api/usage";
+import type { ObjectUsageDetail } from "@/lib/api/usage";
 import type { CriticalityResponse, UsageSummaryItem } from "@/lib/api/types";
-import { Shield, Flame, Download, ListTree } from "lucide-react";
+import { Shield, Flame, Download, ListTree, GitBranch, X } from "lucide-react";
 import RiskHeatmap from "@/components/shared/RiskHeatmap";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -59,9 +61,74 @@ function UsagePage() {
   const [error, setError] = useState<string | null>(null);
 
   // Deep-link support: e.g. /usage?object=dw.sales_fact from a Changes row
-  // highlights that row in both the heatmap and the criticality table below.
+  // focuses that object in a dedicated drill-down card (and highlights it
+  // in the tables below). The user can also click any table row to focus.
   const searchParams = useSearchParams();
+  const router = useRouter();
   const focusedObject = searchParams.get("object");
+
+  // Active drill-down object — seeded from the URL, updated when the user
+  // clicks a row. The detail card + table highlight key off this.
+  const [activeObject, setActiveObject] = useState<string | null>(focusedObject);
+  const [detail, setDetail] = useState<ObjectUsageDetail | null>(null);
+  useEffect(() => {
+    setActiveObject(focusedObject);
+  }, [focusedObject]);
+
+  // Focus an object: update state + reflect in the URL (shallow replace,
+  // no scroll jump) so the view is shareable and the back button works.
+  const focusObject = useCallback(
+    (name: string) => {
+      setActiveObject(name);
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.set("object", name);
+      router.replace(`/usage?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const clearFocus = useCallback(() => {
+    setActiveObject(null);
+    setDetail(null);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    params.delete("object");
+    const qs = params.toString();
+    router.replace(qs ? `/usage?${qs}` : "/usage", { scroll: false });
+  }, [router, searchParams]);
+
+  // Columns (schema.table.column) don't carry their own usage/criticality
+  // in SCION — those live at the table/object level — so resolve a column
+  // to its parent table for the drill-down, mirroring the Lineage page.
+  // `columnParent` keeps the original column name to explain the redirect.
+  const { resolvedObject, columnParent } = useMemo(() => {
+    if (!activeObject) return { resolvedObject: null as string | null, columnParent: null as string | null };
+    const parts = activeObject.split(".");
+    if (parts.length >= 3) {
+      return { resolvedObject: parts.slice(0, 2).join("."), columnParent: activeObject };
+    }
+    return { resolvedObject: activeObject, columnParent: null };
+  }, [activeObject]);
+
+  // Fetch the per-object profile whenever the focused object or the
+  // selected snapshot changes. Resolves ANY object via the backend, even
+  // one outside the top-N usage / criticality rankings shown below.
+  useEffect(() => {
+    if (!resolvedObject || !selectedSnap) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    getObjectUsageDetail(Number(selectedSnap), resolvedObject)
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedObject, selectedSnap]);
 
   // Usage summary is now snapshot-scoped (v1.13.04). When the user
   // selects a snapshot, we re-fetch usage filtered to objects that
@@ -90,6 +157,8 @@ function UsagePage() {
     if (activeDiffPair && !selectedSnap) {
       loadCriticality(String(activeDiffPair.snapshotTo));
     }
+    // selectedSnap intentionally omitted — see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDiffPair]);
 
   async function loadCriticality(snapId: string) {
@@ -126,30 +195,97 @@ function UsagePage() {
   // only ("no usage telemetry for this object") instead of claiming it's
   // been highlighted somewhere — which is the case for schema-level
   // objects that don't have query counts.
-  const focusMatch = focusedObject && (
-    (usage?.some(u => u.object_name === focusedObject || focusedObject.endsWith("." + u.object_name))) ||
-    (criticality?.items.some(i => i.object_name === focusedObject || focusedObject.endsWith("." + i.object_name)))
+  const isFocused = useCallback(
+    (name: string) =>
+      !!activeObject && (activeObject === name || activeObject.endsWith("." + name)),
+    [activeObject],
   );
+
+  // Pretty-print the criticality level with its colour.
+  const critColor = (lvl: string) => CRIT_COLORS[lvl] ?? "#7C8185";
 
   return (
     <PageShell title="Usage & Criticality" subtitle="Object usage frequency and business criticality">
-      {/* Focused object banner from quick-link navigation. When we can't
-          find the object in any of our datasets (happens for schemas and
-          parser-only objects with no usage telemetry), we shift the copy
-          from a promise ("highlighted below") to an explanation so the
-          user isn't confused about why nothing lit up. */}
-      {focusedObject && (
-        <div className="bg-td-orange/10 border border-td-orange/30 rounded-lg p-3 mb-4 flex items-center gap-3">
-          <Flame size={16} className="text-td-orange shrink-0" />
-          <div className="flex-1 text-xs">
-            <span className="text-td-gray-dark">Focused on:</span>{" "}
-            <span className="font-mono font-semibold text-td-navy">{focusedObject}</span>
-            <span className="text-td-gray-dark ml-2">
-              {focusMatch
-                ? "— highlighted in the tables below."
-                : "— no usage telemetry found for this object (common for schemas and parser-only imports). The tables below show the objects we do have data for."}
-            </span>
+      {/* Per-object drill-down card. Shown when an object is focused via
+          the ?object= deep-link (from a Changes row) or by clicking a row
+          in the tables below. Resolves ANY object, even one outside the
+          top-N rankings, so "click transactions to see its insights"
+          (Reunion 11) actually works on a real extract. */}
+      {activeObject && (
+        <div className="bg-white border-2 border-td-orange/40 rounded-lg p-4 mb-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Flame size={16} className="text-td-orange shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wide text-td-gray-dark">Object drill-down</div>
+                <div className="font-mono font-semibold text-td-navy text-sm truncate" title={resolvedObject ?? activeObject}>{resolvedObject ?? activeObject}</div>
+                {columnParent && (
+                  <div className="text-[10px] text-td-gray-dark mt-0.5">
+                    Column <span className="font-mono">{columnParent.split(".").pop()}</span> has no usage of its own — showing its parent table.
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearFocus}
+              className="text-td-gray-dark hover:text-td-navy shrink-0"
+              aria-label="Clear focus"
+            >
+              <X size={16} />
+            </button>
           </div>
+
+          {!selectedSnap ? (
+            <p className="text-xs text-td-gray-dark">Select a snapshot above to load this object&apos;s usage and criticality.</p>
+          ) : !detail ? (
+            <p className="text-xs text-td-gray-dark">Loading object profile…</p>
+          ) : !detail.found ? (
+            <p className="text-xs text-td-gray-dark">
+              No usage telemetry or criticality found for this object in snapshot #{selectedSnap}
+              {" "}(common for schemas and parser-only imports).
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-[10px] text-td-gray-dark">Queries</div>
+                <div className="text-lg font-bold text-td-navy">{detail.usage.query_count.toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-[10px] text-td-gray-dark">Distinct users</div>
+                <div className="text-lg font-bold text-td-navy">{detail.usage.user_count.toLocaleString()}</div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-[10px] text-td-gray-dark">Last accessed</div>
+                <div className="text-xs font-medium text-td-navy mt-1">
+                  {detail.usage.last_accessed
+                    ? new Date(detail.usage.last_accessed).toLocaleDateString()
+                    : "—"}
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded p-2">
+                <div className="text-[10px] text-td-gray-dark">Criticality</div>
+                {detail.criticality ? (
+                  <span
+                    className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[11px] font-medium text-white"
+                    style={{ backgroundColor: critColor(detail.criticality.criticality_level) }}
+                  >
+                    {detail.criticality.criticality_level} · {(detail.criticality.combined_score * 100).toFixed(0)}%
+                  </span>
+                ) : (
+                  <div className="text-xs text-td-gray-dark mt-1">—</div>
+                )}
+              </div>
+              <div className="bg-gray-50 rounded p-2 flex items-center">
+                <Link
+                  href={`/lineage?object=${encodeURIComponent(resolvedObject ?? activeObject)}&snapshot=${selectedSnap}`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-td-object hover:underline"
+                >
+                  <GitBranch size={12} /> View lineage
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -230,10 +366,15 @@ function UsagePage() {
                   — other pages sometimes pass just the object leaf name via
                   the ?object= query param. */}
               {usage.slice(0, 12).map((u) => {
-                const isFocused = focusedObject === u.object_name || focusedObject?.endsWith("." + u.object_name);
+                const focused = isFocused(u.object_name);
                 return (
-                <div key={u.object_name} className={`flex items-center gap-3 ${isFocused ? "bg-td-orange/10 -mx-2 px-2 py-1 rounded" : ""}`}>
-                  <span className={`text-xs font-mono w-48 truncate ${isFocused ? "text-td-orange font-bold" : "text-td-gray-dark"}`} title={u.object_name}>
+                <div
+                  key={u.object_name}
+                  onClick={() => focusObject(u.object_name)}
+                  className={`flex items-center gap-3 cursor-pointer rounded -mx-2 px-2 py-1 ${focused ? "bg-td-orange/10" : "hover:bg-gray-50"}`}
+                  title="Click to drill into this object"
+                >
+                  <span className={`text-xs font-mono w-48 truncate ${focused ? "text-td-orange font-bold" : "text-td-gray-dark"}`} title={u.object_name}>
                     {u.object_name}
                   </span>
                   <div className="flex-1">
@@ -338,7 +479,12 @@ function UsagePage() {
             </thead>
             <tbody>
               {criticality.items.map((item) => (
-                <tr key={item.object_name} className={`border-t border-gray-100 hover:bg-gray-50 ${(focusedObject === item.object_name || focusedObject?.endsWith("." + item.object_name)) ? "bg-td-orange/10" : ""}`}>
+                <tr
+                  key={item.object_name}
+                  onClick={() => focusObject(item.object_name)}
+                  className={`border-t border-gray-100 cursor-pointer ${isFocused(item.object_name) ? "bg-td-orange/10" : "hover:bg-gray-50"}`}
+                  title="Click to drill into this object"
+                >
                   <td className="px-4 py-3 font-mono text-xs">{item.object_name}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
