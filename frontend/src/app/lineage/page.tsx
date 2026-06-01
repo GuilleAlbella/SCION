@@ -14,7 +14,8 @@
 // Now: the page never loads the full graph. It uses
 // ``<ObjectAutocomplete source="graph">`` to let the user search the
 // snapshot's catalog server-side, then calls ``GET /graph/focus`` to
-// fetch ONLY the BFS subgraph (default 2 hops, capped at 200 nodes).
+// fetch ONLY the BFS subgraph (default 2 hops, user-adjustable 1-5 via
+// the depth stepper, capped at LINEAGE_MAX_NODES nodes).
 // The 5-lane lineage layout is still computed in the browser, but
 // from a much smaller input. ``capped`` from the server tells us
 // when BFS ran out of room, so the UI can suggest widening the
@@ -54,10 +55,15 @@ import { ArrowUp, ArrowDown, Info, Network, GitBranch, Layers } from "lucide-rea
 const NODE_W = 220;
 const NODE_H = 60;
 
-// Lineage walks 2 hops in each direction by default — enough to spot
-// "is this fed by an external table?" without overloading the layout.
-// Caller can extend later if we add a hops control to the UI.
-const LINEAGE_HOPS = 2;
+// Lineage walks N hops in each direction. Default 2 — enough to spot
+// "is this fed by an external table?" without overloading the layout —
+// but the depth stepper (added for the Reunion 11 "step-by-step" ask)
+// lets the user drop to 1 (immediate neighbours only, the cleanest
+// starting point on a huge real-world graph) or climb to 5. The
+// backend /graph/focus caps hops at 5, so we mirror that here.
+const LINEAGE_DEFAULT_HOPS = 2;
+const LINEAGE_MIN_HOPS = 1;
+const LINEAGE_MAX_HOPS = 5;
 // Local nodes cap. The backend hard-caps at 1000; 300 covers any sane
 // lineage neighbourhood while leaving headroom for the pathological
 // "table feeds 100 reports" case before we'd want to surface a hint.
@@ -119,6 +125,32 @@ function layoutNodes(nodes: Node[], edges: Edge[]): Node[] {
   });
 }
 
+// Union two directed focus responses (upstream-only + downstream-only)
+// into one. See the fetch effect for why lineage walks each direction
+// separately instead of relying on the backend's undirected `both`.
+// Nodes dedupe by node_id; edges dedupe by (source, target, type);
+// `capped` is true if either walk hit its node cap.
+function mergeFocusedGraphs(
+  up: FocusedGraphResponse,
+  down: FocusedGraphResponse,
+): FocusedGraphResponse {
+  const nodes = new Map<string, GN>();
+  for (const n of up.nodes) nodes.set(n.node_id, n);
+  for (const n of down.nodes) nodes.set(n.node_id, n);
+
+  const edges = new Map<string, FocusedGraphResponse["edges"][number]>();
+  for (const e of [...up.edges, ...down.edges]) {
+    edges.set(`${e.source}|${e.target}|${e.type}`, e);
+  }
+
+  return {
+    ...up,
+    nodes: [...nodes.values()],
+    edges: [...edges.values()],
+    capped: up.capped || down.capped,
+  };
+}
+
 // Next.js 16 requires any component that calls `useSearchParams` to sit under
 // a Suspense boundary so the rest of the page can stream. Hence the wrapper —
 // the real page logic is in LineagePage below.
@@ -148,6 +180,18 @@ function LineagePage() {
   const [focusData, setFocusData] = useState<FocusedGraphResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // How many hops the lineage walks in each direction. Driven by the
+  // depth stepper so the user can reveal the graph "step by step"
+  // (start at 1, expand) or cap it on a huge neighbourhood.
+  const [hops, setHops] = useState<number>(LINEAGE_DEFAULT_HOPS);
+
+  // Traversal direction. On a hub object (hundreds of direct
+  // relationships) `both` blows past the node cap at depth 1; letting
+  // the user view producers (`up`) or consumers (`down`) on their own
+  // halves the load and usually fits the full picture. Maps straight
+  // to the /graph/focus `direction` param.
+  const [direction, setDirection] = useState<"both" | "up" | "down">("both");
 
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
@@ -191,16 +235,33 @@ function LineagePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getFocusedGraph({
+    const base = {
       snapshot_id: snapshotId,
       root: selectedObject,
-      hops: LINEAGE_HOPS,
+      hops,
       max_nodes: LINEAGE_MAX_NODES,
       // Lineage is about data flow, so we follow only FEEDS edges.
       // DEPENDS_ON edges (e.g. table→database) are structural and
       // would clutter the picture without adding lineage value.
       edge_types: "FEEDS",
-    })
+    };
+    // For "both" we issue TWO *directed* fetches (up + down) and union
+    // them, rather than one `direction=both` call. The backend's `both`
+    // is an UNDIRECTED BFS: from an upstream hub it also walks that hub's
+    // OWN downstream consumers — siblings of the root that aren't on its
+    // lineage path at all. On a real graph those siblings flood the
+    // node cap (e.g. a 1-in/1-out table whose single producer is a view
+    // feeding 567 objects), so the user gets a "too big" warning while
+    // only a couple of relevant nodes render. Two directed walks keep
+    // the result to the root's true ancestors + descendants.
+    const request: Promise<FocusedGraphResponse> =
+      direction === "both"
+        ? Promise.all([
+            getFocusedGraph({ ...base, direction: "up" }),
+            getFocusedGraph({ ...base, direction: "down" }),
+          ]).then(([up, down]) => mergeFocusedGraphs(up, down))
+        : getFocusedGraph({ ...base, direction });
+    request
       .then((data) => {
         if (!cancelled) setFocusData(data);
       })
@@ -220,7 +281,7 @@ function LineagePage() {
     return () => {
       cancelled = true;
     };
-  }, [snapshotId, selectedObject]);
+  }, [snapshotId, selectedObject, hops, direction]);
 
   // ──── Build the 5-lane lineage view from the focused subgraph ────
   // The backend hands us a (capped) BFS neighbourhood; here we tag each
@@ -250,35 +311,47 @@ function LineagePage() {
         selectedNodeData: null as GN | null,
       };
 
-    // Upstream = nodes that feed INTO selected (FEEDS edge ends at root).
-    const upstreamIds = new Set<string>();
-    const downstreamIds = new Set<string>();
-    for (const e of focusData.edges) {
-      if (e.type !== "FEEDS") continue;
-      if (e.target === selectedNode.node_id) upstreamIds.add(e.source);
-      if (e.source === selectedNode.node_id) downstreamIds.add(e.target);
-    }
+    // Generalised N-hop BFS over FEEDS edges. We walk upstream (follow
+    // edges backwards: a node that feeds the frontier) and downstream
+    // (follow edges forwards: a node fed by the frontier) to whatever
+    // depth the focus call returned, tagging each reachable node with
+    // its direction and 1-based hop distance from the root. This
+    // replaces the old hard-coded 2-level tagging so the depth stepper
+    // can render 1..5 levels in each direction.
+    const feedsEdges = focusData.edges.filter((e) => e.type === "FEEDS");
+    const rootId = selectedNode.node_id;
 
-    // 2nd-level expansion. The focus call already returned a 2-hop
-    // neighbourhood, so any node that feeds an upstream node (or that
-    // a downstream node feeds) is in the dataset and just needs to
-    // be tagged.
-    const upstream2 = new Set<string>();
-    for (const uid of upstreamIds) {
-      for (const e of focusData.edges) {
-        if (e.target === uid && e.type === "FEEDS" && e.source !== selectedNode.node_id) {
-          upstream2.add(e.source);
+    // First assignment wins; we run the upstream BFS before the
+    // downstream one, so a node sitting on a cycle is labelled by its
+    // upstream path (deterministic across renders). The root stays
+    // "center".
+    const direction = new Map<string, "upstream" | "center" | "downstream">();
+    const depthOf = new Map<string, number>();
+    direction.set(rootId, "center");
+    depthOf.set(rootId, 0);
+
+    const walk = (dir: "upstream" | "downstream") => {
+      let frontier = new Set<string>([rootId]);
+      let level = 0;
+      while (frontier.size > 0) {
+        level += 1;
+        const next = new Set<string>();
+        for (const e of feedsEdges) {
+          // upstream: producers (edge target in frontier → add source)
+          // downstream: consumers (edge source in frontier → add target)
+          const inFrontier = dir === "upstream" ? frontier.has(e.target) : frontier.has(e.source);
+          if (!inFrontier) continue;
+          const candidate = dir === "upstream" ? e.source : e.target;
+          if (direction.has(candidate)) continue;
+          direction.set(candidate, dir);
+          depthOf.set(candidate, level);
+          next.add(candidate);
         }
+        frontier = next;
       }
-    }
-    const downstream2 = new Set<string>();
-    for (const did of downstreamIds) {
-      for (const e of focusData.edges) {
-        if (e.source === did && e.type === "FEEDS" && e.target !== selectedNode.node_id) {
-          downstream2.add(e.target);
-        }
-      }
-    }
+    };
+    walk("upstream");
+    walk("downstream");
 
     const rfNodes: Node[] = [];
     const rfEdges: Edge[] = [];
@@ -300,36 +373,48 @@ function LineagePage() {
       });
     };
 
-    upstream2.forEach((id) => pushNode(id, "upstream"));
-    upstreamIds.forEach((id) => pushNode(id, "upstream"));
-    pushNode(selectedNode.node_id, "center");
-    downstreamIds.forEach((id) => pushNode(id, "downstream"));
-    downstream2.forEach((id) => pushNode(id, "downstream"));
+    // Push every tagged node. dagre assigns layout ranks from the edge
+    // structure, so we don't need to pre-sort by depth.
+    for (const [id, dir] of direction) pushNode(id, dir);
 
-    // Only emit edges whose BOTH endpoints landed in the subgraph.
+    // Only emit FEEDS edges whose BOTH endpoints landed in the subgraph.
+    // Colour by direction: any edge touching an upstream node is red,
+    // any touching a downstream node is green, otherwise blue.
     let ei = 0;
-    for (const e of focusData.edges) {
-      if (e.type !== "FEEDS") continue;
-      if (added.has(e.source) && added.has(e.target)) {
-        const isUpstream = upstreamIds.has(e.source) || upstream2.has(e.source);
-        const isDownstream = downstreamIds.has(e.target) || downstream2.has(e.target);
-        rfEdges.push({
-          id: `le-${ei++}`,
-          source: e.source,
-          target: e.target,
-          animated: true,
-          style: { stroke: isUpstream ? "#DC2626" : isDownstream ? "#16A34A" : "#2563EB", strokeWidth: 2 },
-        });
-      }
+    for (const e of feedsEdges) {
+      if (!added.has(e.source) || !added.has(e.target)) continue;
+      const srcDir = direction.get(e.source);
+      const tgtDir = direction.get(e.target);
+      const stroke =
+        srcDir === "upstream" || tgtDir === "upstream"
+          ? "#DC2626"
+          : srcDir === "downstream" || tgtDir === "downstream"
+            ? "#16A34A"
+            : "#2563EB";
+      rfEdges.push({
+        id: `le-${ei++}`,
+        source: e.source,
+        target: e.target,
+        animated: true,
+        style: { stroke, strokeWidth: 2 },
+      });
     }
 
     const laidOut = layoutNodes(rfNodes, rfEdges);
 
+    // The side lists keep their "immediate producers / consumers"
+    // meaning: only depth-1 neighbours, no matter how deep the graph
+    // now goes.
+    const directNeighbours = (dir: "upstream" | "downstream") =>
+      [...direction.entries()]
+        .filter(([id, d]) => d === dir && depthOf.get(id) === 1)
+        .map(([id]) => nodeMap.get(id)?.object_name ?? id);
+
     return {
       nodes: laidOut,
       edges: rfEdges,
-      upstreamList: [...upstreamIds].map((id) => nodeMap.get(id)?.object_name ?? id),
-      downstreamList: [...downstreamIds].map((id) => nodeMap.get(id)?.object_name ?? id),
+      upstreamList: directNeighbours("upstream"),
+      downstreamList: directNeighbours("downstream"),
       selectedNodeData: selectedNode,
     };
   }, [focusData, selectedObject]);
@@ -363,11 +448,16 @@ function LineagePage() {
       if (selectedNodeData && node.id === selectedNodeData.node_id) return;
       const clicked = focusData?.nodes.find((n) => n.node_id === node.id);
       if (!clicked) return;
-      // Schema-qualify so /graph/focus resolves unambiguously: it matches
-      // (schema_name, object_name) first and falls back to a bare name.
-      const identifier = clicked.schema_name
-        ? `${clicked.schema_name}.${clicked.object_name}`
-        : clicked.object_name;
+      // `object_name` is stored already schema-qualified in graph_node
+      // (e.g. "ACC_TED_VW.td_ps_ff_transactions"), so use it as-is when it
+      // contains a dot. Only prepend the schema for the rare unqualified
+      // node — prepending unconditionally produced "schema.schema.object"
+      // and an ugly (if accidentally-resolvable) identifier.
+      const identifier = clicked.object_name.includes(".")
+        ? clicked.object_name
+        : clicked.schema_name
+          ? `${clicked.schema_name}.${clicked.object_name}`
+          : clicked.object_name;
       focusOn(identifier);
     },
     [focusData, selectedNodeData, focusOn],
@@ -380,10 +470,11 @@ function LineagePage() {
         <p className="text-[11px] text-td-gray-dark leading-relaxed">
           Lineage answers two operational questions: <strong>if I break this object, what
           downstream breaks with it?</strong> and <strong>if a report is wrong, where might
-          the bad data come from?</strong> Pick an object below; SCION traces 2 hops in
-          each direction and colours the graph so upstream (red) shows data sources and
-          downstream (green) shows data consumers. Search is server-side, so even
-          on a 240k-table extract the picker stays instant.
+          the bad data come from?</strong> Pick an object below; SCION traces lineage
+          outward in each direction and colours the graph so upstream (red) shows data
+          sources and downstream (green) shows data consumers. Use the <strong>Depth</strong>{" "}
+          control to reveal the graph step by step — start at 1 level and expand up to 5.
+          Search is server-side, so even on a 240k-table extract the picker stays instant.
         </p>
       </div>
 
@@ -423,6 +514,76 @@ function LineagePage() {
               disabled={!snapshotId}
             />
           </div>
+          {/* Depth stepper — reveal lineage "step by step" (start at 1,
+              expand) or cap it on a huge neighbourhood. Re-fetches the
+              focus subgraph at the chosen hop count. */}
+          <div>
+            <label className="text-xs text-td-gray-dark block mb-1">
+              Depth
+              <span
+                className="ml-1 text-[10px] text-td-gray-dark font-normal"
+                title="How many hops of lineage to walk in each direction. Start at 1 to see only immediate producers/consumers, then step up to reveal more levels."
+              >
+                — levels each way
+              </span>
+            </label>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setHops((h) => Math.max(LINEAGE_MIN_HOPS, h - 1))}
+                disabled={!selectedObject || hops <= LINEAGE_MIN_HOPS}
+                className="w-7 h-7 rounded border border-gray-300 text-sm font-semibold text-td-gray-dark disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                aria-label="Show one fewer level"
+              >
+                −
+              </button>
+              <span className="w-8 text-center text-sm font-semibold tabular-nums">{hops}</span>
+              <button
+                type="button"
+                onClick={() => setHops((h) => Math.min(LINEAGE_MAX_HOPS, h + 1))}
+                disabled={!selectedObject || hops >= LINEAGE_MAX_HOPS}
+                className="w-7 h-7 rounded border border-gray-300 text-sm font-semibold text-td-gray-dark disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                aria-label="Show one more level"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          {/* Direction filter — on a hub object, viewing producers or
+              consumers on their own halves the node count and usually
+              fits the full picture instead of hitting the cap. */}
+          <div>
+            <label className="text-xs text-td-gray-dark block mb-1">
+              Direction
+              <span
+                className="ml-1 text-[10px] text-td-gray-dark font-normal"
+                title="Walk both directions, or focus on just the upstream producers / downstream consumers. Filtering one side helps when an object has too many relationships to show at once."
+              >
+                — what to walk
+              </span>
+            </label>
+            <div className="inline-flex rounded border border-gray-300 overflow-hidden">
+              {([
+                ["both", "Both"],
+                ["up", "Upstream"],
+                ["down", "Downstream"],
+              ] as const).map(([value, dirLabel]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDirection(value)}
+                  disabled={!selectedObject}
+                  className={`px-2.5 py-1.5 text-xs font-medium border-l border-gray-300 first:border-l-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    direction === value
+                      ? "bg-td-object text-white"
+                      : "bg-white text-td-gray-dark hover:bg-gray-50"
+                  }`}
+                >
+                  {dirLabel}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Redirected-from-column info banner */}
@@ -440,9 +601,39 @@ function LineagePage() {
 
         {focusData?.capped && (
           <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-900">
-            BFS reached the {LINEAGE_MAX_NODES}-node cap before exhausting {LINEAGE_HOPS} hops.
-            The graph below is the largest readable slice; widen the search via Changes
-            or pick a more specific object to see the full neighbourhood.
+            {hops === LINEAGE_MIN_HOPS ? (
+              // Capped at depth 1 → genuine hub: the object's OWN direct
+              // degree is what overflows, so it's worth citing.
+              <>
+                Showing the first {LINEAGE_MAX_NODES} objects — this object has more
+                direct relationships than fit in one view
+                {selectedNodeData?.metrics &&
+                  ` (${selectedNodeData.metrics.in_degree} incoming + ${selectedNodeData.metrics.out_degree} outgoing in the full graph)`}
+                .{" "}
+                {direction === "both" ? (
+                  <>
+                    Tip: switch <strong>Direction</strong> to <strong>Upstream</strong>{" "}
+                    or <strong>Downstream</strong> to see each side on its own.
+                  </>
+                ) : (
+                  <>Even this single direction exceeds the cap, so only part is shown.</>
+                )}
+              </>
+            ) : (
+              // Capped at depth ≥2 → it's the BREADTH of the multi-hop
+              // neighbourhood, not the node itself. Citing the node's own
+              // degree here is misleading (a 1-in/1-out node still reaches
+              // hundreds at 5 hops); steer toward depth / direction instead.
+              <>
+                Showing the first {LINEAGE_MAX_NODES} objects — the {hops}-hop
+                neighbourhood reaches more than that. Tip: lower the{" "}
+                <strong>Depth</strong>
+                {direction === "both" && (
+                  <> or switch <strong>Direction</strong> to one side</>
+                )}{" "}
+                to see the full picture.
+              </>
+            )}
           </div>
         )}
       </div>
@@ -470,7 +661,7 @@ function LineagePage() {
             intro={
               <>
                 The selected object sits in the middle (blue). <strong>Red nodes on the left</strong>{" "}
-                feed data into it — upstream producers, 1 or 2 hops away. <strong>Green nodes on the right</strong>{" "}
+                feed data into it — upstream producers, up to {hops} hop{hops > 1 ? "s" : ""} away. <strong>Green nodes on the right</strong>{" "}
                 consume data from it — downstream reports, pipelines, and views.
                 KPIs at the top count each direction. Click any node in the graph to jump
                 to its own lineage.
@@ -479,8 +670,11 @@ function LineagePage() {
           >
           {/* KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <KpiCard label="Feeds data from" value={upstreamList.length} color="#DC2626" />
-            <KpiCard label="Sends data to" value={downstreamList.length} color="#16A34A" />
+            {/* When a direction filter hides one side, show "—" instead of
+                a misleading "0" — the count isn't zero, it's just not in
+                this view. The true degree still shows in Object Details. */}
+            <KpiCard label="Feeds data from" value={direction === "down" ? "—" : upstreamList.length} color="#DC2626" />
+            <KpiCard label="Sends data to" value={direction === "up" ? "—" : downstreamList.length} color="#16A34A" />
             <KpiCard label="Related objects" value={nodes.length} color="#2563EB" />
             <KpiCard label="Data flows" value={edges.length} color="#00233C" />
           </div>
@@ -542,7 +736,9 @@ function LineagePage() {
                 <ArrowUp size={16} className="text-td-upstream" />
                 <h3 className="text-sm font-semibold text-td-upstream">Where data comes from ({upstreamList.length})</h3>
               </div>
-              {upstreamList.length === 0 ? (
+              {direction === "down" ? (
+                <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Downstream. Switch to Both or Upstream to see producers.</p>
+              ) : upstreamList.length === 0 ? (
                 <p className="text-xs text-td-gray-dark">This is a source table — data originates here.</p>
               ) : (
                 <ul className="space-y-1">
@@ -595,7 +791,9 @@ function LineagePage() {
                 <ArrowDown size={16} className="text-td-downstream" />
                 <h3 className="text-sm font-semibold text-td-downstream">Where data goes ({downstreamList.length})</h3>
               </div>
-              {downstreamList.length === 0 ? (
+              {direction === "up" ? (
+                <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Upstream. Switch to Both or Downstream to see consumers.</p>
+              ) : downstreamList.length === 0 ? (
                 <p className="text-xs text-td-gray-dark">This is an endpoint — no other objects consume this data directly.</p>
               ) : (
                 <ul className="space-y-1">
