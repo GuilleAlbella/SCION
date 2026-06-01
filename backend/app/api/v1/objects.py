@@ -113,13 +113,19 @@ def search_objects(
                 # picked) cheap and free of error toasts.
                 return {"items": [], "has_more": False, "source": source}
 
-            # Identifier format mirrors what the rest of the app expects:
-            # `schema_name.object_name`. We build it in SQL so the LIKE
-            # filter applies to the user-visible string, not just the
-            # bare object_name.
+            # The graph builder already stores the canonical identifier in
+            # `object_name`: qualified "schema.table" for TABLE/VIEW nodes
+            # and the bare schema name for SCHEMA nodes. So `object_name`
+            # IS the full id — we must NOT prepend `schema_name` again.
+            # The old `schema_name + "." + object_name` synthesis produced
+            # doubled identifiers like "ACC_TED_VW.ACC_TED_VW.td_ps_ff_..."
+            # which only resolved by accident (the focus resolver splits on
+            # the first dot) and showed up doubled in the UI. We build the
+            # LIKE filter against object_name directly so it still matches
+            # the user-visible string.
             from sqlalchemy import func as _func
 
-            full_id = (GraphNode.schema_name + "." + GraphNode.object_name).label("full_id")
+            full_id = GraphNode.object_name.label("full_id")
             stmt = select(full_id).where(GraphNode.snapshot_id == snapshot_id)
             if pattern is not None:
                 stmt = stmt.where(full_id.ilike(pattern))
