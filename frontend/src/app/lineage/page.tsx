@@ -66,7 +66,7 @@ const LINEAGE_MAX_NODES = 300;
 /* ---- Custom nodes for the lineage subgraph ---- */
 function UpstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
-    <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W }}>
+    <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#DC2626" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#DC2626" }} />
       <div style={{ fontSize: 9, color: "#DC2626", fontWeight: 600, letterSpacing: "0.03em" }}>SOURCE · {data.type}</div>
@@ -78,7 +78,7 @@ function UpstreamNode({ data }: { data: { label: string; type: string; metrics?:
 
 function CenterNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
-    <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)" }}>
+    <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)", cursor: "default" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#2563EB" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#2563EB" }} />
       <div style={{ fontSize: 9, color: "#2563EB", fontWeight: 600 }}>SELECTED · {data.type}</div>
@@ -90,7 +90,7 @@ function CenterNode({ data }: { data: { label: string; type: string; metrics?: G
 
 function DownstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
   return (
-    <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W }}>
+    <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#16A34A" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#16A34A" }} />
       <div style={{ fontSize: 9, color: "#16A34A", fontWeight: 600, letterSpacing: "0.03em" }}>CONSUMER · {data.type}</div>
@@ -350,6 +350,29 @@ function LineagePage() {
     setRedirectedFromColumn(null);
   }, []);
 
+  // Click-handler for nodes IN THE GRAPH diagram: re-focus the lineage on
+  // the clicked object, mirroring the upstream/downstream list rows (and
+  // the Graph page's own onNodeClick). Until this was wired, clicking a
+  // node in the diagram did nothing — even though the section intro
+  // promised "Click any node in the graph to jump to its own lineage".
+  // That gap is the click-to-expand bug surfaced in the Reunion 11 demo.
+  const onNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      // Ignore clicks on the already-centered node — re-focusing on it
+      // would just re-fetch the same neighbourhood.
+      if (selectedNodeData && node.id === selectedNodeData.node_id) return;
+      const clicked = focusData?.nodes.find((n) => n.node_id === node.id);
+      if (!clicked) return;
+      // Schema-qualify so /graph/focus resolves unambiguously: it matches
+      // (schema_name, object_name) first and falls back to a bare name.
+      const identifier = clicked.schema_name
+        ? `${clicked.schema_name}.${clicked.object_name}`
+        : clicked.object_name;
+      focusOn(identifier);
+    },
+    [focusData, selectedNodeData, focusOn],
+  );
+
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-4 flex items-start gap-2">
@@ -469,6 +492,7 @@ function LineagePage() {
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                onNodeClick={onNodeClick}
                 fitView
                 minZoom={0.3}
                 maxZoom={2}
