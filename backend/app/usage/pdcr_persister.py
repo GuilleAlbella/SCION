@@ -260,12 +260,15 @@ def persist_object_usage(
     blindly (useful for the v1.22 case where usage arrives before
     any dict snapshot exists).
 
-    `query_count` / `user_count` mapping is provisional: we set
-    ``query_count = count_a`` and ``user_count = count_b`` because
-    those are the most likely candidates among the five raw counters
-    PDCR emits. The full record (all five counters) is stashed in
-    ``source_json`` so the persister can be revisited once Rahul
-    confirms the semantics without re-ingesting.
+    Count mapping (confirmed by Rahul, 2026-06-02 / 8 May README):
+    ``query_count`` ← ``QueryCount`` and ``user_count`` ←
+    ``DistinctUserCount``. The other numerics (FreqofUse, TypeOfUse,
+    TargetIndicator) are stashed in ``source_json`` for traceability.
+    Because PDCR aggregates by ``(database, table, column, ObjectNum,
+    TypeOfUse)``, an object can span several rows (one per TypeOfUse);
+    rolling up per object is done at query time in /usage/summary and
+    /usage/object via ``SUM(query_count)`` + ``MAX(user_count)``, so we
+    persist each row as-is here.
     """
     result = PDCRPersistResult()
 
@@ -289,7 +292,7 @@ def persist_object_usage(
             )
             continue
 
-        access_ts = _parse_timestamp(r.access_timestamp)
+        access_ts = _parse_timestamp(r.last_accessed)
         if access_ts is None:
             result.skipped_invalid += 1
             continue
@@ -311,9 +314,9 @@ def persist_object_usage(
                 result.skipped_orphan += 1
                 continue
 
-        # Provisional count semantics — see module docstring.
-        query_count = r.count_a if r.count_a is not None else 0
-        user_count = r.count_b if r.count_b is not None else 0
+        # Confirmed count semantics (see module docstring).
+        query_count = r.query_count if r.query_count is not None else 0
+        user_count = r.distinct_user_count if r.distinct_user_count is not None else 0
 
         session.add(
             UsageEvent(
@@ -325,16 +328,15 @@ def persist_object_usage(
                 last_accessed=access_ts,
                 source="pdcr",
                 source_json={
-                    # Stash the raw PDCR row so the persister is easy to
-                    # re-run with new count-semantics later.
+                    # Stash the raw PDCR row for traceability.
                     "platform_name": r.platform_name,
-                    "data_size": r.data_size,
+                    "object_num": r.object_num,
                     "object_type_pdcr": r.object_type,
-                    "count_a": r.count_a,
-                    "count_b": r.count_b,
-                    "count_c": r.count_c,
-                    "count_d": r.count_d,
-                    "count_e": r.count_e,
+                    "freq_of_use": r.freq_of_use,
+                    "type_of_use": r.type_of_use,
+                    "target_indicator": r.target_indicator,
+                    "query_count": r.query_count,
+                    "distinct_user_count": r.distinct_user_count,
                 },
             )
         )

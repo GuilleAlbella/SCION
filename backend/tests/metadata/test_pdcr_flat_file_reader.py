@@ -65,18 +65,19 @@ def _object_usage_record(
     database: str = "ADLTRD_GSS_Sizing",
     table: str = "STAGING_1778622599200",
     column: str = "MaxWISSDReadMBSecNode_SPDSK",
-    data_size: str = "1,188",
+    object_num: str = "1,188",         # ObjectNum (was data_size)
     object_type: str = "Col",
-    count_a: str = "1",
-    count_b: str = "2",
-    count_c: str = "",
-    count_d: str = "1",
-    count_e: str = "1",
-    access_ts: str = "2026-05-12 17:47:57.646670",
+    freq_of_use: str = "1",            # FreqofUse (was count_a)
+    type_of_use: str = "2",            # TypeOfUse (was count_b)
+    target_indicator: str = "",        # TargetIndicator Y/N (was count_c, NOT numeric)
+    query_count: str = "1",            # QueryCount (was count_d)
+    distinct_user_count: str = "1",    # DistinctUserCount (was count_e)
+    access_ts: str = "2026-05-12 17:47:57.646670",  # LastAccessed
 ) -> str:
     return _join_record([
-        platform, database, table, column, data_size, object_type,
-        count_a, count_b, count_c, count_d, count_e, access_ts,
+        platform, database, table, column, object_num, object_type,
+        freq_of_use, type_of_use, target_indicator, query_count,
+        distinct_user_count, access_ts,
     ])
 
 
@@ -233,32 +234,32 @@ def test_read_object_usage_single_record(tmp_path):
     assert r.database_name == "ADLTRD_GSS_Sizing"
     assert r.table_name == "STAGING_1778622599200"
     assert r.column_name == "MaxWISSDReadMBSecNode_SPDSK"
-    assert r.data_size == "1,188"   # kept raw — persister parses
+    assert r.object_num == "1,188"          # ObjectNum — kept raw
     assert r.object_type == "Col"
-    assert r.count_a == 1
-    assert r.count_b == 2
-    assert r.count_c is None        # empty → None
-    assert r.count_d == 1
-    assert r.count_e == 1
-    assert r.access_timestamp == "2026-05-12 17:47:57.646670"
+    assert r.freq_of_use == 1               # FreqofUse
+    assert r.type_of_use == 2               # TypeOfUse
+    assert r.target_indicator is None       # TargetIndicator — empty → None (it's a string field)
+    assert r.query_count == 1               # QueryCount
+    assert r.distinct_user_count == 1       # DistinctUserCount
+    assert r.last_accessed == "2026-05-12 17:47:57.646670"
 
 
 def test_read_object_usage_multiple_records(tmp_path):
     """Two records, different object types, both parsed correctly."""
     f = tmp_path / "pdcr_object_usage_multi.dat"
     payload = (
-        _object_usage_record(object_type="Col", count_a="42") +
-        _object_usage_record(object_type="Tbl", column="", count_a="7", count_b="3")
+        _object_usage_record(object_type="Col", freq_of_use="42") +
+        _object_usage_record(object_type="Tbl", column="", freq_of_use="7", type_of_use="3")
     )
     f.write_text(payload, encoding="utf-8")
 
     records = read_object_usage(f)
     assert len(records) == 2
     assert records[0].object_type == "Col"
-    assert records[0].count_a == 42
+    assert records[0].freq_of_use == 42
     assert records[1].object_type == "Tbl"
     assert records[1].column_name == ""    # table-level rows have empty column
-    assert records[1].count_a == 7
+    assert records[1].freq_of_use == 7
 
 
 def test_read_object_usage_wrong_arity_raises(tmp_path):
