@@ -8,6 +8,43 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.8 (2026-06-03) — Lineage navigation + usage drill-down + "Breaking" clarity
+
+Reunion 11 (cross-team demo) follow-ups. Four UI/UX improvements that
+make the structural-intelligence pages usable on real customer-scale
+data and clearer for end-user testers:
+
+- **Lineage: click-to-expand fix (#51).** Clicking a node in the
+  Lineage diagram did nothing — the `<ReactFlow>` had no `onNodeClick`,
+  even though the copy promised "click any node to jump to its lineage".
+  Wired it to re-focus, mirroring the Graph page.
+- **Lineage: depth control + direction filter + directed walk (#52).**
+  A 1–5 hop depth stepper (reveal the graph step by step) and a
+  Both/Upstream/Downstream filter. "Both" now does two *directed*
+  fetches (up + down) and unions them instead of one undirected BFS —
+  the undirected walk pulled in an upstream hub's siblings, flooding
+  the 300-node cap with a spurious "too big" warning while only a
+  couple of relevant nodes rendered. Also fixed a doubled identifier
+  (`schema.schema.object`) coming from the objects-search endpoint and
+  the node-click handler.
+- **Usage: per-object drill-down (#53).** New
+  `GET /usage/object/{snapshot_id}?object=Y` returns one object's full
+  usage + criticality profile (resolves any object, even outside the
+  top-N rankings; case-insensitive qualified/bare matching). The Usage
+  page gained a drill-down card (queries, distinct users, last
+  accessed, criticality, "View lineage" link), clickable rows, and a
+  column→parent-table redirect mirroring Lineage. The Changes "Usage"
+  button now focuses the object instead of opening the global screen.
+- **"Breaking" clarity (#54).** Kept the standard "Breaking" label but
+  made it self-explanatory after testers didn't know what it meant or
+  what to do. Centralised the vocabulary and added an object-specific
+  reason — e.g. "This column was removed (was VARCHAR(11)). Any view,
+  report, or query that selects it will fail." — plus the expected
+  tester action, surfaced on the Changes and Impact badges/headers.
+
+No schema changes; no migrations. Frontend tsc + eslint clean; backend
+117 tests pass.
+
 ### v1.21.7 (2026-05-31) — dev.ps1 brings schema to HEAD before launch
 
 Bug fix surfaced while testing Pipeline 3 on a real Transcend

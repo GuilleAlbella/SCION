@@ -35,8 +35,9 @@ import { useToast } from "@/components/shared/ToastProvider";
 import SchemaVisualDiff from "@/components/shared/SchemaVisualDiff";
 import { LayoutList, GitCompare, TrendingUp, Clock, Target, Flame, ExternalLink, BarChart3, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { changeTypeLabel } from "@/lib/terminology";
+import { changeTypeLabel, BREAKING_MEANING, BREAKING_TESTER_ACTION, breakingReason } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 
 const SEVERITY_STYLES: Record<string, string> = {
   HIGH: "bg-red-100 text-red-800",
@@ -55,10 +56,15 @@ function SeverityBadge({ severity }: { severity: string | null }) {
   );
 }
 
-function BreakingBadge({ breaking }: { breaking: boolean | null }) {
+function BreakingBadge({ breaking, reason }: { breaking: boolean | null; reason?: string }) {
   if (!breaking) return null;
+  // The hover title explains why THIS change is breaking (object-specific)
+  // and what the tester should do; falls back to the generic meaning.
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white cursor-help"
+      title={`${reason ?? BREAKING_MEANING} — ${BREAKING_TESTER_ACTION}`}
+    >
       <ShieldAlert size={10} />
       BREAKING
     </span>
@@ -152,7 +158,10 @@ function ExpandableRow({
           <SeverityBadge severity={item.severity} />
         </td>
         <td className="px-4 py-3">
-          <BreakingBadge breaking={item.is_breaking} />
+          <BreakingBadge
+            breaking={item.is_breaking}
+            reason={breakingReason(item.change_type, item.before_state, item.after_state)}
+          />
         </td>
       </tr>
       {expanded && (
@@ -749,7 +758,8 @@ export default function ChangesPage() {
                 breaks backward compatibility with downstream consumers (a dropped column referenced
                 by a view, a DECIMAL(10,2) → VARCHAR type change). These dimensions are separate —
                 a change can be <strong>BREAKING with MEDIUM severity</strong>, or HIGH severity but
-                non-breaking. The cards below count each bucket.
+                non-breaking. The cards below count each bucket.{" "}
+                <strong>Testing a Breaking change?</strong> {BREAKING_TESTER_ACTION}
               </>
             }
           >
@@ -963,7 +973,12 @@ export default function ChangesPage() {
                   <th className="px-4 py-3 font-medium">Object</th>
                   <th className="px-4 py-3 font-medium">Change</th>
                   <th className="px-4 py-3 font-medium">Severity</th>
-                  <th className="px-4 py-3 font-medium">Breaking</th>
+                  <th className="px-4 py-3 font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Breaking
+                      <InfoTooltip text={BREAKING_MEANING} detail={BREAKING_TESTER_ACTION} size={11} className="text-white/50" />
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1056,7 +1071,10 @@ export default function ChangesPage() {
                           {changeTypeLabel(item.change_type)}
                         </span>
                         {item.is_breaking && (
-                          <span className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold">
+                          <span
+                            className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded text-[10px] font-bold cursor-help"
+                            title={`${breakingReason(item.change_type)} — ${BREAKING_TESTER_ACTION}`}
+                          >
                             BREAKING
                           </span>
                         )}
