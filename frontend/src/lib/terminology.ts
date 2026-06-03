@@ -96,6 +96,74 @@ export function getObjectTypeStyle(type: string) {
   return OBJECT_TYPE_STYLES[type] ?? DEFAULT_OBJECT_STYLE;
 }
 
+// ──── "Breaking" change vocabulary ────
+// The `is_breaking` flag confused testers in end-user testing (Reunion
+// 11): a red "BREAKING" badge with no guidance on what it means or what
+// to do about it. We keep the industry-standard word "Breaking" but
+// centralise the explanation here so every surface (Changes, Impact,
+// Alerts, Home) shows the same meaning + the expected tester action.
+export const BREAKING_LABEL = "Breaking";
+
+/** One-liner shown as a hover title directly on the badge. */
+export const BREAKING_MEANING =
+  "This change can break downstream objects that depend on it — e.g. a " +
+  "dropped or retyped column used by a view, report, or query.";
+
+/** What a tester should do — shown as the InfoTooltip detail line. */
+export const BREAKING_TESTER_ACTION =
+  "It's a risk flag, not a confirmed failure. When testing, review the " +
+  "impacted downstream objects (see Impact detail) and verify whether any " +
+  "actually break, then report those.";
+
+/**
+ * Why THIS specific change is flagged breaking. `is_breaking` is derived
+ * purely from the change type (backend `BREAKING_CHANGES` set), so the
+ * reason is deterministic from the type — and we sharpen it with the
+ * before/after state (e.g. the old/new column type) when available.
+ * Falls back to the generic meaning for any unmapped type.
+ */
+export function breakingReason(
+  changeType: string,
+  before?: Record<string, unknown> | null,
+  after?: Record<string, unknown> | null,
+): string {
+  const beforeType =
+    before && typeof before.data_type === "string" ? before.data_type : null;
+  const afterType =
+    after && typeof after.data_type === "string" ? after.data_type : null;
+
+  switch (changeType) {
+    case "COLUMN_REMOVED":
+      return (
+        `This column was removed${beforeType ? ` (was ${beforeType})` : ""}. ` +
+        "Any view, report, or query that selects it will fail."
+      );
+    case "COLUMN_TYPE_CHANGED":
+      return (
+        "This column's type changed" +
+        (beforeType && afterType ? ` from ${beforeType} to ${afterType}` : "") +
+        ". Consumers that expect the old type — casts, joins, parsing — may break."
+      );
+    case "TABLE_REMOVED":
+      return (
+        "This table was removed. Every view, report, or query that reads " +
+        "from it breaks until they're repointed or dropped."
+      );
+    case "TABLE_TYPE_CHANGED":
+      return (
+        "This object's type changed (e.g. table ↔ view). Consumers built " +
+        "against the previous kind may break."
+      );
+    case "SCHEMA_REMOVED":
+      return (
+        "This database was removed. All objects under it — and their " +
+        "downstream consumers — break."
+      );
+    default:
+      return BREAKING_MEANING;
+  }
+}
+
 /**
  * For a change event, returns a short human-readable description.
  */

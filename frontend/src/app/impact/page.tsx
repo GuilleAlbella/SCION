@@ -16,7 +16,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import Confetti from "@/components/shared/Confetti";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import { GuidedSection, HeroStat, BigStat } from "@/components/shared/GuidedSection";
-import { changeTypeLabel } from "@/lib/terminology";
+import { changeTypeLabel, BREAKING_MEANING, BREAKING_TESTER_ACTION, breakingReason } from "@/lib/terminology";
 
 const SEVERITY_COLORS: Record<string, string> = {
   HIGH: "#DC2626",
@@ -444,7 +444,8 @@ export default function ImpactPage() {
                 <strong>Breaking</strong> is a separate flag: it means the change <em>breaks backward compatibility</em>{" "}
                 (dropping a column referenced by a view, changing a column&apos;s type incompatibly).
                 A change can be BREAKING with MEDIUM severity, or HIGH severity but non-breaking.
-                That&apos;s why both donuts are shown side-by-side.
+                That&apos;s why both donuts are shown side-by-side.{" "}
+                <strong>Testing a Breaking change?</strong> {BREAKING_TESTER_ACTION}
               </>
             }
           >
@@ -588,7 +589,12 @@ export default function ImpactPage() {
                   <th className="px-4 py-3 font-medium">Object</th>
                   <th className="px-4 py-3 font-medium">Change</th>
                   <th className="px-4 py-3 font-medium">Severity</th>
-                  <th className="px-4 py-3 font-medium">Breaking</th>
+                  <th className="px-4 py-3 font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Breaking
+                      <InfoTooltip text={BREAKING_MEANING} detail={BREAKING_TESTER_ACTION} size={11} className="text-white/50" />
+                    </span>
+                  </th>
                   <th className="px-4 py-3 font-medium">
                     <span className="inline-flex items-center gap-1">Direct <InfoTooltip text="First-level dependents: objects that directly reference this one (1 hop away)." size={11} className="text-white/50" /></span>
                   </th>
@@ -624,7 +630,10 @@ export default function ImpactPage() {
                     </td>
                     <td className="px-4 py-3">
                       {row.is_breaking && (
-                        <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-xs font-medium">
+                        <span
+                          className="bg-red-600 text-white px-2 py-0.5 rounded-full text-xs font-medium cursor-help"
+                          title={`${breakingReason(row.change_type)} — ${BREAKING_TESTER_ACTION}`}
+                        >
                           BREAKING
                         </span>
                       )}
