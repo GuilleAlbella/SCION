@@ -8,6 +8,41 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.9 (2026-06-03) — PDCR counter fix + Rahul testing bugs + import persistence
+
+Three improvements from the first round of end-user testing with Rahul's team:
+
+**PDCR usage counter mapping corrected (#55)**
+Rahul confirmed the real field semantics (email 2026-06-02 / 8 May
+README). The original mapping was provisional and wrong: we were using
+FreqofUse as query_count and TypeOfUse as user_count. Now correctly:
+- QueryCount → query_count, DistinctUserCount → user_count
+- target_indicator is Y/N string (not numeric)
+- object_num replaces the misnamed data_size
+- DBQL (pdcr_log) ingestion disabled: Rahul confirmed DataDNA isn't
+  joining against sql_text near-term; the reader and dbql_query table
+  stay dormant (flip INGEST_DBQL = True to re-enable).
+- object_usage idempotency: re-uploading the same file now produces
+  skipped_duplicate instead of inserting duplicate rows.
+
+**Four bugs from Rahul's R11 testing session (#56)**
+- Lineage blocked after "Object not found" error: changing snapshot
+  now resets the error and object state cleanly.
+- Network error clicking downstream node: switched Promise.all to
+  Promise.allSettled for the two directed BFS fetches so a failure
+  in one direction doesn't kill the other.
+- Usage filter not applied: section subtitles now explain the tables
+  are the global ranking and point to the Object drill-down card.
+- Visual Diff table count misleading: "(M of N tables changed)"
+  instead of the confusing "(N tables, M changed)".
+
+**Import progress survives page navigation (#57)**
+Persists the active import_id in sessionStorage. Navigating away from
+Snapshots and returning now automatically reopens the panel and
+resumes the progress checklist via server-side polling.
+
+No schema changes. Frontend tsc + eslint clean; backend 119 tests pass.
+
 ### v1.21.8 (2026-06-03) — Lineage navigation + usage drill-down + "Breaking" clarity
 
 Reunion 11 (cross-team demo) follow-ups. Four UI/UX improvements that
