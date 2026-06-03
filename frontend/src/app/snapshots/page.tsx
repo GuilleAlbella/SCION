@@ -112,6 +112,77 @@ export default function SnapshotsPage() {
   );
   const [dictCancelling, setDictCancelling] = useState(false);
 
+  // ── Resume in-flight import after page navigation ─────────────────
+  // The user can navigate away from Snapshots while a dict-import is
+  // running (the long POST keeps going in the browser background).
+  // On unmount all useState is lost, so returning to Snapshots would
+  // show a blank page with no indication that an import is running.
+  //
+  // Fix: we persist the active import_id + phase start time in
+  // sessionStorage. On mount we check for a saved entry; if found we
+  // reopen the panel, switch to "processing" phase and restart the
+  // polling channel — the server-side progress is still available as
+  // long as the server is running.  When the import finishes (or the
+  // user cancels / an error occurs) the entry is removed.
+  //
+  // The pollAbort ref lets the cleanup function stop the resumed poll
+  // channel when the component unmounts again.
+  const resumePollAbortRef = useRef<AbortController | null>(null);
+
+  const _STORAGE_KEY = "scion_active_import";
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(_STORAGE_KEY);
+    if (!raw) return;
+    let parsed: { importId: string; startedAt: number };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      sessionStorage.removeItem(_STORAGE_KEY);
+      return;
+    }
+    const { importId, startedAt } = parsed;
+
+    // Re-open the panel in processing state — we don't have the file
+    // list any more but the checklist (driven by server progress) gives
+    // the user all the relevant info.
+    setDictPanelOpen(true);
+    setDictPhase("processing");
+    setDictUploading(true);
+    setDictActiveImportId(importId);
+    setDictPhaseStartedAt(startedAt);
+
+    const ac = new AbortController();
+    resumePollAbortRef.current = ac;
+
+    pollImportProgress(
+      importId,
+      (state) => {
+        setDictServerProgress(state);
+        if (
+          state.status === "done" ||
+          state.status === "error" ||
+          state.status === "cancelled"
+        ) {
+          sessionStorage.removeItem(_STORAGE_KEY);
+          setDictPhase(state.status === "done" ? "done" : "error");
+          setDictUploading(false);
+          setDictActiveImportId(null);
+          ac.abort();
+          if (state.status === "done") {
+            void mutate("snapshots");
+          }
+        }
+      },
+      ac.signal,
+    );
+
+    return () => {
+      ac.abort();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleCreate() {
     setCreating(true);
     setCreateError(null);
@@ -361,9 +432,16 @@ export default function SnapshotsPage() {
     setDictPhase("uploading");
     setDictUploadedBytes(0);
     setDictTotalBytes(totalHint);
-    setDictPhaseStartedAt(Date.now());
+    const startedAt = Date.now();
+    setDictPhaseStartedAt(startedAt);
     setDictActiveImportId(importId);
     setDictCancelling(false);
+
+    // Persist so we can resume if the user navigates away and returns.
+    sessionStorage.setItem(
+      _STORAGE_KEY,
+      JSON.stringify({ importId, startedAt }),
+    );
 
     try {
       const r = await importDictBatch(dictFiles, false, (e) => {
@@ -388,6 +466,7 @@ export default function SnapshotsPage() {
       }, importId);
       setDictResult(r);
       setDictPhase("done");
+      sessionStorage.removeItem(_STORAGE_KEY);
       // Refresh snapshot list so the new snapshot shows up below.
       // Keep panel open so user sees the success card with counts.
       await mutate("snapshots");
@@ -421,6 +500,7 @@ export default function SnapshotsPage() {
       // handleDictCancel already told the user what's happening.
       if (httpStatus === 499) {
         setDictPhase("idle");
+        sessionStorage.removeItem(_STORAGE_KEY);
         toast("Import cancelled. No data was persisted.", "info");
         // Wipe the panel back to "ready to drop new files" so the
         // user can retry without any leftover progress UI.
@@ -430,6 +510,7 @@ export default function SnapshotsPage() {
       } else {
         setDictError(msg);
         setDictPhase("error");
+        sessionStorage.removeItem(_STORAGE_KEY);
       }
     } finally {
       // Always stop the parallel polling channel — without this the
