@@ -20,11 +20,19 @@ Plus one helper:
 Design choices
 ==============
 
-**Idempotency by natural key.** Re-running the persister on the
-same input file produces zero new rows (the unique constraint on
-``DBQLQuery(query_id, collect_timestamp)`` rejects the duplicate).
-This is the contract every Pipeline 3 caller relies on — if the
-user uploads the same `.dat` twice the second is a no-op.
+**Idempotency by natural key.**
+
+For ``DBQLQuery``: the unique DB constraint on
+``(query_id, collect_timestamp)`` rejects duplicates at flush time.
+
+For ``UsageEvent`` (PDCR object_usage): there is no DB-level unique
+constraint (usage_event predates PDCR and is also written by the
+legacy JSON ingestor). Idempotency is enforced in-process via a
+pre-loaded set of ``(object_name, schema_name, object_type,
+last_accessed)`` tuples — the same pre-load pattern used by
+``persist_dbql_log``. Re-uploading the same ``.dat`` file produces
+zero new rows; uploads from a different extract window (different
+``last_accessed`` values) produce genuine new rows.
 
 **Case-insensitive identifier resolution.** PDCR emits identifiers
 in UPPERCASE (Teradata internal convention) while the dictionary
@@ -260,12 +268,15 @@ def persist_object_usage(
     blindly (useful for the v1.22 case where usage arrives before
     any dict snapshot exists).
 
-    `query_count` / `user_count` mapping is provisional: we set
-    ``query_count = count_a`` and ``user_count = count_b`` because
-    those are the most likely candidates among the five raw counters
-    PDCR emits. The full record (all five counters) is stashed in
-    ``source_json`` so the persister can be revisited once Rahul
-    confirms the semantics without re-ingesting.
+    Count mapping (confirmed by Rahul, 2026-06-02 / 8 May README):
+    ``query_count`` ← ``QueryCount`` and ``user_count`` ←
+    ``DistinctUserCount``. The other numerics (FreqofUse, TypeOfUse,
+    TargetIndicator) are stashed in ``source_json`` for traceability.
+    Because PDCR aggregates by ``(database, table, column, ObjectNum,
+    TypeOfUse)``, an object can span several rows (one per TypeOfUse);
+    rolling up per object is done at query time in /usage/summary and
+    /usage/object via ``SUM(query_count)`` + ``MAX(user_count)``, so we
+    persist each row as-is here.
     """
     result = PDCRPersistResult()
 
@@ -279,6 +290,54 @@ def persist_object_usage(
         build_node_index(snapshot_id, session) if snapshot_id else {}
     )
 
+    # ── Idempotency pre-load ──────────────────────────────────────────
+    # Usage-event has no DB-level unique constraint (it also holds rows
+    # from the legacy JSON ingestor). We enforce idempotency the same
+    # way persist_dbql_log does: pre-load the set of
+    # (object_name.lower(), schema_name.lower(), object_type,
+    # last_accessed) tuples that already exist for source='pdcr',
+    # then skip any incoming record whose key is already present.
+    #
+    # Using the incoming object names as the IN-filter keeps the query
+    # selective — only rows that could possibly match the batch are
+    # loaded, not the entire usage_event table.  Chunked at 900 to
+    # stay under SQLite's host-parameter ceiling.
+    #
+    # ``last_accessed`` (the parsed datetime) distinguishes records from
+    # different extract windows: same object but newer window → new row;
+    # same object, same window re-uploaded → duplicate, skip.
+    _candidate_names: list[str] = []
+    for _r in rec_list:
+        _st = _PDCR_TYPE_TO_SCION.get(_r.object_type)
+        if _st is None:
+            continue
+        _candidate_names.append(
+            (_r.column_name if _st == "COLUMN" else _r.table_name)
+        )
+    unique_names = list({n for n in _candidate_names})
+
+    existing_usage_keys: set[tuple] = set()
+    for i in range(0, len(unique_names), 900):
+        chunk = unique_names[i : i + 900]
+        rows = session.execute(
+            select(
+                UsageEvent.object_name,
+                UsageEvent.schema_name,
+                UsageEvent.object_type,
+                UsageEvent.last_accessed,
+            ).where(
+                UsageEvent.source == "pdcr",
+                UsageEvent.object_name.in_(chunk),
+            )
+        ).all()
+        for row in rows:
+            existing_usage_keys.add((
+                (row.object_name or "").lower(),
+                (row.schema_name or "").lower(),
+                row.object_type,
+                row.last_accessed,
+            ))
+
     for r in rec_list:
         # Skip object types we don't model yet (UDF / SP / Tmp / etc).
         scion_type = _PDCR_TYPE_TO_SCION.get(r.object_type)
@@ -289,7 +348,7 @@ def persist_object_usage(
             )
             continue
 
-        access_ts = _parse_timestamp(r.access_timestamp)
+        access_ts = _parse_timestamp(r.last_accessed)
         if access_ts is None:
             result.skipped_invalid += 1
             continue
@@ -311,9 +370,25 @@ def persist_object_usage(
                 result.skipped_orphan += 1
                 continue
 
-        # Provisional count semantics — see module docstring.
-        query_count = r.count_a if r.count_a is not None else 0
-        user_count = r.count_b if r.count_b is not None else 0
+        # Confirmed count semantics (see module docstring).
+        query_count = r.query_count if r.query_count is not None else 0
+        user_count = r.distinct_user_count if r.distinct_user_count is not None else 0
+
+        # Idempotency check — skip if this (object, schema, type,
+        # last_accessed) tuple was already persisted (same file
+        # re-uploaded).  Also guard within-batch duplicates by adding
+        # the key to the set before the session.add so that a second
+        # identical row in the same file is also caught.
+        dedup_key = (
+            object_name.lower(),
+            r.database_name.lower(),
+            scion_type,
+            access_ts,
+        )
+        if dedup_key in existing_usage_keys:
+            result.skipped_duplicate += 1
+            continue
+        existing_usage_keys.add(dedup_key)
 
         session.add(
             UsageEvent(
@@ -325,16 +400,15 @@ def persist_object_usage(
                 last_accessed=access_ts,
                 source="pdcr",
                 source_json={
-                    # Stash the raw PDCR row so the persister is easy to
-                    # re-run with new count-semantics later.
+                    # Stash the raw PDCR row for traceability.
                     "platform_name": r.platform_name,
-                    "data_size": r.data_size,
+                    "object_num": r.object_num,
                     "object_type_pdcr": r.object_type,
-                    "count_a": r.count_a,
-                    "count_b": r.count_b,
-                    "count_c": r.count_c,
-                    "count_d": r.count_d,
-                    "count_e": r.count_e,
+                    "freq_of_use": r.freq_of_use,
+                    "type_of_use": r.type_of_use,
+                    "target_indicator": r.target_indicator,
+                    "query_count": r.query_count,
+                    "distinct_user_count": r.distinct_user_count,
                 },
             )
         )
@@ -342,9 +416,10 @@ def persist_object_usage(
 
     session.flush()
     _logger.info(
-        "persist_object_usage: inserted=%d skipped_unmapped=%d skipped_orphan=%d "
-        "skipped_invalid=%d (skipped_by_type=%s)",
+        "persist_object_usage: inserted=%d skipped_duplicate=%d skipped_unmapped=%d "
+        "skipped_orphan=%d skipped_invalid=%d (skipped_by_type=%s)",
         result.inserted,
+        result.skipped_duplicate,
         result.skipped_unmapped_type,
         result.skipped_orphan,
         result.skipped_invalid,

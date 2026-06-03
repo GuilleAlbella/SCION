@@ -318,6 +318,14 @@ _DICT_CATEGORIES = {
 }
 _PDCR_CATEGORIES = {"dbql_log", "object_usage"}
 
+# DBQL (pdcr_log) ingestion switch. Disabled by decision (Rahul,
+# 2026-06-02): SCION stores the reassembled SQL text per QueryID but
+# nothing consumes it, and DataDNA isn't joining against it near-term,
+# so we keep the database lean and don't persist it. The reader and the
+# `dbql_query` table/migration stay in place (dormant) — flip this to
+# True to re-enable if DataDNA later wants the QueryID → SQL correlation.
+INGEST_DBQL = False
+
 
 # ──── The endpoint ────
 
@@ -841,7 +849,7 @@ def import_dict_batch(
             pdcr_snapshot_id = result.snapshot_id
             with Session(bind=engine) as pdcr_session:
                 try:
-                    if "dbql_log" in pdcr_paths_by_category:
+                    if "dbql_log" in pdcr_paths_by_category and INGEST_DBQL:
                         dbql_records = pdcr_flat_file_reader.read_dbql_log(
                             pdcr_paths_by_category["dbql_log"]
                         )
@@ -945,11 +953,20 @@ def import_dict_batch(
                         pdcr_snapshot_id, e,
                     )
 
+            # Surface DBQL explicitly rather than silently dropping it
+            # (FR-13): if a pdcr_log file was uploaded but ingestion is
+            # disabled, say so instead of reporting "0 queries".
+            dbql_caption = (
+                f"{dbql_result.inserted:,} queries"
+                if INGEST_DBQL
+                else "DBQL skipped (storage disabled)"
+                if "dbql_log" in pdcr_paths_by_category
+                else "no DBQL"
+            )
             _progress_end(
                 "persist_pdcr",
                 caption=(
-                    f"{dbql_result.inserted:,} queries · "
-                    f"{obj_result.inserted:,} usage rows"
+                    f"{dbql_caption} · {obj_result.inserted:,} usage rows"
                     + (
                         f" · criticality HIGH={criticality_high:,}"
                         if criticality_recomputed else ""

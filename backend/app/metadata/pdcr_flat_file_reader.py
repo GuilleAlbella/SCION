@@ -20,8 +20,9 @@ terminated flat-files alongside the dictionary extracts:
      single-line records:
 
          platform_name, database_name, table_name, column_name,
-         data_size, object_type, count_a, count_b, count_c,
-         count_d, count_e, access_timestamp
+         object_num, object_type, freq_of_use, type_of_use,
+         target_indicator, query_count, distinct_user_count,
+         last_accessed
 
 Why a separate module from `dict_flat_file_reader.py`
 ======================================================
@@ -127,24 +128,25 @@ class DBQLRecord:
 class ObjectUsageRecord:
     """One per-object usage record.
 
-    All five count fields are emitted by Rahul's exporter; their
-    precise semantics (query_count / user_count / unique_users /
-    something_else) are pending confirmation. We pass them through
-    untyped here so the persister (PR-C) can name them properly once
-    Rahul confirms.
+    Field semantics confirmed by Rahul (2026-06-02, also in the 8 May
+    README). Rows are aggregated by
+    ``(ObjectDatabaseName, ObjectTableName, ObjectColumnName, ObjectNum,
+    TypeOfUse)``, so one object can appear on several rows — one per
+    TypeOfUse. The persister sums QueryCount and takes the max
+    DistinctUserCount when rolling up per object.
     """
     platform_name: str
-    database_name: str
-    table_name: str
-    column_name: str
-    data_size: Optional[str]    # "1,188" — kept raw; numeric parse in persister
-    object_type: str            # "Col" / "Tbl" / "Idx" / …
-    count_a: Optional[int]      # field 7  — semantics TBD
-    count_b: Optional[int]      # field 8
-    count_c: Optional[int]      # field 9  (often empty in practice)
-    count_d: Optional[int]      # field 10
-    count_e: Optional[int]      # field 11
-    access_timestamp: str       # "2026-05-12 17:47:57.646670"
+    database_name: str          # ObjectDatabaseName
+    table_name: str             # ObjectTableName
+    column_name: str            # ObjectColumnName
+    object_num: Optional[str]   # ObjectNum — kept raw (part of the agg key)
+    object_type: str            # ObjectType: "Col" / "Tab" / "Viw" / …
+    freq_of_use: Optional[int]  # FreqofUse — optimizer references from the parse tree
+    type_of_use: Optional[int]  # TypeOfUse — part of the aggregation key
+    target_indicator: Optional[str]  # TargetIndicator — "Y"/"N" write-target flag (NOT numeric)
+    query_count: Optional[int]       # QueryCount — queries referencing the object (by type of use)
+    distinct_user_count: Optional[int]  # DistinctUserCount — distinct usernames (by type of use)
+    last_accessed: str          # LastAccessed: "2026-05-12 17:47:57.646670"
 
 
 # ──── DBQL reader ────
@@ -234,14 +236,14 @@ def iter_object_usage(
             database_name=fields[1],
             table_name=fields[2],
             column_name=fields[3],
-            data_size=_nn(fields[4]),  # raw string like "1,188"
+            object_num=_nn(fields[4]),       # ObjectNum — kept raw
             object_type=fields[5],
-            count_a=_parse_int(fields[6]),
-            count_b=_parse_int(fields[7]),
-            count_c=_parse_int(fields[8]),
-            count_d=_parse_int(fields[9]),
-            count_e=_parse_int(fields[10]),
-            access_timestamp=fields[11],
+            freq_of_use=_parse_int(fields[6]),       # FreqofUse
+            type_of_use=_parse_int(fields[7]),       # TypeOfUse
+            target_indicator=_nn(fields[8]),         # TargetIndicator "Y"/"N" — NOT numeric
+            query_count=_parse_int(fields[9]),       # QueryCount
+            distinct_user_count=_parse_int(fields[10]),  # DistinctUserCount
+            last_accessed=fields[11],                # LastAccessed
         )
 
 

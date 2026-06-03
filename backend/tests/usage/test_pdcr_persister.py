@@ -69,8 +69,8 @@ def _obj_usage(
     table: str = "customer",
     column: str = "id",
     object_type: str = "Col",
-    count_a: int = 5,
-    count_b: int = 2,
+    query_count: int = 5,         # QueryCount (confirmed field name)
+    distinct_user_count: int = 2, # DistinctUserCount (confirmed field name)
     access_ts: str = "2026-05-12 17:47:57.646670",
 ) -> ObjectUsageRecord:
     return ObjectUsageRecord(
@@ -78,14 +78,14 @@ def _obj_usage(
         database_name=database,
         table_name=table,
         column_name=column,
-        data_size="1,000",
+        object_num="1,000",            # ObjectNum (was data_size)
         object_type=object_type,
-        count_a=count_a,
-        count_b=count_b,
-        count_c=None,
-        count_d=1,
-        count_e=1,
-        access_timestamp=access_ts,
+        freq_of_use=1,                 # FreqofUse (was count_a)
+        type_of_use=2,                 # TypeOfUse (was count_b)
+        target_indicator=None,         # TargetIndicator Y/N (was count_c)
+        query_count=query_count,       # QueryCount (was count_d)
+        distinct_user_count=distinct_user_count,  # DistinctUserCount (was count_e)
+        last_accessed=access_ts,       # LastAccessed (was access_timestamp)
     )
 
 
@@ -229,8 +229,8 @@ def test_persist_object_usage_column_row(session):
     assert rows[0].object_name == "id"          # column
     assert rows[0].schema_name == "TEDW"
     assert rows[0].source == "pdcr"
-    assert rows[0].query_count == 5            # count_a
-    assert rows[0].user_count == 2             # count_b
+    assert rows[0].query_count == 5            # QueryCount
+    assert rows[0].user_count == 2             # DistinctUserCount
 
 
 def test_persist_object_usage_table_row(session):
@@ -245,21 +245,32 @@ def test_persist_object_usage_table_row(session):
 
 
 def test_persist_object_usage_stashes_raw_counters(session):
-    """All 5 raw PDCR counters land in source_json so the persister
-    can be revisited once Rahul confirms the semantics."""
-    rec = _obj_usage(count_a=10, count_b=20)
+    """Confirmed field names land in source_json with their proper names
+    (Rahul 2026-06-02): freq_of_use, type_of_use, target_indicator,
+    query_count, distinct_user_count."""
     rec = ObjectUsageRecord(
-        **{**rec.__dict__, "count_c": 30, "count_d": 40, "count_e": 50}
+        platform_name="Transcend-DevTest",
+        database_name="TEDW",
+        table_name="customer",
+        column_name="id",
+        object_num="1,000",
+        object_type="Col",
+        freq_of_use=10,
+        type_of_use=20,
+        target_indicator="N",
+        query_count=40,
+        distinct_user_count=50,
+        last_accessed="2026-05-12 17:47:57.646670",
     )
     persist_object_usage([rec], session)
     session.commit()
 
     row = session.execute(select(UsageEvent)).scalars().one()
-    assert row.source_json["count_a"] == 10
-    assert row.source_json["count_b"] == 20
-    assert row.source_json["count_c"] == 30
-    assert row.source_json["count_d"] == 40
-    assert row.source_json["count_e"] == 50
+    assert row.source_json["freq_of_use"] == 10
+    assert row.source_json["type_of_use"] == 20
+    assert row.source_json["target_indicator"] == "N"
+    assert row.source_json["query_count"] == 40
+    assert row.source_json["distinct_user_count"] == 50
     assert row.source_json["object_type_pdcr"] == "Col"
 
 
@@ -280,6 +291,42 @@ def test_persist_object_usage_skips_unmapped_types(session):
     assert result.inserted == 1
     assert result.skipped_unmapped_type == 3
     assert result.skipped_by_type == {"UDF": 2, "SP": 1}
+
+
+# ──── persist_object_usage: idempotency ────
+
+def test_persist_object_usage_is_idempotent_on_repeat(session):
+    """Re-uploading the same pdcr_object_usage file must not insert
+    duplicate rows. The second call must return inserted=0 and
+    skipped_duplicate=N (same N as the first call's inserted)."""
+    rec = _obj_usage()
+
+    r1 = persist_object_usage([rec], session)
+    session.commit()
+    assert r1.inserted == 1
+    assert r1.skipped_duplicate == 0
+
+    r2 = persist_object_usage([rec], session)
+    session.commit()
+    assert r2.inserted == 0
+    assert r2.skipped_duplicate == 1
+
+
+def test_persist_object_usage_different_last_accessed_not_duplicate(session):
+    """The same object with a different last_accessed timestamp comes
+    from a different extract window — that is NOT a duplicate and must
+    produce a new row."""
+    rec1 = _obj_usage(access_ts="2026-05-12 17:47:57.646670")
+    rec2 = _obj_usage(access_ts="2026-05-13 09:00:00.000000")
+
+    r1 = persist_object_usage([rec1], session)
+    session.commit()
+    assert r1.inserted == 1
+
+    r2 = persist_object_usage([rec2], session)
+    session.commit()
+    assert r2.inserted == 1
+    assert r2.skipped_duplicate == 0
 
 
 # ──── persist_object_usage: case-insensitive resolve ────
