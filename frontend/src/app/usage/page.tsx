@@ -348,15 +348,20 @@ function UsagePage() {
       {usage && usage.length > 0 && (
         <GuidedSection
           title="1. Usage footprint"
-          subtitle="How heavily each object is queried (top 12 by query count)"
+          subtitle={activeObject
+            ? `Global top 12 by query count — see the Object drill-down card above for "${(resolvedObject ?? activeObject).split(".").pop() ?? ""}" specifically`
+            : "How heavily each object is queried (top 12 by query count)"}
           icon={Flame}
           intro={
             <>
               This is raw usage telemetry — how many queries touched each object in the
-              observed window. Think of it as “which tables are load-bearing for the business.”
+              observed window. Think of it as "which tables are load-bearing for the business."
               An object with high usage and low graph centrality may still be critical
               (it&apos;s a leaf report used by everyone); an object with zero usage may be safe
               to decommission even if it has many upstream producers.
+              {activeObject && !usage?.some(u => isFocused(u.object_name)) && (
+                <>{" "}<strong>Note:</strong> {resolvedObject ?? activeObject} is not in the top 12 — its stats are in the Object drill-down card above.</>
+              )}
             </>
           }
         >
@@ -444,7 +449,9 @@ function UsagePage() {
       {criticality && criticality.items.length > 0 && (
         <GuidedSection
           title="3. Per-object drill-down"
-          subtitle="The raw numbers behind the score, row by row"
+          subtitle={activeObject
+            ? `Global criticality ranking — ${(resolvedObject ?? activeObject).split(".").pop()} is ${criticality.items.some(i => isFocused(i.object_name)) ? "highlighted below" : "in the Object drill-down card above"}`
+            : "The raw numbers behind the score, row by row"}
           icon={ListTree}
           intro={
             <>
@@ -452,8 +459,8 @@ function UsagePage() {
               busiest object in the system. <strong>Graph Score</strong> = normalised in_degree +
               out_degree + centrality.{" "}
               <strong>Combined</strong> = 0.6 × Usage + 0.4 × Graph → the tier in the last column.
-              A row with high Usage but low Graph is “popular but isolated” (safe-ish to change);
-              high Graph but low Usage is “structurally central but unused” (probably dead code
+              A row with high Usage but low Graph is "popular but isolated" (safe-ish to change);
+              high Graph but low Usage is "structurally central but unused" (probably dead code
               nobody noticed).
             </>
           }

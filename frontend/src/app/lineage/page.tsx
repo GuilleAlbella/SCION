@@ -254,12 +254,30 @@ function LineagePage() {
     // feeding 567 objects), so the user gets a "too big" warning while
     // only a couple of relevant nodes render. Two directed walks keep
     // the result to the root's true ancestors + descendants.
+    //
+    // We use allSettled (not all) so a failure in one direction doesn't
+    // suppress the other. A source node has no upstream (up returns 404)
+    // but still has a valid downstream; an endpoint has no downstream.
+    // With Promise.all, either failure would kill the whole render and
+    // show a spurious "Network Error" or "Object not found" even though
+    // the object exists — exactly the Bug 3 symptom Rahul reported.
     const request: Promise<FocusedGraphResponse> =
       direction === "both"
-        ? Promise.all([
+        ? Promise.allSettled([
             getFocusedGraph({ ...base, direction: "up" }),
             getFocusedGraph({ ...base, direction: "down" }),
-          ]).then(([up, down]) => mergeFocusedGraphs(up, down))
+          ]).then(([upResult, downResult]) => {
+            const up = upResult.status === "fulfilled" ? upResult.value : null;
+            const down = downResult.status === "fulfilled" ? downResult.value : null;
+            if (up && down) return mergeFocusedGraphs(up, down);
+            if (up) return up;
+            if (down) return down;
+            // Both failed — surface the first rejection so the caller's
+            // catch block can show a meaningful error.
+            const firstErr =
+              upResult.status === "rejected" ? upResult.reason : downResult.status === "rejected" ? downResult.reason : new Error("Failed to load lineage.");
+            return Promise.reject(firstErr);
+          })
         : getFocusedGraph({ ...base, direction });
     request
       .then((data) => {
@@ -484,7 +502,16 @@ function LineagePage() {
             <label className="text-xs text-td-gray-dark block mb-1">Snapshot</label>
             <select
               value={selectedSnap || (snapshotId ? String(snapshotId) : "")}
-              onChange={(e) => setSelectedSnap(e.target.value)}
+              onChange={(e) => {
+                  setSelectedSnap(e.target.value);
+                  // Clear any stale "Object not found" error from the
+                  // previous snapshot — the object may exist in the new
+                  // one.  Also reset the graph data so the canvas doesn't
+                  // show a stale neighbourhood from the wrong snapshot.
+                  setError(null);
+                  setFocusData(null);
+                  setSelectedObject("");
+                }}
               className="border border-gray-300 rounded px-3 py-1.5 text-sm"
             >
               <option value="">Select</option>
