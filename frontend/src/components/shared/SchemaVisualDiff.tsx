@@ -298,7 +298,9 @@ export default function SchemaVisualDiff({ snapshotFrom, snapshotTo, changes }: 
                 <Database size={16} style={{ color: ss.text }} />
                 <span className="text-base font-bold" style={{ color: ss.text }}>{schemaName}</span>
                 <span className="text-xs" style={{ color: "#64748b" }}>
-                  ({tables.length} tables{changedCount > 0 ? `, ${changedCount} changed` : ""})
+                  {changedCount > 0
+                    ? `(${changedCount} of ${tables.length} tables changed)`
+                    : `(${tables.length} tables, no changes)`}
                 </span>
                 {badge && (
                   <span className="ml-auto text-[10px] text-white px-2 py-0.5 rounded-full font-bold" style={{ backgroundColor: badge.bg }}>
