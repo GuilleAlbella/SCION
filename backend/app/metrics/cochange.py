@@ -55,6 +55,16 @@ DEFAULT_MIN_LIFT = 1.5
 # for Apriori-style mining.
 DEFAULT_MAX_HISTORY_PAIRS = 20
 
+# Maximum basket size (unique table-level objects per delta) before a
+# transaction is dropped from the mining input. Deltas with more objects
+# than this cap are mass-refresh events (full schema reloads, large
+# migrations) where every object changes together — they don't generate
+# meaningful co-change signal and dominate the combinations step with
+# O(N²) pairs. At N=245k that's ~30 billion pairs; the algo would never
+# finish. By skipping these "noisy" transactions we keep the mining
+# bounded. Set to 0 to disable the cap (not recommended on production).
+DEFAULT_MAX_BASKET_SIZE = 500
+
 
 @dataclass
 class CoChangePair:
@@ -72,6 +82,7 @@ class CoChangePair:
 
 def _load_deltas_as_transactions(
     max_history_pairs: int = DEFAULT_MAX_HISTORY_PAIRS,
+    max_basket_size: int = DEFAULT_MAX_BASKET_SIZE,
 ) -> List[Set[str]]:
     """Return one `set[object_identifier]` per snapshot delta.
 
@@ -134,7 +145,14 @@ def _load_deltas_as_transactions(
             continue
         by_delta.setdefault((snap_from, snap_to), set()).add(parent)
 
-    return [s for s in by_delta.values() if len(s) >= 2]
+    # Drop baskets with too many objects: they are mass-refresh events
+    # where everything changed at once and produce O(N²) pairs that
+    # make the combinations step hang. A cap of 0 disables the filter.
+    if max_basket_size > 0:
+        kept = [s for s in by_delta.values() if 2 <= len(s) <= max_basket_size]
+    else:
+        kept = [s for s in by_delta.values() if len(s) >= 2]
+    return kept
 
 
 def _collapse_to_table(identifier: str, object_type: str) -> str | None:
@@ -154,6 +172,7 @@ def mine_cochange_pairs(
     min_lift: float = DEFAULT_MIN_LIFT,
     top_n: int = 50,
     max_history_pairs: int = DEFAULT_MAX_HISTORY_PAIRS,
+    max_basket_size: int = DEFAULT_MAX_BASKET_SIZE,
 ) -> List[CoChangePair]:
     """Mine directional co-change rules from the recent change history.
 
@@ -162,7 +181,10 @@ def mine_cochange_pairs(
     (strongest coupling first), then confidence. ``max_history_pairs``
     bounds the input window — see ``_load_deltas_as_transactions``.
     """
-    transactions = _load_deltas_as_transactions(max_history_pairs=max_history_pairs)
+    transactions = _load_deltas_as_transactions(
+        max_history_pairs=max_history_pairs,
+        max_basket_size=max_basket_size,
+    )
     total = len(transactions)
     if total == 0:
         return []

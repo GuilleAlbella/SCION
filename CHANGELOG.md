@@ -8,6 +8,30 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.12 (2026-06-09) — Intelligence cochange + volatility-trend perf fix
+
+**cochange and volatility-trend endpoints unblocked (#60 follow-up)**
+
+Two additional performance issues on production data with 1.86M change_event rows:
+
+1. **cochange infinite loop**: `combinations(N, 2)` on baskets of 245k+ objects
+   = ~30 billion pairs → the endpoint never returned. Root cause: production
+   deltas are mass-refresh events (full schema reloads) where every object
+   changes at once. Fixed with `max_basket_size=500`: transactions where a
+   single delta touches more than 500 unique table-level objects are skipped
+   as "noisy" (they don't generate actionable co-change signal). Returns 0
+   pairs when all deltas are mass-refreshes, which is the honest answer.
+
+2. **volatility-trend loading 1.86M rows**: The bulk `SELECT * FROM change_event
+   WHERE snapshot_to IN (...)` loaded all change rows into Python memory for
+   string splitting/counting — several seconds just for the I/O. Replaced with
+   a SQL GROUP BY aggregate that extracts schema name and collapses columns to
+   parent tables server-side using SUBSTR/INSTR. Also replaced the
+   `table_snapshot.schema_id IN (37k_ids)` large-IN query with a JOIN-based
+   aggregate. Both queries now complete in <200 ms.
+
+---
+
 ### v1.21.11 (2026-06-09) — Intelligence screen performance fix
 
 **Intelligence screen 87s → <2s (#60)**

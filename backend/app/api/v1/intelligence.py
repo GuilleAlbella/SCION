@@ -16,6 +16,7 @@ from app.metrics.intelligence_metrics import (
     stability_trend,
 )
 from app.metrics.cochange import (
+    DEFAULT_MAX_BASKET_SIZE,
     DEFAULT_MAX_HISTORY_PAIRS,
     DEFAULT_MIN_LIFT,
     DEFAULT_MIN_PAIR_SUPPORT,
@@ -91,29 +92,32 @@ def get_cochange(
     min_pair_support: int = DEFAULT_MIN_PAIR_SUPPORT,
     top_n: int = 50,
     max_history_pairs: int = DEFAULT_MAX_HISTORY_PAIRS,
+    max_basket_size: int = DEFAULT_MAX_BASKET_SIZE,
 ) -> Dict[str, Any]:
     """Top-N directional co-change association rules across the recent history.
 
     Returns rules (object_a, object_b) with support/confidence/lift,
     surfaced from the ``change_event`` log via Apriori-style pairwise
     mining. A ``lift`` above 1 indicates historical coupling beyond
-    chance. ``max_history_pairs`` (default
-    ``DEFAULT_MAX_HISTORY_PAIRS``) bounds the input window — without
-    this cap, a single request was scanning the entire
-    ``change_event`` table on every click and made the page hang at
-    Transcend scale.
+    chance. ``max_history_pairs`` bounds the input window. ``max_basket_size``
+    skips "noisy" transactions (mass-refresh deltas where thousands of
+    objects changed at once) — without this cap, the combinations step
+    is O(N²) on the basket size and hangs on production-scale data where
+    a single delta may contain 245k+ unique objects.
     """
     pairs = mine_cochange_pairs(
         min_pair_support=min_pair_support,
         min_lift=min_lift,
         top_n=top_n,
         max_history_pairs=max_history_pairs,
+        max_basket_size=max_basket_size,
     )
     return {
         "total": len(pairs),
         "min_lift": min_lift,
         "min_pair_support": min_pair_support,
         "max_history_pairs": max_history_pairs,
+        "max_basket_size": max_basket_size,
         "pairs": [_asdict(p) for p in pairs],
     }
 
