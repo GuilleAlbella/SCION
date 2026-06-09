@@ -8,6 +8,21 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.13 (2026-06-09) — Intelligence cochange fast-exit + volatility-trend response cap
+
+**cochange fast-exit on mass-refresh data**
+Added COUNT(*) pre-filter per snapshot pair before loading rows. If every
+pair has more raw changes than `max_basket_size`, the endpoint returns
+immediately (0 pairs, <200 ms) without fetching 1.86M rows.
+
+**volatility-trend top_n cap (default 200)**
+With 10,877 schemas in production, the endpoint was returning a 6 MB JSON
+response and spending ~3s on serialization. Added `top_n=200` parameter
+that returns only the most actionable schemas (worsening + highest
+current_volatility), reducing response from 6 MB to ~120 KB.
+
+---
+
 ### v1.21.12 (2026-06-09) — Intelligence cochange + volatility-trend perf fix
 
 **cochange and volatility-trend endpoints unblocked (#60 follow-up)**

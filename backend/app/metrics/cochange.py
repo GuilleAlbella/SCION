@@ -32,7 +32,7 @@ from dataclasses import dataclass, asdict
 from itertools import combinations
 from typing import Dict, List, Set, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
@@ -101,10 +101,7 @@ def _load_deltas_as_transactions(
     with Session(bind=engine) as session:
         # Pre-flight: which pairs are in scope? We pull distinct
         # (snapshot_from, snapshot_to) tuples sorted descending by the
-        # ending snapshot, take the top N, and filter the bulk fetch
-        # by them. The (snapshot_from, snapshot_to) composite index
-        # added in v1.15.00 makes both the distinct scan and the
-        # filtered fetch indexed.
+        # ending snapshot, take the top N.
         pair_rows = session.execute(
             select(ChangeEvent.snapshot_from, ChangeEvent.snapshot_to)
             .distinct()
@@ -115,14 +112,57 @@ def _load_deltas_as_transactions(
         if not recent_pairs:
             return []
 
-        from sqlalchemy import and_, or_
+        # ── Fast pre-filter by raw change count ──────────────────────────
+        # Loading all rows for a pair with 450 k changes is wasteful when
+        # the basket will be discarded anyway. We use COUNT(*) as a cheap
+        # upper bound on basket size (since COUNT(*) ≥ COUNT(DISTINCT)):
+        #   - If COUNT(*) ≤ max_basket_size → basket is guaranteed small: load it.
+        #   - If COUNT(*) > max_basket_size → basket *may* still be small
+        #     (many changes to the same objects), but for typical production
+        #     data the ratio is close to 1:1, so skip with high confidence.
+        # This avoids loading 1.86 M rows when every delta is a mass-refresh.
+        if max_basket_size > 0:
+            from sqlalchemy import and_, or_
+
+            pair_change_counts = {
+                (int(sf), int(st)): int(cnt)
+                for sf, st, cnt in session.execute(
+                    select(
+                        ChangeEvent.snapshot_from,
+                        ChangeEvent.snapshot_to,
+                        func.count().label("cnt"),
+                    )
+                    .where(
+                        or_(
+                            *[
+                                and_(
+                                    ChangeEvent.snapshot_from == sf,
+                                    ChangeEvent.snapshot_to == st,
+                                )
+                                for sf, st in recent_pairs
+                            ]
+                        )
+                    )
+                    .group_by(ChangeEvent.snapshot_from, ChangeEvent.snapshot_to)
+                ).all()
+            }
+            candidate_pairs = [
+                p for p in recent_pairs if pair_change_counts.get(p, 0) <= max_basket_size
+            ]
+        else:
+            from sqlalchemy import and_, or_
+            candidate_pairs = recent_pairs
+
+        if not candidate_pairs:
+            return []  # all pairs are too large — no useful signal
+
         pair_filter = or_(
             *[
                 and_(
                     ChangeEvent.snapshot_from == sf,
                     ChangeEvent.snapshot_to == st,
                 )
-                for sf, st in recent_pairs
+                for sf, st in candidate_pairs
             ]
         )
 
@@ -145,9 +185,8 @@ def _load_deltas_as_transactions(
             continue
         by_delta.setdefault((snap_from, snap_to), set()).add(parent)
 
-    # Drop baskets with too many objects: they are mass-refresh events
-    # where everything changed at once and produce O(N²) pairs that
-    # make the combinations step hang. A cap of 0 disables the filter.
+    # Apply the exact basket-size cap (COUNT(*) pre-filter above is an upper
+    # bound; a few baskets may still be too large after deduplication).
     if max_basket_size > 0:
         kept = [s for s in by_delta.values() if 2 <= len(s) <= max_basket_size]
     else:

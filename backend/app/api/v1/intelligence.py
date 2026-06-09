@@ -126,21 +126,28 @@ def get_cochange(
 def get_volatility_trend(
     window: int = DEFAULT_WINDOW,
     max_history_snapshots: int = DEFAULT_MAX_HISTORY_SNAPSHOTS,
+    top_n: int = 200,
 ) -> Dict[str, Any]:
     """Rolling volatility per schema with a time-series and current/prior delta.
 
     For each schema, returns a series of (snapshot_id, volatility) samples
     plus the immediate delta vs the prior window and a ``trend`` label
     (worsening / stable / improving). ``max_history_snapshots`` bounds
-    how far back we look — same motivation as cochange's history cap.
+    how far back we look. ``top_n`` caps the number of schemas returned
+    (sorted by worsening / current volatility) — without this cap a
+    warehouse with 10k+ schemas produces a 6 MB response per request.
     """
     trends = compute_schema_volatility_trend(
         window=window,
         max_history_snapshots=max_history_snapshots,
     )
+    # Schemas are already sorted by (worsening first, then current_volatility desc)
+    # inside compute_schema_volatility_trend, so slicing gives the most actionable top-N.
+    top = trends[:top_n] if top_n > 0 else trends
     return {
         "window": window,
         "max_history_snapshots": max_history_snapshots,
         "total": len(trends),
-        "trends": [_asdict(t) for t in trends],
+        "returned": len(top),
+        "trends": [_asdict(t) for t in top],
     }
