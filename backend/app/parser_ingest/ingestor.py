@@ -245,6 +245,13 @@ def ingest(
             # `node_id_by_dataset` was built in step 3; edges to unknown
             # datasets are dropped (noise_filter should have done it, but
             # we double-check here so nothing dangling slips through).
+            # We also deduplicate: the parser emits one edge per SQL step
+            # that uses the relationship, so the same (source, target) pair
+            # can appear hundreds of times. We keep only the first occurrence
+            # per (source_node_id, target_node_id) pair to avoid flooding the
+            # graph with redundant edges that degrade BFS performance and
+            # produce visual noise in the lineage view.
+            seen_edge_pairs: set[Tuple[int, int]] = set()
             for e in payload.dataset_lineage:
                 src = node_id_by_dataset.get(e.source_dataset_natural_key)
                 tgt = node_id_by_dataset.get(e.target_dataset_natural_key)
@@ -255,6 +262,11 @@ def ingest(
                         f"{e.target_dataset_natural_key!r} has missing endpoint — skipped."
                     )
                     continue
+
+                pair = (src, tgt)
+                if pair in seen_edge_pairs:
+                    continue
+                seen_edge_pairs.add(pair)
 
                 edge = GraphEdge(
                     snapshot_id=snap.snapshot_id,
