@@ -41,6 +41,11 @@ class ChangeEvent(Base):
       by this pair. Without it, a 250k-row table forces a full scan per
       query, which on a multi-pair diff request stacks up to seconds of
       wasted CPU.
+    - ``ix_change_event_snapshot_to (snapshot_to)``: backs Intelligence
+      scorecard and domain-risk queries that filter only on snapshot_to
+      (without a snapshot_from constraint). On a 1.8M-row table, a full
+      scan on these governance queries added ~80 s of latency; this index
+      brings them down to milliseconds.
     - ``ix_change_event_object_identifier (object_identifier)``: backs the
       ``/timeline`` and ``/objects/search`` endpoints, which both filter
       by object name. Substring (``ILIKE %q%``) won't use this index, but
@@ -68,6 +73,7 @@ class ChangeEvent(Base):
 
     __table_args__ = (
         Index("ix_change_event_snapshot_pair", "snapshot_from", "snapshot_to"),
+        Index("ix_change_event_snapshot_to", "snapshot_to"),
         Index("ix_change_event_object_identifier", "object_identifier"),
     )
 

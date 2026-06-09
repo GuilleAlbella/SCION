@@ -8,6 +8,27 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.11 (2026-06-09) — Intelligence screen performance fix
+
+**Intelligence screen 87s → <2s (#60)**
+The Governance Report (Intelligence) screen was timing out (502 Bad Gateway)
+on production data with 1.86M `change_event` rows. Root causes:
+
+1. `domain_risk_index` loaded all ~252K `ChangeEvent` ORM objects into Python
+   memory per request (SQLAlchemy ORM overhead: ~80 s). Replaced with a single
+   SQL GROUP BY + SUBSTR aggregate that returns one row per schema.
+2. The two COUNT queries in `governance_scorecard` each triggered a full table
+   scan because the existing index `ix_change_event_snapshot_pair(snapshot_from,
+   snapshot_to)` cannot service queries that filter only on `snapshot_to`.
+   Added new index `ix_change_event_snapshot_to` to `change_event` — COUNT now
+   runs in 15 ms instead of 2.4 s.
+3. Combined the two separate COUNT/COUNT(is_breaking) queries into a single
+   `COUNT + SUM(CASE …)` round-trip.
+
+Total scorecard latency on snapshot with 252K change events: ~1.5 s (was >87 s).
+
+---
+
 ### v1.21.10 (2026-06-09) — Lineage self-loop fix + edge deduplication + no-lineage UX
 
 Three fixes from Ashish/Rahul integration testing (snapshot #4):
