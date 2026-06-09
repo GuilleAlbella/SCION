@@ -184,12 +184,20 @@ def apply(payload: ParsedLineagePayload) -> NoiseFilterStats:
 
     # ──── 4. Dataset lineage edges ────
     # Drop an edge if either endpoint (source or target dataset) was filtered.
+    # Also drop self-loop edges (source == target) — they are parser artefacts
+    # from queries that read and write the same table (e.g. INSERT INTO T
+    # SELECT … FROM T). Self-loops carry no actionable lineage information
+    # and break the dagre layout on the frontend.
     # This preserves graph integrity — no edges to nodes that don't exist.
     kept_ds_edges: List[ParsedDatasetLineage] = []
     for e in payload.dataset_lineage:
         if e.source_dataset_natural_key in dropped_dataset_keys or \
            e.target_dataset_natural_key in dropped_dataset_keys:
             stats.dropped_dataset_lineage += 1
+        elif e.source_dataset_natural_key == e.target_dataset_natural_key:
+            # Self-loop: same object on both sides — drop silently.
+            stats.dropped_dataset_lineage += 1
+            _add_sample(stats, "dataset_lineage_self_loop", e.source_dataset_natural_key)
         else:
             kept_ds_edges.append(e)
             stats.kept_dataset_lineage += 1

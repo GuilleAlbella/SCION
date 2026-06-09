@@ -8,6 +8,37 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.10 (2026-06-09) — Lineage self-loop fix + edge deduplication + no-lineage UX
+
+Three fixes from Ashish/Rahul integration testing (snapshot #4):
+
+**Self-loop edges filtered at ingestion (#59)**
+The parser emits edges where source == target for queries that read and
+write the same table (e.g. `INSERT INTO T SELECT … FROM T`). These
+self-loops were stored in `graph_edge` and caused the dagre layout to
+crash or produce a blank graph when the focused object had one.
+Fixed in `noise_filter.py`: self-loops are now dropped during ingestion
+with a dedicated sample counter (`dataset_lineage_self_loop`).
+Belt-and-suspenders guard also added in the frontend BFS so existing
+snapshots imported before this fix also render correctly.
+
+**Duplicate edges deduplicated at ingestion (#59)**
+The parser emits one lineage edge per SQL step that uses a relationship,
+so the same (source, target) pair appeared up to 196× in the DB for
+high-traffic tables. The ingestor now tracks seen (source_node_id,
+target_node_id) pairs per snapshot and skips duplicates, keeping only
+the first occurrence. This reduces edge count significantly on real
+Transcend-scale extracts and improves BFS performance.
+
+**Clear UX when object has no lineage (#59)**
+When an object exists in a snapshot but the parser captured no edges for
+it, the lineage page previously showed a confusing blank canvas. It now
+shows an amber info banner explaining that no relationships were recorded
+for that object and why this can happen (standalone INSERT targets, out-
+of-scope SQL, etc.).
+
+---
+
 ### v1.21.9 (2026-06-03) — PDCR counter fix + Rahul testing bugs + import persistence
 
 Three improvements from the first round of end-user testing with Rahul's team:

@@ -336,7 +336,13 @@ function LineagePage() {
     // its direction and 1-based hop distance from the root. This
     // replaces the old hard-coded 2-level tagging so the depth stepper
     // can render 1..5 levels in each direction.
-    const feedsEdges = focusData.edges.filter((e) => e.type === "FEEDS");
+    // Filter FEEDS edges and drop self-loops (source === target). Self-loops
+    // are parser artefacts from queries that read and write the same table;
+    // the noise filter removes them during ingestion but we guard here too so
+    // existing snapshots imported before the fix also render correctly.
+    const feedsEdges = focusData.edges.filter(
+      (e) => e.type === "FEEDS" && e.source !== e.target,
+    );
     const rootId = selectedNode.node_id;
 
     // First assignment wins; we run the upstream BFS before the
@@ -674,6 +680,19 @@ function LineagePage() {
 
       {snapshotId && !selectedObject && !loading && (
         <EmptyState message="Pick an object above to see where its data comes from and where it goes." />
+      )}
+
+      {/* Object exists in snapshot but the parser captured no lineage edges for it */}
+      {selectedObject && !loading && !error && focusData && !selectedNodeData && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-3">
+          <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-900">No lineage recorded for this object</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              <strong>{selectedObject}</strong> exists in snapshot #{snapshotId} but the parser did not capture any upstream or downstream relationships for it. This is expected for objects that appear only as standalone targets in INSERT statements or whose SQL was not part of the parsed extract.
+            </p>
+          </div>
+        </div>
       )}
 
       {selectedObject && selectedNodeData && (
