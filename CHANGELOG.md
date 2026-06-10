@@ -8,6 +8,26 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.14 (2026-06-10) — Fix lineage edges for UNKNOWN-schema datasets
+
+**Ingestor: resolve UNKNOWN-schema references against known nodes**
+The parser emits `UNKNOWN.<Name>` when it cannot infer the database context
+for a dataset reference in a SQL statement. Previously these datasets were
+dropped by the noise filter (correct) but the corresponding lineage edge was
+also lost — the object would exist in the graph with no downstream links even
+though the relationship was captured at attribute level.
+
+New step 6.5 in the ingestor scans `attribute_lineage` for edges that touch
+an `UNKNOWN.<Name>` endpoint and resolves the name against existing graph nodes
+in the same snapshot. If exactly one node with that bare name exists (unambiguous
+resolution), the `graph_edge` is emitted. Ambiguous names (same table in multiple
+schemas) are skipped — better to show nothing than to show the wrong link.
+
+This fixes the missing `BATCH_CREATE_UPDATE_V → COMPONENTDISCOVERY_STATE` edge
+and the 4 other downstream objects in snapshot #4 that had the same issue.
+
+---
+
 ### v1.21.13 (2026-06-09) — Intelligence cochange fast-exit + volatility-trend response cap
 
 **cochange fast-exit on mass-refresh data**

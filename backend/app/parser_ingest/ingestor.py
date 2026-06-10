@@ -284,6 +284,63 @@ def ingest(
                 session.add(edge)
                 persisted["graph_edges"] += 1
 
+            # ──── 6.5. Resolve UNKNOWN-schema references via attribute lineage ────
+            # The parser emits UNKNOWN.<Name> when it can't infer the schema
+            # from the SQL context. Noise-filter drops those datasets as
+            # unresolvable containers, so their edges are missing from step 6.
+            # Here we scan attribute_lineage for edges that touch an UNKNOWN
+            # endpoint. If the bare object name uniquely matches exactly one
+            # real node in this snapshot, we emit the graph_edge so lineage
+            # remains visible. Ambiguous names (same table in multiple schemas)
+            # are skipped — better to show nothing than to show the wrong link.
+            node_ids_by_bare_name: Dict[str, List[int]] = {}
+            for key, nid in node_id_by_dataset.items():
+                if "." in key:
+                    node_ids_by_bare_name.setdefault(key.split(".", 1)[1], []).append(nid)
+
+            for e in payload.attribute_lineage:
+                src_key = e.source_dataset_natural_key or ""
+                tgt_key = e.target_dataset_natural_key or ""
+                src_unknown = src_key.upper().startswith("UNKNOWN.")
+                tgt_unknown = tgt_key.upper().startswith("UNKNOWN.")
+                if not src_unknown and not tgt_unknown:
+                    continue
+
+                if src_unknown:
+                    cands = node_ids_by_bare_name.get(src_key[8:], [])
+                    src_id = cands[0] if len(cands) == 1 else None
+                else:
+                    src_id = node_id_by_dataset.get(src_key)
+
+                if tgt_unknown:
+                    cands = node_ids_by_bare_name.get(tgt_key[8:], [])
+                    tgt_id = cands[0] if len(cands) == 1 else None
+                else:
+                    tgt_id = node_id_by_dataset.get(tgt_key)
+
+                if src_id is None or tgt_id is None or src_id == tgt_id:
+                    continue
+                pair = (src_id, tgt_id)
+                if pair in seen_edge_pairs:
+                    continue
+                seen_edge_pairs.add(pair)
+                edge = GraphEdge(
+                    snapshot_id=snap.snapshot_id,
+                    source_node_id=src_id,
+                    target_node_id=tgt_id,
+                    relationship_type="FEEDS",
+                    from_node_uid=src_key,
+                    to_node_uid=tgt_key,
+                    edge_type="FEEDS",
+                    edge_metadata={
+                        "impact_type": "Direct",
+                        "step_natural_key": e.step_natural_key,
+                        "resolved_from_unknown": True,
+                    },
+                )
+                session.add(edge)
+                persisted["graph_edges"] += 1
+
             # ──── 7. Attribute-level lineage ────
             for e in payload.attribute_lineage:
                 row = AttributeLineage(
