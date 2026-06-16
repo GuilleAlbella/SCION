@@ -306,7 +306,7 @@ function LineagePage() {
   // node as upstream / center / downstream based on edge directionality
   // relative to the root. The original page did the same thing, just over
   // a much larger candidate set.
-  const { nodes, edges, upstreamList, downstreamList, selectedNodeData } = useMemo(() => {
+  const { nodes, edges, upstreamList, downstreamList, selectedNodeData, isSelfReferencing } = useMemo(() => {
     if (!focusData)
       return {
         nodes: [] as Node[],
@@ -314,6 +314,7 @@ function LineagePage() {
         upstreamList: [] as string[],
         downstreamList: [] as string[],
         selectedNodeData: null as GN | null,
+        isSelfReferencing: false,
       };
 
     const nodeMap = new Map(focusData.nodes.map((n) => [n.node_id, n]));
@@ -327,6 +328,7 @@ function LineagePage() {
         upstreamList: [] as string[],
         downstreamList: [] as string[],
         selectedNodeData: null as GN | null,
+        isSelfReferencing: false,
       };
 
     // Generalised N-hop BFS over FEEDS edges. We walk upstream (follow
@@ -336,10 +338,15 @@ function LineagePage() {
     // its direction and 1-based hop distance from the root. This
     // replaces the old hard-coded 2-level tagging so the depth stepper
     // can render 1..5 levels in each direction.
-    // Filter FEEDS edges and drop self-loops (source === target). Self-loops
-    // are parser artefacts from queries that read and write the same table;
-    // the noise filter removes them during ingestion but we guard here too so
-    // existing snapshots imported before the fix also render correctly.
+    // Self-loop edges (source === target) arise when a table reads from and
+    // writes to itself in the same SQL (e.g. INSERT INTO T SELECT … FROM T).
+    // We exclude them from the dagre graph to prevent layout crashes, but
+    // track them separately so the side panels can flag the pattern.
+    const selfLoopNodeIds = new Set<string>(
+      focusData.edges
+        .filter((e) => e.type === "FEEDS" && e.source === e.target)
+        .map((e) => e.source),
+    );
     const feedsEdges = focusData.edges.filter(
       (e) => e.type === "FEEDS" && e.source !== e.target,
     );
@@ -440,6 +447,7 @@ function LineagePage() {
       upstreamList: directNeighbours("upstream"),
       downstreamList: directNeighbours("downstream"),
       selectedNodeData: selectedNode,
+      isSelfReferencing: selfLoopNodeIds.has(String(rootId)),
     };
   }, [focusData, selectedObject]);
 
@@ -719,8 +727,8 @@ function LineagePage() {
             {/* When a direction filter hides one side, show "—" instead of
                 a misleading "0" — the count isn't zero, it's just not in
                 this view. The true degree still shows in Object Details. */}
-            <KpiCard label="Feeds data from" value={direction === "down" ? "—" : upstreamList.length} color="#DC2626" />
-            <KpiCard label="Sends data to" value={direction === "up" ? "—" : downstreamList.length} color="#16A34A" />
+            <KpiCard label="Feeds data from" value={direction === "down" ? "—" : upstreamList.length + (isSelfReferencing ? 1 : 0)} color="#DC2626" />
+            <KpiCard label="Sends data to" value={direction === "up" ? "—" : downstreamList.length + (isSelfReferencing ? 1 : 0)} color="#16A34A" />
             <KpiCard label="Related objects" value={nodes.length} color="#2563EB" />
             <KpiCard label="Data flows" value={edges.length} color="#00233C" />
           </div>
@@ -780,14 +788,19 @@ function LineagePage() {
             <div className="bg-white rounded-lg shadow-sm border-2 border-td-upstream p-4">
               <div className="flex items-center gap-2 mb-3">
                 <ArrowUp size={16} className="text-td-upstream" />
-                <h3 className="text-sm font-semibold text-td-upstream">Where data comes from ({upstreamList.length})</h3>
+                <h3 className="text-sm font-semibold text-td-upstream">Where data comes from ({upstreamList.length + (isSelfReferencing ? 1 : 0)})</h3>
               </div>
               {direction === "down" ? (
                 <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Downstream. Switch to Both or Upstream to see producers.</p>
-              ) : upstreamList.length === 0 ? (
+              ) : upstreamList.length === 0 && !isSelfReferencing ? (
                 <p className="text-xs text-td-gray-dark">This is a source table — data originates here.</p>
               ) : (
                 <ul className="space-y-1">
+                  {isSelfReferencing && (
+                    <li className="text-xs font-mono bg-amber-50 rounded px-2 py-1 text-amber-800 border border-amber-200">
+                      {selectedNodeData.object_name.split(".").pop()} <span className="text-amber-500 font-normal">(self-referencing)</span>
+                    </li>
+                  )}
                   {upstreamList.map((name) => (
                     <li key={name} className="text-xs font-mono bg-red-50 rounded px-2 py-1 text-red-800 cursor-pointer hover:bg-red-100"
                       onClick={() => focusOn(name)}>
@@ -835,14 +848,19 @@ function LineagePage() {
             <div className="bg-white rounded-lg shadow-sm border-2 border-td-downstream p-4">
               <div className="flex items-center gap-2 mb-3">
                 <ArrowDown size={16} className="text-td-downstream" />
-                <h3 className="text-sm font-semibold text-td-downstream">Where data goes ({downstreamList.length})</h3>
+                <h3 className="text-sm font-semibold text-td-downstream">Where data goes ({downstreamList.length + (isSelfReferencing ? 1 : 0)})</h3>
               </div>
               {direction === "up" ? (
                 <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Upstream. Switch to Both or Downstream to see consumers.</p>
-              ) : downstreamList.length === 0 ? (
+              ) : downstreamList.length === 0 && !isSelfReferencing ? (
                 <p className="text-xs text-td-gray-dark">This is an endpoint — no other objects consume this data directly.</p>
               ) : (
                 <ul className="space-y-1">
+                  {isSelfReferencing && (
+                    <li className="text-xs font-mono bg-amber-50 rounded px-2 py-1 text-amber-800 border border-amber-200">
+                      {selectedNodeData.object_name.split(".").pop()} <span className="text-amber-500 font-normal">(self-referencing)</span>
+                    </li>
+                  )}
                   {downstreamList.map((name) => (
                     <li key={name} className="text-xs font-mono bg-green-50 rounded px-2 py-1 text-green-800 cursor-pointer hover:bg-green-100"
                       onClick={() => focusOn(name)}>

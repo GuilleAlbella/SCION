@@ -194,10 +194,6 @@ def apply(payload: ParsedLineagePayload) -> NoiseFilterStats:
         if e.source_dataset_natural_key in dropped_dataset_keys or \
            e.target_dataset_natural_key in dropped_dataset_keys:
             stats.dropped_dataset_lineage += 1
-        elif e.source_dataset_natural_key == e.target_dataset_natural_key:
-            # Self-loop: same object on both sides — drop silently.
-            stats.dropped_dataset_lineage += 1
-            _add_sample(stats, "dataset_lineage_self_loop", e.source_dataset_natural_key)
         else:
             kept_ds_edges.append(e)
             stats.kept_dataset_lineage += 1

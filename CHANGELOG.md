@@ -8,6 +8,22 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.15 (2026-06-16) — Self-referencing lineage visible in side panels
+
+**Lineage: self-referencing tables now shown in "Where data comes from" / "Where data goes"**
+Tables with `INSERT INTO T SELECT … FROM T` patterns (same table as both source
+and target) now appear in both side panels with an amber *(self-referencing)* badge.
+Previously these edges were deleted from the DB and invisible to users.
+
+The dagre graph continues to exclude self-loop edges (to prevent layout crashes),
+but they are preserved in the database and surfaced in the list panels. The noise
+filter no longer drops self-loop dataset lineage edges during ingestion.
+
+Self-loop edges were also restored in snapshots #2 and #4 via a one-time DB patch
+(47 + 2 edges re-inserted).
+
+---
+
 ### v1.21.14 (2026-06-10) — Fix lineage edges for UNKNOWN-schema datasets
 
 **Ingestor: resolve UNKNOWN-schema references against known nodes**
