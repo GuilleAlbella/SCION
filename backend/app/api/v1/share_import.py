@@ -15,7 +15,7 @@ that shows "New data available from share."
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel

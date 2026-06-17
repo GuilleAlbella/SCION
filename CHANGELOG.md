@@ -8,6 +8,17 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.17 (2026-06-17) - Share import startup hotfix
+
+**Backend startup fix**
+Added the missing `Optional` import in `share_import.py`. FastAPI/Pydantic
+resolves endpoint annotations at application startup, so the v1.21.16 backend
+image failed to boot when registering `/share-import/scan`.
+
+No schema changes.
+
+---
+
 ### v1.21.16 (2026-06-17) - Unified share import + AI test pack
 
 **Snapshots: one production import path**
