@@ -56,9 +56,9 @@ class ShareScanResponse(BaseModel):
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _iter_share_files(subdir: str) -> List[Path]:
-    """Return all regular files in SCION_SHARE_MOUNT_PATH/<subdir>."""
-    base = Path(SCION_SHARE_MOUNT_PATH) / subdir
+def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> List[Path]:
+    """Return all regular files in <mount_path>/<subdir>."""
+    base = Path(mount_path) / subdir
     if not base.is_dir():
         return []
     return [f for f in base.iterdir() if f.is_file()]
@@ -80,46 +80,60 @@ def _path_to_upload(path: Path) -> UploadFile:
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.get("/scan", response_model=ShareScanResponse)
-def scan_share() -> ShareScanResponse:
-    """Return the list of importable files found in the share (no-op)."""
-    base = Path(SCION_SHARE_MOUNT_PATH)
+def scan_share(
+    path: Optional[str] = None,
+) -> ShareScanResponse:
+    """Return the list of importable files found in the share (no-op).
+
+    `path` overrides the server-default SCION_SHARE_MOUNT_PATH for this
+    request — useful when the share is mounted at a different location.
+    """
+    mount = path or SCION_SHARE_MOUNT_PATH
+    base = Path(mount)
     if not base.exists():
         return ShareScanResponse(
             share_available=False,
-            share_path=SCION_SHARE_MOUNT_PATH,
+            share_path=mount,
             dict_files=[], pdcr_files=[], lineage_files=[],
         )
     return ShareScanResponse(
         share_available=True,
-        share_path=SCION_SHARE_MOUNT_PATH,
-        dict_files=[f.name for f in _iter_share_files(_DICT_DIR)],
-        pdcr_files=[f.name for f in _iter_share_files(_PDCR_DIR)],
-        lineage_files=[f.name for f in _iter_share_files(_LINEAGE_DIR)],
+        share_path=mount,
+        dict_files=[f.name for f in _iter_share_files(_DICT_DIR, mount)],
+        pdcr_files=[f.name for f in _iter_share_files(_PDCR_DIR, mount)],
+        lineage_files=[f.name for f in _iter_share_files(_LINEAGE_DIR, mount)],
     )
 
 
 @router.post("", response_model=ShareImportResponse)
-def import_from_share(force: bool = False) -> ShareImportResponse:
+def import_from_share(
+    force: bool = False,
+    path: Optional[str] = None,
+) -> ShareImportResponse:
     """Import all files from the share in one unified snapshot.
 
     Dict + PDCR .dat files land first (creating a single snapshot);
     then the lineage JSON is attached to that same snapshot via the
     parser pipeline. The result is one snapshot that contains dict
     structure, usage data, AND DBQL lineage.
+
+    `path` overrides the server-default SCION_SHARE_MOUNT_PATH so the
+    user can point to a different folder without restarting the server.
     """
-    base = Path(SCION_SHARE_MOUNT_PATH)
+    mount = path or SCION_SHARE_MOUNT_PATH
+    base = Path(mount)
     if not base.exists():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                f"Share path not accessible: {SCION_SHARE_MOUNT_PATH}. "
-                "Check that the CIFS mount is active on the server."
+                f"Share path not accessible: {mount}. "
+                "Check that the path exists and is readable on the server."
             ),
         )
 
-    dict_paths = _iter_share_files(_DICT_DIR)
-    pdcr_paths = _iter_share_files(_PDCR_DIR)
-    lineage_paths = _iter_share_files(_LINEAGE_DIR)
+    dict_paths = _iter_share_files(_DICT_DIR, mount)
+    pdcr_paths = _iter_share_files(_PDCR_DIR, mount)
+    lineage_paths = _iter_share_files(_LINEAGE_DIR, mount)
 
     if not dict_paths:
         raise HTTPException(

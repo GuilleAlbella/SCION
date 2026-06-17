@@ -120,6 +120,8 @@ export default function SnapshotsPage() {
   const [shareImporting, setShareImporting] = useState(false);
   const [shareResult, setShareResult] = useState<ShareImportResponse | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  // Custom path: empty = use server default (SCION_SHARE_MOUNT_PATH)
+  const [sharePath, setSharePath] = useState("");
 
   // ── Resume in-flight import after page navigation ─────────────────
   // The user can navigate away from Snapshots while a dict-import is
@@ -205,13 +207,13 @@ export default function SnapshotsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function openSharePanel() {
+  async function openSharePanel(customPath?: string) {
     setSharePanelOpen(true);
     setShareResult(null);
     setShareError(null);
     setShareScanning(true);
     try {
-      const scan = await scanShare();
+      const scan = await scanShare(customPath || sharePath || undefined);
       setShareScan(scan);
     } catch (e: unknown) {
       setShareError(e instanceof Error ? e.message : "Could not reach share");
@@ -224,7 +226,7 @@ export default function SnapshotsPage() {
     setShareImporting(true);
     setShareError(null);
     try {
-      const result = await importFromShare();
+      const result = await importFromShare(false, sharePath || undefined);
       setShareResult(result);
       await mutate("snapshots");
       setActiveSnapshotId(result.snapshot_id);
@@ -251,6 +253,7 @@ export default function SnapshotsPage() {
     setShareScan(null);
     setShareResult(null);
     setShareError(null);
+    setSharePath("");
   }
 
   async function handleCreate() {
@@ -709,6 +712,30 @@ export default function SnapshotsPage() {
             Dict structure, PDCR usage data, and DBQL lineage are all combined into
             a single snapshot — no file upload required.
           </p>
+
+          {/* Path override — shown before the scan so the user can change
+              it and re-scan without reopening the panel. The placeholder
+              shows the server default so the field is self-documenting. */}
+          <div className="flex items-center gap-2 mb-4">
+            <label className="text-[11px] text-td-gray-dark font-medium whitespace-nowrap">
+              Share path
+            </label>
+            <input
+              type="text"
+              value={sharePath}
+              onChange={(e) => setSharePath(e.target.value)}
+              placeholder={shareScan?.share_path ?? "/mnt/vm1_share"}
+              disabled={shareImporting}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
+            />
+            <button
+              onClick={() => openSharePanel(sharePath || undefined)}
+              disabled={shareScanning || shareImporting}
+              className="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-td-navy rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {shareScanning ? "Scanning…" : "Scan"}
+            </button>
+          </div>
 
           {shareScanning && (
             <div className="text-xs text-td-gray-dark py-3">Scanning share…</div>

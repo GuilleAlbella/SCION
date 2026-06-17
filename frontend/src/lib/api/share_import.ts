@@ -19,14 +19,15 @@ export interface ShareImportResponse {
   lineage_warnings: string[];
 }
 
-export async function scanShare(): Promise<ShareScanResponse> {
-  const { data } = await apiClient.get<ShareScanResponse>("/share-import/scan");
+export async function scanShare(path?: string): Promise<ShareScanResponse> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : "";
+  const { data } = await apiClient.get<ShareScanResponse>(`/share-import/scan${params}`);
   return data;
 }
 
-export async function importFromShare(force = false): Promise<ShareImportResponse> {
-  const { data } = await apiClient.post<ShareImportResponse>(
-    `/share-import?force=${force}`
-  );
+export async function importFromShare(force = false, path?: string): Promise<ShareImportResponse> {
+  const params = new URLSearchParams({ force: String(force) });
+  if (path) params.set("path", path);
+  const { data } = await apiClient.post<ShareImportResponse>(`/share-import?${params}`);
   return data;
 }
