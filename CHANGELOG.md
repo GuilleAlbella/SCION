@@ -8,6 +8,41 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.16 (2026-06-17) - Unified share import + AI test pack
+
+**Snapshots: one production import path**
+The Snapshots toolbar now keeps the production path focused on **Import from
+Share** and leaves **Capture Live Snapshot** as the demo/local option. The old
+standalone dict-batch and parser-import buttons were removed from the primary
+toolbar because the share flow now covers dictionary, PDCR Object Usage, and
+lineage together.
+
+**Share import: server path override and manual file picker**
+The share import panel now has two modes:
+
+- **From server share** scans the mounted server path, defaulting to
+  `SCION_SHARE_MOUNT_PATH`, with an editable override for alternate mount
+  locations.
+- **Manual file picker** lets the user choose `.dat` and `.json` files from any
+  local or network folder. Dictionary/PDCR files create the snapshot first, and
+  lineage JSON is attached to the same snapshot when available.
+
+The backend exposes `/share-import/scan?path=...` and
+`/share-import?force=false&path=...`, and parser lineage import can now accept
+`snapshot_id` to attach lineage to an existing dictionary snapshot instead of
+creating a separate parser snapshot.
+
+**Share notifications**
+Added a notification bell and `/notifications/share` endpoint so operators can
+see when new files are available in the mounted share.
+
+**AI-assisted integration test pack**
+Added a SCION use-case document and an AI-assisted test suite scaffold with 29
+test objects / 12 test types, covering ingest, diff, lineage, impact, usage,
+criticality, and health checks.
+
+---
+
 ### v1.21.15 (2026-06-16) — Self-referencing lineage visible in side panels
 
 **Lineage: self-referencing tables now shown in "Where data comes from" / "Where data goes"**

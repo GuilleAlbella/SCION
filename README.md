@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.21.15
+**Version:** BETA v1.21.16
 
 ---
 
@@ -116,7 +116,7 @@ Parser/                  # Sample payloads from the extractor team
 | Page | Description |
 |------|-------------|
 | **Dashboard** | Mission control: animated KPIs, engine status, processing pipeline, breaking changes ticker, recent activity |
-| **Snapshots** | List snapshots, **3 ways to create**: capture live (demo backing DB), import parser JSON (two-phase preview/confirm), import dict `.dat` batch (multi-file drag-and-drop with coverage indicator). **Protected delete** with typed-ID confirmation |
+| **Snapshots** | List snapshots, **Import from Share** for dict + PDCR + lineage in one unified flow, optional manual file picker for alternate folders, and **Capture Live Snapshot** for demo backing DB. **Protected delete** with typed-ID confirmation |
 | **Changes** | Compare snapshots, filters, expandable before/after, **DDL Generator**, **Visual Diff**, **quick links** to Lineage/Timeline/Impact/Usage, **CSV export** |
 | **Impact Analysis** | Batch blast radius, donut charts, per-change table with **queries/users affected**, **Export Report** (HTML), **CSV export**, confetti on LOW risk |
 | **What-If Simulation** | Preview a hypothetical change's impact without applying it |
@@ -137,7 +137,8 @@ Parser/                  # Sample payloads from the extractor team
 | **Global Search** | `Ctrl+K` command palette — searches graph nodes + change events |
 | **Dark Mode** | Toggle in sidebar. Persists in localStorage |
 | **Keyboard Shortcuts** | `?` for panel. `G+D/C/I/W/L/A/T` for navigation |
-| **Toast Notifications** | Animated feedback on diff, DDL, impact, delete |
+| **Toast Notifications** | Animated feedback on diff, DDL, impact, delete, and imports |
+| **Share Notifications** | Sidebar bell checks the mounted share for new DataDNA files |
 | **Info Tooltips** | Hover/click `?` icons for metric explanations |
 
 ---
@@ -155,8 +156,11 @@ Parser/                  # Sample payloads from the extractor team
 ### Ingest pipelines
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/parser-import/lineage?dry_run=true\|false` | Import DataDNA parser JSON. Dry-run returns preview; real run persists snapshot + process + step + attribute_lineage |
+| POST | `/api/v1/parser-import/lineage?dry_run=true\|false` | Import DataDNA parser JSON. Dry-run returns preview; real run persists snapshot + process + step + attribute_lineage; optional `snapshot_id` attaches lineage to an existing dict snapshot |
 | POST | `/api/v1/dict-import` | Multipart upload of 1–6 dict `.dat` files. Auto-detects content type per file, validates batch consistency (source + run_id + temporal coherence), persists as one snapshot keyed by `extract_run_id`. Idempotent re-import |
+| GET | `/api/v1/share-import/scan?path=...` | Scan mounted share or alternate server path for dict, PDCR, and lineage files |
+| POST | `/api/v1/share-import?force=false&path=...` | Import dict + PDCR + lineage from the mounted share as one unified snapshot |
+| GET | `/api/v1/notifications/share` | Check whether new files are available in the mounted share |
 
 ### Diff & Changes
 | Method | Path | Description |
@@ -441,7 +445,7 @@ Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets
 ## Changelog
 
 The full changelog lives in [`CHANGELOG.md`](./CHANGELOG.md).
-Bump the version with `.	oolsump_version.ps1 X.Y.Z "summary"` and
+Bump the version with `.\tools\bump_version.ps1 X.Y.Z "summary"` and
 edit the generated stub in `CHANGELOG.md` (no longer in README).
 
 ---
