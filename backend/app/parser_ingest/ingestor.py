@@ -41,6 +41,7 @@ def ingest(
     *,
     source_system: Optional[str] = None,
     description: Optional[str] = None,
+    attach_to_snapshot_id: Optional[int] = None,
 ) -> IngestionReport:
     """Persist `payload` into SCION and return an ingestion report.
 
@@ -52,6 +53,9 @@ def ingest(
         source_system: Override for ``snapshot.source_system``. If omitted,
             derived from ``payload.platform.platform_natural_key``.
         description: Optional free-text description for the snapshot.
+        attach_to_snapshot_id: If given, lineage data is attached to this
+            existing snapshot instead of creating a new one. Useful for
+            unified imports where dict data was already ingested first.
 
     Returns:
         `IngestionReport` with snapshot_id, input counts, and persisted counts.
@@ -91,17 +95,29 @@ def ingest(
 
     with Session(bind=engine) as session:
         with session.begin():
-            # ──── 1. Create the Snapshot row ────
-            snap = Snapshot(
-                snapshot_time=payload.parse_timestamp,
-                source_system=source_system
-                    or f"parser:{payload.platform.platform_natural_key}",
-                description=description
-                    or f"Parser run {payload.parse_run_id}",
-                is_baseline=False,
-            )
-            session.add(snap)
-            session.flush()  # force PK assignment so FKs below can reference it
+            # ──── 1. Create or reuse Snapshot row ────
+            if attach_to_snapshot_id is not None:
+                from sqlalchemy import select as _select
+                snap = session.execute(
+                    _select(Snapshot).where(Snapshot.snapshot_id == attach_to_snapshot_id)
+                ).scalar_one_or_none()
+                if snap is None:
+                    from fastapi import HTTPException
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Snapshot {attach_to_snapshot_id} not found.",
+                    )
+            else:
+                snap = Snapshot(
+                    snapshot_time=payload.parse_timestamp,
+                    source_system=source_system
+                        or f"parser:{payload.platform.platform_natural_key}",
+                    description=description
+                        or f"Parser run {payload.parse_run_id}",
+                    is_baseline=False,
+                )
+                session.add(snap)
+                session.flush()  # force PK assignment so FKs below can reference it
             report.snapshot_id = snap.snapshot_id
 
             # ──── 2. Containers → schema_snapshot ────

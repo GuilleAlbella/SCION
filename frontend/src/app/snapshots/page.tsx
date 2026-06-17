@@ -19,7 +19,8 @@ import {
   type ImportProgressState,
 } from "@/lib/api/dict_import";
 import type { ParserImportResponse } from "@/lib/api/types";
-import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle } from "lucide-react";
+import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle, FolderSync, Database, GitBranch, Activity } from "lucide-react";
+import { scanShare, importFromShare, type ShareScanResponse, type ShareImportResponse } from "@/lib/api/share_import";
 import { useToast } from "@/components/shared/ToastProvider";
 import { DictImportProgress, type ImportPhase } from "@/components/shared/DictImportProgress";
 import {
@@ -112,6 +113,14 @@ export default function SnapshotsPage() {
   );
   const [dictCancelling, setDictCancelling] = useState(false);
 
+  // ──── Share import state ────
+  const [sharePanelOpen, setSharePanelOpen] = useState(false);
+  const [shareScan, setShareScan] = useState<ShareScanResponse | null>(null);
+  const [shareScanning, setShareScanning] = useState(false);
+  const [shareImporting, setShareImporting] = useState(false);
+  const [shareResult, setShareResult] = useState<ShareImportResponse | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+
   // ── Resume in-flight import after page navigation ─────────────────
   // The user can navigate away from Snapshots while a dict-import is
   // running (the long POST keeps going in the browser background).
@@ -182,6 +191,67 @@ export default function SnapshotsPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-open the share import panel when the notification bell sends
+  // the user here with ?autoImport=true.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("autoImport") === "true") {
+        openSharePanel();
+      }
+    }
+    // Run once on mount — router.push from the bell always navigates here fresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function openSharePanel() {
+    setSharePanelOpen(true);
+    setShareResult(null);
+    setShareError(null);
+    setShareScanning(true);
+    try {
+      const scan = await scanShare();
+      setShareScan(scan);
+    } catch (e: unknown) {
+      setShareError(e instanceof Error ? e.message : "Could not reach share");
+    } finally {
+      setShareScanning(false);
+    }
+  }
+
+  async function handleShareImport() {
+    setShareImporting(true);
+    setShareError(null);
+    try {
+      const result = await importFromShare();
+      setShareResult(result);
+      await mutate("snapshots");
+      setActiveSnapshotId(result.snapshot_id);
+      const lineagePart = result.lineage_attached
+        ? ` + ${result.lineage_tables} lineage tables, ${result.lineage_edges} edges`
+        : "";
+      toast(
+        `Snapshot #${result.snapshot_id} created from share. ` +
+        `${result.dict_result.tables_created} tables, ${result.dict_result.columns_created} columns${lineagePart}.`,
+        "success"
+      );
+    } catch (e: unknown) {
+      const msg = e && typeof e === "object" && "response" in e
+        ? (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Import failed"
+        : e instanceof Error ? e.message : "Import failed";
+      setShareError(msg);
+    } finally {
+      setShareImporting(false);
+    }
+  }
+
+  function clearShareImport() {
+    setSharePanelOpen(false);
+    setShareScan(null);
+    setShareResult(null);
+    setShareError(null);
+  }
 
   async function handleCreate() {
     setCreating(true);
@@ -598,10 +668,20 @@ export default function SnapshotsPage() {
         </p>
       </div>
 
-      {/* Action buttons — three import paths in one row.
-          Order: dict batch (the new primary path for real customers) →
-          parser JSON (demo / parser team) → capture live (demo only). */}
+      {/* Action buttons — four import paths in one row.
+          Order: share (primary for prod) → dict batch → parser JSON → capture live. */}
       <div className="flex gap-3 justify-end mb-4 flex-wrap">
+        <button
+          onClick={() => sharePanelOpen ? clearShareImport() : openSharePanel()}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            sharePanelOpen
+              ? "bg-emerald-600 text-white"
+              : "bg-emerald-500 text-white hover:bg-emerald-600"
+          }`}
+        >
+          <FolderSync size={16} />
+          Import from Share
+        </button>
         <button
           onClick={() => setDictPanelOpen((o) => !o)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -636,6 +716,120 @@ export default function SnapshotsPage() {
           {creating ? "Creating..." : "Capture Live Snapshot"}
         </button>
       </div>
+
+      {/* ──── Share import panel ────
+          Reads files directly from the server-side CIFS mount — no upload
+          needed. Shows a pre-flight scan of what's available, then lets
+          the user import everything in one click. */}
+      {sharePanelOpen && (
+        <div className="bg-white rounded-xl shadow-sm border-2 border-emerald-500 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FolderSync size={20} className="text-emerald-600" />
+              <h3 className="text-sm font-semibold text-td-navy">Import from Share</h3>
+            </div>
+            <button onClick={clearShareImport} className="text-td-gray-dark hover:text-td-navy">
+              <X size={16} />
+            </button>
+          </div>
+
+          <p className="text-[11px] text-td-gray-dark mb-4">
+            Imports all available files from the server-side share in one unified snapshot.
+            Dict structure, PDCR usage data, and DBQL lineage are all combined into
+            a single snapshot — no file upload required.
+          </p>
+
+          {shareScanning && (
+            <div className="text-xs text-td-gray-dark py-3">Scanning share…</div>
+          )}
+
+          {shareScan && !shareScanning && (
+            <>
+              {!shareScan.share_available ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-900">
+                  Share not reachable at <code className="font-mono">{shareScan.share_path}</code>.
+                  Check that the CIFS mount is active on the server.
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
+                  <div className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wider mb-2">
+                    Files available in share
+                  </div>
+                  <div className="space-y-1.5">
+                    <ShareFileRow
+                      icon={<Database size={11} />}
+                      label="Data Dictionary"
+                      files={shareScan.dict_files}
+                    />
+                    <ShareFileRow
+                      icon={<GitBranch size={11} />}
+                      label="Data Lineage"
+                      files={shareScan.lineage_files}
+                    />
+                    <ShareFileRow
+                      icon={<Activity size={11} />}
+                      label="Object Usage (PDCR)"
+                      files={shareScan.pdcr_files}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {shareScan.share_available && !shareResult && (
+                <button
+                  onClick={handleShareImport}
+                  disabled={shareImporting || shareScan.dict_files.length === 0}
+                  className="flex items-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Upload size={14} />
+                  {shareImporting ? "Importing…" : "Import all"}
+                </button>
+              )}
+            </>
+          )}
+
+          {shareResult && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                <div className="text-sm font-semibold text-td-navy">
+                  Snapshot #{shareResult.snapshot_id} created
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px] mb-2">
+                <SummaryStat label="Schemas" value={String(shareResult.dict_result.schemas_created)} />
+                <SummaryStat label="Tables" value={String(shareResult.dict_result.tables_created)} />
+                <SummaryStat label="Columns" value={String(shareResult.dict_result.columns_created)} />
+                {shareResult.lineage_attached && (
+                  <>
+                    <SummaryStat label="Lineage tables" value={String(shareResult.lineage_tables)} />
+                    <SummaryStat label="Lineage edges" value={String(shareResult.lineage_edges)} />
+                  </>
+                )}
+                {(shareResult.dict_result.object_usage_inserted ?? 0) > 0 && (
+                  <SummaryStat label="Usage rows" value={String(shareResult.dict_result.object_usage_inserted)} />
+                )}
+              </div>
+              {shareResult.lineage_warnings.length > 0 && (
+                <ul className="text-[10px] text-amber-700 space-y-0.5 mb-2">
+                  {shareResult.lineage_warnings.map((w, i) => (
+                    <li key={i}>⚠ {w}</li>
+                  ))}
+                </ul>
+              )}
+              <button onClick={clearShareImport} className="text-xs text-emerald-700 hover:underline">
+                Done — close panel
+              </button>
+            </div>
+          )}
+
+          {shareError && (
+            <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+              {shareError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ──── Dict batch import panel ────
           Toggled open by the "Import Dict Batch" button. Drag-drop or
@@ -1292,6 +1486,39 @@ function CountsCard({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ShareFileRow — one row in the share scan panel showing category + filenames.
+function ShareFileRow({
+  icon,
+  label,
+  files,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  files: string[];
+}) {
+  return (
+    <div className="flex items-start gap-2 text-[11px]">
+      <span className={`mt-0.5 shrink-0 ${files.length > 0 ? "text-emerald-600" : "text-gray-300"}`}>
+        {icon}
+      </span>
+      <div className="flex-1 min-w-0">
+        <span className={`font-medium ${files.length > 0 ? "text-td-navy" : "text-gray-400"}`}>
+          {label}
+        </span>
+        {files.length > 0 ? (
+          <div className="text-[10px] text-td-gray-dark mt-0.5">
+            {files.length} file{files.length !== 1 ? "s" : ""}:{" "}
+            {files.slice(0, 3).join(", ")}
+            {files.length > 3 ? ` +${files.length - 3} more` : ""}
+          </div>
+        ) : (
+          <div className="text-[10px] text-gray-400 mt-0.5">No files found</div>
+        )}
+      </div>
     </div>
   );
 }

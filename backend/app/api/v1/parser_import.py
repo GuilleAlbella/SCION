@@ -76,6 +76,14 @@ def import_lineage(
         default=None,
         description="Optional description stored on the snapshot row.",
     ),
+    attach_to_snapshot_id: Optional[int] = Query(
+        default=None,
+        alias="snapshot_id",
+        description=(
+            "If provided, lineage is attached to this existing snapshot instead "
+            "of creating a new one. Use after a dict import to produce a unified snapshot."
+        ),
+    ),
 ) -> Dict[str, Any]:
     """Ingest a parser lineage payload into SCION.
 
@@ -111,6 +119,7 @@ def import_lineage(
             parsed,
             source_system=source_system,
             description=description,
+            attach_to_snapshot_id=attach_to_snapshot_id,
         )
 
     return _report_to_response(report)

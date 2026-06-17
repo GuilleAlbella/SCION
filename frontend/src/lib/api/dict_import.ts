@@ -33,6 +33,14 @@ export interface DictImportResponse {
   partitioning_seen: number;
   tabletext_seen: number;
   files_received: number;
+  // PDCR fields (Pipeline 3) — present when PDCR files were included
+  dbql_inserted?: number;
+  object_usage_inserted?: number;
+  object_usage_skipped_orphan?: number;
+  criticality_recomputed?: boolean;
+  criticality_high_count?: number;
+  criticality_medium_count?: number;
+  criticality_low_count?: number;
 }
 
 /** Upload-progress callback shape, mirrored from axios's `progressEvent`
