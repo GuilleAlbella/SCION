@@ -122,6 +122,12 @@ export default function SnapshotsPage() {
   const [shareError, setShareError] = useState<string | null>(null);
   // Custom path: empty = use server default (SCION_SHARE_MOUNT_PATH)
   const [sharePath, setSharePath] = useState("");
+  // Manual file-picker mode
+  const shareFileInputRef = useRef<HTMLInputElement>(null);
+  const [shareManualFiles, setShareManualFiles] = useState<File[]>([]);
+  const [shareManualImporting, setShareManualImporting] = useState(false);
+  const [shareManualResult, setShareManualResult] = useState<ShareImportResponse | null>(null);
+  const [shareManualError, setShareManualError] = useState<string | null>(null);
 
   // ── Resume in-flight import after page navigation ─────────────────
   // The user can navigate away from Snapshots while a dict-import is
@@ -254,6 +260,101 @@ export default function SnapshotsPage() {
     setShareResult(null);
     setShareError(null);
     setSharePath("");
+    setShareManualFiles([]);
+    setShareManualResult(null);
+    setShareManualError(null);
+    if (shareFileInputRef.current) shareFileInputRef.current.value = "";
+  }
+
+  async function handleShareManualImport() {
+    if (shareManualFiles.length === 0) return;
+    setShareManualImporting(true);
+    setShareManualError(null);
+    setShareManualResult(null);
+
+    const datFiles = shareManualFiles.filter((f) => f.name.toLowerCase().endsWith(".dat"));
+    const jsonFiles = shareManualFiles.filter((f) => f.name.toLowerCase().endsWith(".json"));
+
+    try {
+      // Step 1: import .dat files → creates the snapshot
+      let snapshotId: number | null = null;
+      let dictResult: DictImportResponse | null = null;
+
+      if (datFiles.length > 0) {
+        dictResult = await importDictBatch(datFiles, false);
+        snapshotId = dictResult.snapshot_id;
+      }
+
+      // Step 2: import .json files → attach to same snapshot
+      let lineageAttached = false;
+      let lineageTables = 0;
+      let lineageEdges = 0;
+      const lineageWarnings: string[] = [];
+
+      for (const jsonFile of jsonFiles) {
+        const text = await jsonFile.text();
+        let payload: unknown;
+        try { payload = JSON.parse(text); }
+        catch { lineageWarnings.push(`${jsonFile.name}: invalid JSON`); continue; }
+
+        const report = await confirmParserImport(payload, {
+          description: `Lineage from ${jsonFile.name}`,
+          snapshotId: snapshotId ?? undefined,
+        });
+
+        if (snapshotId == null) snapshotId = report.snapshot_id ?? null;
+        lineageAttached = true;
+        lineageTables += report.persisted_counts?.tables ?? 0;
+        lineageEdges += report.persisted_counts?.graph_edges ?? 0;
+        if (report.warnings?.length) lineageWarnings.push(...report.warnings);
+      }
+
+      await mutate("snapshots");
+      if (snapshotId != null) {
+        setActiveSnapshotId(snapshotId);
+        const lineagePart = lineageAttached
+          ? ` + ${lineageTables} lineage tables, ${lineageEdges} edges`
+          : "";
+        toast(
+          `Snapshot #${snapshotId} created. ` +
+          `${dictResult?.tables_created ?? 0} tables, ${dictResult?.columns_created ?? 0} columns${lineagePart}.`,
+          "success"
+        );
+      }
+
+      // Reuse the ShareImportResponse shape for display
+      setShareManualResult({
+        snapshot_id: snapshotId ?? 0,
+        dict_result: dictResult ?? {
+          snapshot_id: snapshotId ?? 0,
+          skipped_existing: false,
+          source_system_name: "",
+          extract_run_id: "",
+          schemas_created: 0,
+          tables_created: 0,
+          columns_created: 0,
+          indices_created: 0,
+          partitioning_created: 0,
+          ddl_text_created: 0,
+          indices_seen: 0,
+          partitioning_seen: 0,
+          tabletext_seen: 0,
+          files_received: 0,
+        },
+        lineage_attached: lineageAttached,
+        lineage_tables: lineageTables,
+        lineage_edges: lineageEdges,
+        lineage_columns: 0,
+        lineage_warnings: lineageWarnings,
+      });
+    } catch (e: unknown) {
+      const msg = e && typeof e === "object" && "response" in e
+        ? (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Import failed"
+        : e instanceof Error ? e.message : "Import failed";
+      setShareManualError(msg);
+    } finally {
+      setShareManualImporting(false);
+    }
   }
 
   async function handleCreate() {
@@ -692,140 +793,168 @@ export default function SnapshotsPage() {
       </div>
 
       {/* ──── Share import panel ────
-          Reads files directly from the server-side CIFS mount — no upload
-          needed. Shows a pre-flight scan of what's available, then lets
-          the user import everything in one click. */}
+          Two modes: auto (reads from server share) or manual (file picker). */}
       {sharePanelOpen && (
         <div className="bg-white rounded-xl shadow-sm border-2 border-emerald-500 p-5 mb-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <FolderSync size={20} className="text-emerald-600" />
-              <h3 className="text-sm font-semibold text-td-navy">Import from Share</h3>
+              <h3 className="text-sm font-semibold text-td-navy">Import Snapshot</h3>
             </div>
             <button onClick={clearShareImport} className="text-td-gray-dark hover:text-td-navy">
               <X size={16} />
             </button>
           </div>
 
-          <p className="text-[11px] text-td-gray-dark mb-4">
-            Imports all available files from the server-side share in one unified snapshot.
-            Dict structure, PDCR usage data, and DBQL lineage are all combined into
-            a single snapshot — no file upload required.
-          </p>
+          {/* ── Mode A: Auto from server share ── */}
+          <div className="mb-4">
+            <div className="text-[11px] font-semibold text-td-navy mb-1">
+              From server share
+            </div>
+            <p className="text-[11px] text-td-gray-dark mb-3">
+              Reads dict, PDCR, and lineage files directly from the server-side
+              mount — no upload required.
+            </p>
 
-          {/* Path override — shown before the scan so the user can change
-              it and re-scan without reopening the panel. The placeholder
-              shows the server default so the field is self-documenting. */}
-          <div className="flex items-center gap-2 mb-4">
-            <label className="text-[11px] text-td-gray-dark font-medium whitespace-nowrap">
-              Share path
-            </label>
-            <input
-              type="text"
-              value={sharePath}
-              onChange={(e) => setSharePath(e.target.value)}
-              placeholder={shareScan?.share_path ?? "/mnt/vm1_share"}
-              disabled={shareImporting}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
-            />
-            <button
-              onClick={() => openSharePanel(sharePath || undefined)}
-              disabled={shareScanning || shareImporting}
-              className="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-td-navy rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
-            >
-              {shareScanning ? "Scanning…" : "Scan"}
-            </button>
-          </div>
-
-          {shareScanning && (
-            <div className="text-xs text-td-gray-dark py-3">Scanning share…</div>
-          )}
-
-          {shareScan && !shareScanning && (
-            <>
-              {!shareScan.share_available ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-900">
-                  Share not reachable at <code className="font-mono">{shareScan.share_path}</code>.
-                  Check that the CIFS mount is active on the server.
-                </div>
-              ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4">
-                  <div className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wider mb-2">
-                    Files available in share
-                  </div>
-                  <div className="space-y-1.5">
-                    <ShareFileRow
-                      icon={<Database size={11} />}
-                      label="Data Dictionary"
-                      files={shareScan.dict_files}
-                    />
-                    <ShareFileRow
-                      icon={<GitBranch size={11} />}
-                      label="Data Lineage"
-                      files={shareScan.lineage_files}
-                    />
-                    <ShareFileRow
-                      icon={<Activity size={11} />}
-                      label="Object Usage (PDCR)"
-                      files={shareScan.pdcr_files}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {shareScan.share_available && !shareResult && (
-                <button
-                  onClick={handleShareImport}
-                  disabled={shareImporting || shareScan.dict_files.length === 0}
-                  className="flex items-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Upload size={14} />
-                  {shareImporting ? "Importing…" : "Import all"}
-                </button>
-              )}
-            </>
-          )}
-
-          {shareResult && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle2 size={14} className="text-emerald-600" />
-                <div className="text-sm font-semibold text-td-navy">
-                  Snapshot #{shareResult.snapshot_id} created
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px] mb-2">
-                <SummaryStat label="Schemas" value={String(shareResult.dict_result.schemas_created)} />
-                <SummaryStat label="Tables" value={String(shareResult.dict_result.tables_created)} />
-                <SummaryStat label="Columns" value={String(shareResult.dict_result.columns_created)} />
-                {shareResult.lineage_attached && (
-                  <>
-                    <SummaryStat label="Lineage tables" value={String(shareResult.lineage_tables)} />
-                    <SummaryStat label="Lineage edges" value={String(shareResult.lineage_edges)} />
-                  </>
-                )}
-                {(shareResult.dict_result.object_usage_inserted ?? 0) > 0 && (
-                  <SummaryStat label="Usage rows" value={String(shareResult.dict_result.object_usage_inserted)} />
-                )}
-              </div>
-              {shareResult.lineage_warnings.length > 0 && (
-                <ul className="text-[10px] text-amber-700 space-y-0.5 mb-2">
-                  {shareResult.lineage_warnings.map((w, i) => (
-                    <li key={i}>⚠ {w}</li>
-                  ))}
-                </ul>
-              )}
-              <button onClick={clearShareImport} className="text-xs text-emerald-700 hover:underline">
-                Done — close panel
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={sharePath}
+                onChange={(e) => setSharePath(e.target.value)}
+                placeholder={shareScan?.share_path ?? "/mnt/vm1_share"}
+                disabled={shareImporting}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
+              />
+              <button
+                onClick={() => openSharePanel(sharePath || undefined)}
+                disabled={shareScanning || shareImporting}
+                className="px-3 py-1.5 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-td-navy rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                {shareScanning ? "Scanning…" : "Scan"}
               </button>
             </div>
-          )}
 
-          {shareError && (
-            <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
-              {shareError}
-            </div>
-          )}
+            {shareScanning && (
+              <p className="text-xs text-td-gray-dark">Scanning share…</p>
+            )}
+
+            {shareScan && !shareScanning && (
+              <>
+                {!shareScan.share_available ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-900">
+                    Not reachable at <code className="font-mono">{shareScan.share_path}</code>.
+                    Check that the CIFS mount is active on the server.
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
+                    <div className="space-y-1.5">
+                      <ShareFileRow icon={<Database size={11} />} label="Data Dictionary" files={shareScan.dict_files} />
+                      <ShareFileRow icon={<GitBranch size={11} />} label="Data Lineage" files={shareScan.lineage_files} />
+                      <ShareFileRow icon={<Activity size={11} />} label="Object Usage (PDCR)" files={shareScan.pdcr_files} />
+                    </div>
+                  </div>
+                )}
+
+                {shareScan.share_available && !shareResult && (
+                  <button
+                    onClick={handleShareImport}
+                    disabled={shareImporting || shareScan.dict_files.length === 0}
+                    className="flex items-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Upload size={14} />
+                    {shareImporting ? "Importing…" : "Import all"}
+                  </button>
+                )}
+              </>
+            )}
+
+            {shareResult && <ShareSuccessCard result={shareResult} onDone={clearShareImport} />}
+            {shareError && <ShareErrorCard message={shareError} />}
+          </div>
+
+          {/* ── Divider ── */}
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 border-t border-gray-200" />
+            <span className="text-[10px] text-td-gray-dark uppercase tracking-wider">or select files manually</span>
+            <div className="flex-1 border-t border-gray-200" />
+          </div>
+
+          {/* ── Mode B: Manual file picker ── */}
+          <div>
+            <p className="text-[11px] text-td-gray-dark mb-3">
+              Browse to the share from Windows, or pick any .dat / .json files from your machine.
+              Dict files and lineage JSON are combined into one snapshot automatically.
+            </p>
+
+            <input
+              ref={shareFileInputRef}
+              type="file"
+              multiple
+              accept=".dat,.json"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) setShareManualFiles(Array.from(e.target.files));
+              }}
+            />
+
+            {shareManualFiles.length === 0 ? (
+              <button
+                onClick={() => shareFileInputRef.current?.click()}
+                className="flex items-center gap-2 border-2 border-dashed border-gray-300 hover:border-emerald-400 text-td-gray-dark hover:text-td-navy px-4 py-3 rounded-lg text-sm transition-colors w-full justify-center"
+              >
+                <Upload size={16} />
+                Browse files (.dat, .json)
+              </button>
+            ) : (
+              <div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden mb-3">
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-[11px] text-td-gray-dark">
+                    <span>{shareManualFiles.length} file{shareManualFiles.length !== 1 ? "s" : ""} selected</span>
+                    <button
+                      onClick={() => { setShareManualFiles([]); setShareManualResult(null); setShareManualError(null); if (shareFileInputRef.current) shareFileInputRef.current.value = ""; }}
+                      className="text-blue-600 hover:underline text-[11px]"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {shareManualFiles.map((f, i) => (
+                      <li key={i} className="px-3 py-1.5 flex items-center gap-2 text-[11px]">
+                        <FileText size={11} className="text-gray-400 shrink-0" />
+                        <span className="flex-1 truncate font-medium text-td-navy">{f.name}</span>
+                        <span className="text-[10px] text-gray-500 font-mono">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${f.name.endsWith(".json") ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"}`}>
+                          {f.name.endsWith(".json") ? "lineage" : "dict"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {!shareManualResult && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleShareManualImport}
+                      disabled={shareManualImporting}
+                      className="flex items-center gap-2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    >
+                      <Upload size={14} />
+                      {shareManualImporting ? "Importing…" : "Import selected files"}
+                    </button>
+                    <button
+                      onClick={() => shareFileInputRef.current?.click()}
+                      className="text-xs text-td-gray-dark hover:text-td-navy"
+                    >
+                      Change files
+                    </button>
+                  </div>
+                )}
+
+                {shareManualResult && <ShareSuccessCard result={shareManualResult} onDone={clearShareImport} />}
+                {shareManualError && <ShareErrorCard message={shareManualError} />}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1484,6 +1613,49 @@ function CountsCard({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function ShareSuccessCard({ result, onDone }: { result: ShareImportResponse; onDone: () => void }) {
+  return (
+    <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <CheckCircle2 size={14} className="text-emerald-600" />
+        <div className="text-sm font-semibold text-td-navy">
+          Snapshot #{result.snapshot_id} created
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px] mb-2">
+        <SummaryStat label="Schemas" value={String(result.dict_result.schemas_created)} />
+        <SummaryStat label="Tables" value={String(result.dict_result.tables_created)} />
+        <SummaryStat label="Columns" value={String(result.dict_result.columns_created)} />
+        {result.lineage_attached && (
+          <>
+            <SummaryStat label="Lineage tables" value={String(result.lineage_tables)} />
+            <SummaryStat label="Lineage edges" value={String(result.lineage_edges)} />
+          </>
+        )}
+        {(result.dict_result.object_usage_inserted ?? 0) > 0 && (
+          <SummaryStat label="Usage rows" value={String(result.dict_result.object_usage_inserted)} />
+        )}
+      </div>
+      {result.lineage_warnings.length > 0 && (
+        <ul className="text-[10px] text-amber-700 space-y-0.5 mb-2">
+          {result.lineage_warnings.map((w, i) => <li key={i}>⚠ {w}</li>)}
+        </ul>
+      )}
+      <button onClick={onDone} className="text-xs text-emerald-700 hover:underline">
+        Done — close panel
+      </button>
+    </div>
+  );
+}
+
+function ShareErrorCard({ message }: { message: string }) {
+  return (
+    <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700">
+      {message}
     </div>
   );
 }

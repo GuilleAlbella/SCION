@@ -18,11 +18,12 @@ export async function previewParserImport(
 
 export async function confirmParserImport(
   payload: unknown,
-  opts?: { sourceSystem?: string; description?: string }
+  opts?: { sourceSystem?: string; description?: string; snapshotId?: number }
 ): Promise<ParserImportResponse> {
   const params = new URLSearchParams({ dry_run: "false" });
   if (opts?.sourceSystem) params.set("source_system", opts.sourceSystem);
   if (opts?.description) params.set("description", opts.description);
+  if (opts?.snapshotId != null) params.set("snapshot_id", String(opts.snapshotId));
   const { data } = await client.post<ParserImportResponse>(
     `/parser-import/lineage?${params.toString()}`,
     payload
