@@ -657,19 +657,15 @@ export default function SnapshotsPage() {
           A <strong>snapshot</strong> is a frozen, hashed copy of the warehouse&apos;s
           structural state at a point in time — databases, tables, views, columns,
           types, nullability. Everything else in SCION (diffs, impact, intelligence,
-          criticality) compares two snapshots to detect what moved. Three ways to
-          create one: <strong>Capture Live Snapshot</strong> (reads the local
-          backing DB; demo only),{" "}
-          <strong>Import from Parser</strong> (DataDNA parser JSON feed, two-phase
-          preview → confirm), or <strong>Import Dict Batch</strong> (the 6-file
-          .dat extract from the data-dictionary pipeline, idempotent by{" "}
-          <code className="font-mono">extract_run_id</code>). Only the latest
-          snapshot can be deleted; older ones are immutable to protect the diff history.
+          criticality) compares two snapshots to detect what moved.{" "}
+          <strong>Import from Share</strong> reads the dict, PDCR usage, and lineage
+          files directly from the configured server-side share — no upload needed.{" "}
+          <strong>Capture Live Snapshot</strong> reads the local backing DB (demo only).
+          Only the latest snapshot can be deleted; older ones are immutable to protect the diff history.
         </p>
       </div>
 
-      {/* Action buttons — four import paths in one row.
-          Order: share (primary for prod) → dict batch → parser JSON → capture live. */}
+      {/* Action buttons — two paths: share import (production) + live capture (demo). */}
       <div className="flex gap-3 justify-end mb-4 flex-wrap">
         <button
           onClick={() => sharePanelOpen ? clearShareImport() : openSharePanel()}
@@ -682,31 +678,6 @@ export default function SnapshotsPage() {
           <FolderSync size={16} />
           Import from Share
         </button>
-        <button
-          onClick={() => setDictPanelOpen((o) => !o)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            dictPanelOpen
-              ? "bg-blue-600 text-white"
-              : "bg-blue-500 text-white hover:bg-blue-600"
-          }`}
-        >
-          <Inbox size={16} />
-          Import Dict Batch
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-2 bg-td-orange text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-td-orange/90 transition-colors"
-        >
-          <Upload size={16} />
-          Import from Parser
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
         <button
           onClick={handleCreate}
           disabled={creating}
