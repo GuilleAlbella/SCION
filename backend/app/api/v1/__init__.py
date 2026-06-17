@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.router import API_V1_PREFIX
 from app.api.dependencies import require_api_key
-from app.api.v1 import alerts, changes, control, ddl, dict_import, diff, export, graph, health, impact, intelligence, metrics, objects, parser_import, reasoning, report, schema_tree, search, simulation, snapshots, system, timeline, usage
+from app.api.v1 import alerts, changes, control, ddl, dict_import, diff, export, graph, health, impact, intelligence, metrics, notifications, objects, parser_import, reasoning, report, schema_tree, search, simulation, snapshots, system, timeline, usage
 
 
 v1_router = APIRouter(prefix=API_V1_PREFIX)
@@ -44,6 +44,7 @@ v1_router.include_router(parser_import.router, dependencies=[Depends(require_api
 v1_router.include_router(dict_import.router, dependencies=[Depends(require_api_key)])
 v1_router.include_router(timeline.router, dependencies=[Depends(require_api_key)])
 v1_router.include_router(objects.router, dependencies=[Depends(require_api_key)])
+v1_router.include_router(notifications.router, dependencies=[Depends(require_api_key)])
 v1_router.include_router(health.router)
 # /system/version is intentionally public (no API key) so the Sidebar
 # pill can render before the user ever authenticates and so the same

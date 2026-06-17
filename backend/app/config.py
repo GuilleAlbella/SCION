@@ -53,3 +53,12 @@ SCION_API_BASE_URL: str = os.getenv(
 # - "mock"  – default, contract-only behaviour.
 # - "real"  – future integration with a live TAISA provider.
 SCION_TAISA_MODE: str = os.getenv("SCION_TAISA_MODE", "real")
+
+
+# Share-folder watcher ---------------------------------------------------------
+
+# Filesystem path where the shared import folder is mounted. SCION scans this
+# directory for new data files and notifies the user when fresher data is
+# available than the latest snapshot. Set to "" to disable the watcher.
+# Default matches the mount point configured on ps-ubuntu-0043.
+SCION_SHARE_MOUNT_PATH: str = os.getenv("SCION_SHARE_MOUNT_PATH", "/mnt/vm1_share")

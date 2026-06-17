@@ -6,6 +6,7 @@ import { useSelection } from "@/lib/SelectionContext";
 import GlobalSearch from "@/components/shared/GlobalSearch";
 import { useTheme } from "@/lib/ThemeContext";
 import VersionPill from "@/components/layout/VersionPill";
+import NotificationBell from "@/components/layout/NotificationBell";
 import { Moon, Sun } from "lucide-react";
 import {
   LayoutDashboard,
@@ -54,13 +55,16 @@ export default function Sidebar() {
       <div className="px-4 py-5 border-b border-white/10">
         <div className="flex items-center justify-between">
           <div className="text-td-orange font-bold text-sm tracking-wide">teradata.</div>
-          <button
-            onClick={toggle}
-            className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-            title={dark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
-            {dark ? <Sun size={13} className="text-yellow-400" /> : <Moon size={13} className="text-white/60" />}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <button
+              onClick={toggle}
+              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              title={dark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {dark ? <Sun size={13} className="text-yellow-400" /> : <Moon size={13} className="text-white/60" />}
+            </button>
+          </div>
         </div>
         <div className="mt-1">
           <span className="text-white text-lg font-light tracking-[0.15em]">PROJECT</span>
