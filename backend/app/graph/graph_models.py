@@ -48,9 +48,12 @@ class GraphEdge(Base):
 
     v0: structural definition only, no behaviour or relationships.
 
-    Indexes (alembic d05a1b2c3d4e): ``ix_graph_edge_snapshot`` on
-    ``snapshot_id`` so edge fetches for a snapshot don't scan the whole
-    table.
+    Indexes:
+    - ``ix_graph_edge_snapshot`` on ``snapshot_id`` so edge fetches for a
+      snapshot don't scan the whole table.
+    - ``ix_graph_edge_snapshot_source`` / ``ix_graph_edge_snapshot_target``
+      support recursive impact walks, which always constrain by snapshot and
+      then expand from either source_node_id or target_node_id.
     """
 
     __tablename__ = "graph_edge"
@@ -74,4 +77,8 @@ class GraphEdge(Base):
         nullable=True,
     )
 
-    __table_args__ = (Index("ix_graph_edge_snapshot", "snapshot_id"),)
+    __table_args__ = (
+        Index("ix_graph_edge_snapshot", "snapshot_id"),
+        Index("ix_graph_edge_snapshot_source", "snapshot_id", "source_node_id"),
+        Index("ix_graph_edge_snapshot_target", "snapshot_id", "target_node_id"),
+    )

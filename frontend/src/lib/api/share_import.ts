@@ -25,9 +25,18 @@ export async function scanShare(path?: string): Promise<ShareScanResponse> {
   return data;
 }
 
-export async function importFromShare(force = false, path?: string): Promise<ShareImportResponse> {
+export async function importFromShare(
+  force = false,
+  path?: string,
+  importId?: string,
+): Promise<ShareImportResponse> {
   const params = new URLSearchParams({ force: String(force) });
   if (path) params.set("path", path);
-  const { data } = await apiClient.post<ShareImportResponse>(`/share-import?${params}`);
+  if (importId) params.set("import_id", importId);
+  const { data } = await apiClient.post<ShareImportResponse>(
+    `/share-import?${params}`,
+    undefined,
+    { timeout: 0 },
+  );
   return data;
 }

@@ -8,6 +8,38 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.18 (2026-06-17) - Share import progress + impact traversal indexes
+
+**Share import progress restored**
+`Import from Share` now reuses the existing dictionary import progress panel
+instead of leaving the operator on a grey `Importing...` button. The frontend
+generates the same `import_id`, stores it in session storage, opens the
+`DictImportProgress` panel, and polls the existing `/dict-import/{id}/progress`
+channel while the server reads files directly from the mounted share.
+
+The backend now accepts that `import_id` on `/share-import`, passes it into the
+dict-import pipeline, and only marks the progress complete after optional
+lineage attachment has finished.
+
+**Impact summary performance**
+Added composite traversal indexes on `graph_edge(snapshot_id, source_node_id)`
+and `graph_edge(snapshot_id, target_node_id)`. These match the recursive
+upstream/downstream impact walks used during post-ingest impact summary
+generation. On the Transcend-DevTest full extract this reduced the observed
+post-ingest time from roughly 38 minutes to roughly 7 minutes.
+
+**Lineage attach metadata fix**
+Parser lineage attached to an existing dictionary snapshot no longer overwrites
+the snapshot's dictionary `object_count` with the smaller parser payload count.
+
+**Schema**
+Adds Alembic revision `c5f8a2b7d901` for the new graph-edge traversal indexes.
+The same migration also backfills the missing `ix_change_event_snapshot_to`
+index on fresh Alembic-created databases so Alembic and ORM metadata stay in
+sync.
+
+---
+
 ### v1.21.17 (2026-06-17) - Share import startup hotfix
 
 **Backend startup fix**

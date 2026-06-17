@@ -413,6 +413,7 @@ def import_dict_batch(
             "is registered."
         ),
     ),
+    finalize_progress: bool = True,
 ) -> DictImportResponse:
     """Accept up to 6 dict files in one request and persist as a snapshot.
 
@@ -981,7 +982,7 @@ def import_dict_batch(
                 caption="skipped (no PDCR files in batch)",
             )
 
-        if import_id is not None:
+        if import_id is not None and finalize_progress:
             import_progress.mark_finished(import_id, ok=True)
 
         # Final summary table — easy to grep for and to copy/paste

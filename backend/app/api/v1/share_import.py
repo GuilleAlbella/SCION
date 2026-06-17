@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from starlette.datastructures import UploadFile
 
 from app.config import SCION_SHARE_MOUNT_PATH
+from app.api.v1 import import_progress
 from app.api.v1.dict_import import DictImportResponse, import_dict_batch
 from app.parser_ingest import ingestor, noise_filter, teradata_parser
 
@@ -109,6 +110,7 @@ def scan_share(
 def import_from_share(
     force: bool = False,
     path: Optional[str] = None,
+    import_id: Optional[str] = None,
 ) -> ShareImportResponse:
     """Import all files from the share in one unified snapshot.
 
@@ -157,11 +159,14 @@ def import_from_share(
 
         # Call the existing dict-import handler directly. It handles
         # detection, validation, streaming to temp, persisting, and
-        # criticality re-compute. We skip progress tracking (import_id=None).
+        # criticality re-compute. When the UI supplies import_id, the
+        # normal dict-import progress screen can follow this share-side
+        # import too.
         dict_result: DictImportResponse = import_dict_batch(
             files=upload_files,
             force=force,
-            import_id=None,
+            import_id=import_id,
+            finalize_progress=False,
         )
     finally:
         for fobj in open_handles:
@@ -183,6 +188,12 @@ def import_from_share(
     if json_files:
         lineage_file = json_files[0]
         try:
+            if import_id is not None:
+                import_progress.start_step(
+                    import_id,
+                    "persist_pdcr",
+                    caption=f"attaching lineage from {lineage_file.name}...",
+                )
             payload_raw = json.loads(lineage_file.read_text(encoding="utf-8"))
             parsed = teradata_parser.parse(payload_raw)
             noise_filter.apply(parsed)
@@ -196,10 +207,34 @@ def import_from_share(
             lineage_edges = report.persisted_counts.get("graph_edges", 0)
             lineage_columns = report.persisted_counts.get("columns", 0)
             lineage_warnings = report.warnings
+            if import_id is not None:
+                import_progress.end_step(
+                    import_id,
+                    "persist_pdcr",
+                    caption=(
+                        f"lineage attached: {lineage_tables:,} tables, "
+                        f"{lineage_edges:,} edges"
+                    ),
+                )
         except teradata_parser.ParserPayloadError as exc:
             lineage_warnings.append(f"Lineage parse error: {exc}")
+            if import_id is not None:
+                import_progress.end_step(
+                    import_id,
+                    "persist_pdcr",
+                    caption=f"lineage parse warning: {exc}",
+                )
         except Exception as exc:
             lineage_warnings.append(f"Lineage import error: {exc}")
+            if import_id is not None:
+                import_progress.end_step(
+                    import_id,
+                    "persist_pdcr",
+                    caption=f"lineage import warning: {exc}",
+                )
+
+    if import_id is not None:
+        import_progress.mark_finished(import_id, ok=True)
 
     return ShareImportResponse(
         snapshot_id=snapshot_id,

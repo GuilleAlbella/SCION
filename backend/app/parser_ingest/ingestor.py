@@ -375,10 +375,14 @@ def ingest(
                 session.add(row)
                 persisted["attribute_lineage"] += 1
 
-            # Attach total object count to the snapshot for the metrics page.
-            snap.object_count = (
-                persisted["databases"] + persisted["tables"] + persisted["columns"]
-            )
+            # Attach total object count to parser-created snapshots only. When
+            # lineage is attached to an existing dict snapshot, preserve the
+            # dictionary object's headline count instead of replacing it with
+            # the smaller parser payload count.
+            if attach_to_snapshot_id is None:
+                snap.object_count = (
+                    persisted["databases"] + persisted["tables"] + persisted["columns"]
+                )
 
     report.persisted_counts = persisted
     return report
