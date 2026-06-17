@@ -8,6 +8,23 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.19 (2026-06-17) - Fix PDCR orphan lookup
+
+**PDCR object_usage rows now resolve correctly**
+`build_node_index` in `pdcr_persister.py` was building lookup keys from
+the raw `graph_node.object_name` column, which `graph_builder.py` stores
+as the *qualified* name `"schema.table"`. PDCR records carry only the
+bare `table_name`, so every lookup was a miss — 100% orphan rate.
+
+Fixed by stripping the schema prefix from `object_name` when building the
+in-memory index: `"UAT_NFL_COR_TED_TBL.my_table"` → key `"my_table"`,
+which matches the PDCR `table_name` field. The correction is a one-liner
+in `build_node_index`; no schema changes.
+
+No schema changes.
+
+---
+
 ### v1.21.18 (2026-06-17) - Share import progress + impact traversal indexes
 
 **Share import progress restored**

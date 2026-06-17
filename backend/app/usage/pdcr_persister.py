@@ -379,7 +379,13 @@ def build_node_index(
             GraphNode.node_id,
         ).where(GraphNode.snapshot_id == snapshot_id)
     ).all()
-    return {(s.lower(), n.lower()): nid for s, n, nid in rows}
+    # graph_builder stores object_name as "schema.table" (qualified); PDCR
+    # looks up by bare table_name — strip the schema prefix so keys match.
+    result: dict[tuple[str, str], int] = {}
+    for s, n, nid in rows:
+        bare = n.split(".", 1)[1] if "." in n else n
+        result[(s.lower(), bare.lower())] = nid
+    return result
 
 
 # ──── Helpers ────
