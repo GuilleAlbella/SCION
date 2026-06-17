@@ -1,0 +1,244 @@
+
+Object name : componentDiscovery_seq
+
+Lineage flow : gtb_componentDiscovery_aws_us_east_2 -> componentDiscovery_Base -> componentDiscovery_seq -> events_v -> dbp_ms_site_pog_config_hist_aws_us_east_2
+
+
+Transcend-DevTest§2026/06/07§30692§2026-06-07 18:05:22.268327§306922306950443044§1§insert into uat_acc_ted_tbl.dbp_ms_site_pog_config_hist_aws_us_east_2
+  (
+    cust_site_id,
+    Account_Id,
+    System_Id,
+    src_strt_ts,
+    src_end_ts,
+    action,
+    cur_state,
+    prev_state,
+    compute_node_ts,
+    clique_config,
+    tpa_primary_node_count,
+    tpa_cw_node_count,
+    tpa_hsn_node_count,
+    tpa_primary_instance_type,
+    tpa_cw_instance_type,
+    tpa_hsn_instance_type,
+    tpa_primary_persistentDataGB,
+    tpa_cw_persistentDataGB,
+    tpa_hsn_persistentDataGB,
+    tpa_primary_maxpersistentDataGB,
+    tpa_cw_maxpersistentDataGB,
+    tpa_hsn_maxpersistentDataGB,
+    di_created_ts,
+    di_proc_name,
+    di_rec_del_ind,
+    di_upd_ts
+  )
+select
+    events.cust_site_id,
+    events.Account_Id,
+    events.System_Id,
+    events.src_strt_ts,
+    events.src_end_ts,
+    events.action,
+    null as cur_state,
+    null as prev_state,
+    events.compute_node_ts,
+    events.clique_config,
+    events.tpa_primary_node_count,
+    events.tpa_cw_node_count,
+    events.tpa_hsn_node_count,
+    events.tpa_primary_instance_type,
+    events.tpa_cw_instance_type,
+    events.tpa_hsn_instance_type,
+    events.tpa_primary_persistentDataGB,
+    events.tpa_cw_persistentDataGB,
+    events.tpa_hsn_persistentDataGB,
+    events.tpa_primary_maxpersistentDataGB,
+    events.tpa_cw_maxpersistentDataGB,
+    events.tpa_hsn_maxpersistentDataGB,
+    current_timestamp(6) as di_created_ts,
+    'dbp_ms_site_pog_config_hist.region.upd_ins' as di_proc_name,
+    0 as di_rec_del_ind,
+    NULL as di_upd_ts
+from events_v events
+left join uat_acc_ted_tbl.dbp_ms_site_pog_config_hist_aws_us_east_2 hist
+on events.account_id = hist.account_id
+and events.system_id = hist.system_id
+and hist.di_rec_del_ind = 0
+and hist.action not like '%state_change'
+and hist.src_end_ts = cast('9999-12-31 23:59:59.999999+00:00' as TIMESTAMP(6) WITH TIME ZONE)
+where hist.account_id is null
+;§TEDW§§ENDREC
+
+-----------------
+
+Transcend-DevTest§2026/06/07§30692§2026-06-07 18:05:22.268327§306922306950443033§1§insert into events_v
+select
+  cust_site_id,
+  Account_Id,
+  System_Id,
+  action,
+  compute_node_ts,
+  clique_config,
+  tpa_primary_node_count,
+  tpa_cw_node_count,
+  tpa_hsn_node_count,
+  tpa_primary_instance_type,
+  tpa_cw_instance_type,
+  tpa_hsn_instance_type,
+  tpa_primary_persistentDataGB,
+  tpa_cw_persistentDataGB,
+  tpa_hsn_persistentDataGB,
+  tpa_primary_maxpersistentDataGB,
+  tpa_cw_maxpersistentDataGB,
+  tpa_hsn_maxpersistentDataGB,
+  payload_ts as src_strt_ts,
+  case when lead_payload_ts is null then cast('9999-12-31 23:59:59.999999+00:00' as TIMESTAMP(6) WITH TIME ZONE)
+    else lead_payload_ts - INTERVAL '0.000001' SECOND end as src_end_ts
+from componentDiscovery_seq events
+;§TEDW§§ENDREC
+
+
+---------------
+
+Transcend-DevTest§2026/06/07§30692§2026-06-07 18:05:22.268327§306922306950443031§1§insert into componentDiscovery_seq
+select
+  cust_site_id,
+  Account_Id,
+  System_Id,
+  action,
+  compute_node_ts,
+
+  clique_config,
+  LEAD(clique_config) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_clique_config,
+  case when coalesce(LEAD_clique_config, '') = coalesce(clique_config, '') then 0 else 1 end as clique_config_chg_ind,
+
+  tpa_primary_node_count,
+  LEAD(tpa_primary_node_count) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_primary_node_count,
+  case when zeroifnull(LEAD_tpa_primary_node_count) = zeroifnull(tpa_primary_node_count) then 0 else 1 end as tpa_primary_node_count_chg_ind,
+
+  tpa_cw_node_count,
+  LEAD(tpa_cw_node_count) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_cw_node_count,
+  case when zeroifnull(LEAD_tpa_cw_node_count) = zeroifnull(tpa_cw_node_count) then 0 else 1 end as tpa_cw_node_count_chg_ind,
+
+  tpa_hsn_node_count,
+  LEAD(tpa_hsn_node_count) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_hsn_node_count,
+  case when zeroifnull(LEAD_tpa_hsn_node_count) = zeroifnull(tpa_hsn_node_count) then 0 else 1 end as tpa_hsn_node_count_chg_ind,
+
+  tpa_primary_instance_type,
+  LEAD(tpa_primary_instance_type) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_primary_instance_type,
+  case when coalesce(LEAD_tpa_primary_instance_type, '') = coalesce(tpa_primary_instance_type, '') then 0 else 1 end as tpa_primary_instance_type_chg_ind,
+
+  tpa_cw_instance_type,
+  LEAD(tpa_cw_instance_type) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_cw_instance_type,
+  case when coalesce(LEAD_tpa_cw_instance_type, '') = coalesce(tpa_cw_instance_type, '') then 0 else 1 end as tpa_cw_instance_type,
+
+  tpa_hsn_instance_type,
+  LEAD(tpa_hsn_instance_type) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_hsn_instance_type,
+  case when coalesce(LEAD_tpa_hsn_instance_type, '') = coalesce(tpa_hsn_instance_type, '') then 0 else 1 end as tpa_hsn_instance_type,
+
+  tpa_primary_persistentDataGB,
+  LEAD(tpa_primary_persistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_primary_persistentDataGB,
+  case when zeroifnull(LEAD_tpa_primary_persistentDataGB) = zeroifnull(tpa_primary_persistentDataGB) then 0 else 1 end as tpa_primary_persistentDataGB_chg_ind,
+
+  tpa_cw_persistentDataGB,
+  LEAD(tpa_cw_persistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_cw_persistentDataGB,
+  case when zeroifnull(LEAD_tpa_cw_persistentDataGB) = zeroifnull(tpa_cw_persistentDataGB) then 0 else 1 end as tpa_cw_persistentDataGB_chg_ind,
+
+  tpa_hsn_persistentDataGB,
+  LEAD(tpa_hsn_persistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_hsn_persistentDataGB,
+  case when zeroifnull(LEAD_tpa_hsn_persistentDataGB) = zeroifnull(tpa_hsn_persistentDataGB) then 0 else 1 end as tpa_hsn_persistentDataGB_chg_ind,
+
+  tpa_primary_maxpersistentDataGB,
+  LEAD(tpa_primary_maxpersistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_primary_maxpersistentDataGB,
+  case when zeroifnull(LEAD_tpa_primary_maxpersistentDataGB) = zeroifnull(tpa_primary_maxpersistentDataGB) then 0 else 1 end as tpa_primary_maxpersistentDataGB_chg_ind,
+
+  tpa_cw_maxpersistentDataGB,
+  LEAD(tpa_cw_maxpersistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_cw_maxpersistentDataGB,
+  case when zeroifnull(LEAD_tpa_cw_maxpersistentDataGB) = zeroifnull(tpa_cw_maxpersistentDataGB) then 0 else 1 end as tpa_cw_maxpersistentDataGB_chg_ind,
+
+  tpa_hsn_maxpersistentDataGB,
+  LEAD(tpa_hsn_maxpersistentDataGB) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_tpa_hsn_maxpersistentDataGB,
+  case when zeroifnull(LEAD_tpa_hsn_maxpersistentDataGB) = zeroifnull(tpa_hsn_maxpersistentDataGB) then 0 else 1 end as tpa_hsn_maxpersistentDataGB_chg_ind,
+
+  payload_ts,
+  LEAD(payload_ts) over (partition by Account_Id,System_Id order by payload_ts) as LEAD_payload_ts
+  from componentDiscovery_Base
+  ;§TEDW§§ENDREC
+  
+  ------------------
+  
+  Transcend-DevTest§2026/06/07§30692§2026-06-07 18:05:22.268327§306922306950443028§1§insert into componentDiscovery_Base
+select
+  bh.cust_site_id,
+  v2.Account_Id,
+  v2.System_Id,
+  v2.action,
+  v2.current_state,
+  v2.previous_state,
+  v2.clique_config,
+  v2.compute_node_ts,
+  (case when compute_node_type0='TPA_PRIMARY' then compute_node_cnt0
+        when compute_node_type1='TPA_PRIMARY' then compute_node_cnt1
+        when compute_node_type2='TPA_PRIMARY' then compute_node_cnt2
+        else null end) as tpa_primary_node_count,
+  (case when compute_node_type0='TPA_CW' then compute_node_cnt0
+        when compute_node_type1='TPA_CW' then compute_node_cnt1
+        when compute_node_type2='TPA_CW' then compute_node_cnt2
+        else null end) as tpa_cw_node_count,
+  (case when compute_node_type0='TPA_HSN' then compute_node_cnt0
+        when compute_node_type1='TPA_HSN' then compute_node_cnt1
+        when compute_node_type2='TPA_HSN' then compute_node_cnt2
+        else null end) as tpa_hsn_node_count,
+  tpa_primary_type0 as tpa_primary_instance_type,
+  tpa_cw_type0 as tpa_cw_instance_type,
+  tpa_hsn_type0 as tpa_hsn_instance_type,
+  (case when storage_nodeType0='TPA_PRIMARY' then storage_persistentDataGB0
+        when storage_nodeType1='TPA_PRIMARY' then storage_persistentDataGB1
+        when storage_nodeType2='TPA_PRIMARY' then storage_persistentDataGB2
+        end) as tpa_primary_persistentDataGB,
+  (case when storage_nodeType0='TPA_CW' then storage_persistentDataGB0
+        when storage_nodeType1='TPA_CW' then storage_persistentDataGB1
+        when storage_nodeType2='TPA_CW' then storage_persistentDataGB2
+        end) as tpa_cw_persistentDataGB,
+  (case when storage_nodeType0='TPA_HSN' then storage_persistentDataGB0
+        when storage_nodeType1='TPA_HSN' then storage_persistentDataGB1
+        when storage_nodeType2='TPA_HSN' then storage_persistentDataGB2
+        end) as tpa_hsn_persistentDataGB,
+  (case when storage_nodeType0='TPA_PRIMARY' then storage_maxPersistentDataGB0
+        when storage_nodeType1='TPA_PRIMARY' then storage_maxPersistentDataGB1
+        when storage_nodeType2='TPA_PRIMARY' then storage_maxPersistentDataGB2
+        end) as tpa_primary_maxpersistentDataGB,
+  (case when storage_nodeType0='TPA_CW' then storage_maxPersistentDataGB0
+        when storage_nodeType1='TPA_CW' then storage_maxPersistentDataGB1
+        when storage_nodeType2='TPA_CW' then storage_maxPersistentDataGB2
+        end) as tpa_cw_maxpersistentDataGB,
+  (case when storage_nodeType0='TPA_HSN' then storage_maxPersistentDataGB0
+      when storage_nodeType1='TPA_HSN' then storage_maxPersistentDataGB1
+      when storage_nodeType2='TPA_HSN' then storage_maxPersistentDataGB2
+      end) as tpa_hsn_maxpersistentDataGB,
+  payload_ts
+from uat_raw_metricstreaming_vw.gtb_componentDiscovery_aws_us_east_2 v2
+join uat_acc_ted_con_vw.bank_acct_site_map bh
+  ON v2.account_id = bh.u_site_account_id
+JOIN batch_create_update_v bs
+  ON v2.payload_ts > bs.start_di_created_ts_new
+WHERE v2.payload_ts between bh.bank_acct_site_map_strt_ts and bh.bank_acct_site_map_end_ts
+ AND trim(bh.site_install_status) in ('1', '9')
+ AND trim(bh.u_solution_sub_type) = '1'
+ AND v2.payload_ts > bs.start_di_created_ts_new
+ AND v2.system_type='pogs'
+ AND v2.action not = 'state_change'
+
+ -- remove potential duplicated row that have same attributes
+QUALIFY row_number() over (partition by v2.account_id, v2.system_id,
+  v2.action, v2.current_state, v2.previous_state, tpa_primary_node_count,
+  tpa_cw_node_count, tpa_hsn_node_count, tpa_primary_instance_type,
+  tpa_cw_instance_type, tpa_hsn_instance_type, tpa_primary_persistentDataGB,
+  tpa_cw_persistentDataGB, tpa_hsn_persistentDataGB, tpa_primary_maxpersistentDataGB,
+  tpa_cw_maxpersistentDataGB, tpa_hsn_maxpersistentDataGB, payload_ts
+  order by compute_node_ts) = 1
+;§TEDW§§ENDREC
+
+
+

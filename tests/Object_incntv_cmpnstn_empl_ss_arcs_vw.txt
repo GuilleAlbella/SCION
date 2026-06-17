@@ -1,0 +1,7 @@
+Object name  : incntv_cmpnstn_empl_ss_arcs_vw
+Schema       : STG_CALLIDUS_VW
+Test type    : unchanged
+
+Note: Provided by Rahul Kulkarni as a "known unchanged table" (email 2026-06-10).
+      CreateTimestamp 2018-12-12 19:56:39, LastAlterTimestamp 2019-02-12 06:15:06.
+      Last alteration was in 2019; no recent changes expected in 2026 snapshots.

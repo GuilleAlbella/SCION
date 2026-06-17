@@ -1,0 +1,8 @@
+Object name  : oprtnty_relship_hist
+Schema       : UAT_NFL_COR_TED_TBL
+Test type    : dropped
+
+Note: Provided by Rahul Kulkarni as a "changed" object (email 2026-06-10).
+      TABLE_REMOVED confirmed in snapshots [4, 5, 7] via breaking-change test.
+      Verifies UC-06: SCION reports high-level object drops at the correct granularity
+      (table-level event, not one row per dropped column).

@@ -1,0 +1,8 @@
+Object name  : oprtnty_relship_hist
+Schema       : UAT_NFL_COR_TED_TBL
+Test type    : breaking
+
+Note: Provided by Rahul Kulkarni as a "known changed table" (email 2026-06-10).
+      SCION detected 27 structural modifications (COLUMN_REMOVED) in snapshots #5 and #6.
+      Verifies that SCION classifies at least one of those column removals as a breaking change,
+      i.e. a change that could break downstream consumers of this table.

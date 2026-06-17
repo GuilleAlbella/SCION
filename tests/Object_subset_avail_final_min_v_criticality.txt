@@ -1,0 +1,7 @@
+Object name  : subset_avail_final_min_v
+Test type    : criticality
+
+Note: TEDW.SUBSET_AVAIL_FINAL_MIN_V confirmed with criticality_level=LOW in snapshot 4.
+      This object is part of the known lineage chain (subset_avail_metrics_min_max_v ->
+      subset_avail_metrics_beg_btw_end_v -> subset_avail_final_min_v -> subset_v3).
+      Verifies UC-14: criticality scoring is available for lineage-graph objects.

@@ -1,0 +1,6 @@
+Object name  : subset_compute_sum_v
+Test type    : exists
+
+Note: Confirms that subset_compute_sum_v exists in the lineage snapshot (#7).
+      This is a prerequisite check for the lineage and usage tests on this object.
+      Source: Ashish Suryawanshi (email 2026-06-10).

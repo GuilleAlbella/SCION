@@ -1,0 +1,193 @@
+
+Object name : subset_compute_sum_v
+
+Lineage flow : subset_avail_final_min_v -> subset_compute_v -> subset_compute_sum_v -> subset_v3
+
+Transcend-DevTest§2026/06/08§30716§2026-06-07 21:57:24.960638§307162306950708839§1§INSERT INTO subset_v3
+SELECT sv.bank_id,
+      sv.cust_site_id,
+      sv.account_id,
+      sv.log_dt,
+      sv.log_hr,
+      case when sv.log_min is not null then 1 else 0 end as pog_log_min,
+      case when worker.log_min is not null then 1 else 0 end as cw_log_min,
+      zeroifnull(cmpt.cog_actv_min_ttl) as compute_log_min,
+      sv.log_ts,
+      sv.pltfrm_desc,
+      sv.bank_system_use,
+      sv.lic_pckg_desc,
+      ut.tshirt_size_cd,
+      sv.pog_instance_type as pog_instnc_type_desc,
+      sv.clique_config,
+      sv.pog_node_cnt,
+      zeroifnull(worker.cw_node_cnt),
+
+      zeroifnull(ut.clstr_unit_per_node_per_min_qty) as pog_unit_per_node_per_min_qty,
+      zeroifnull(ut.credit_unit_per_clstr_per_min_qty) as credit_unit_per_clstr_per_min_qty,
+
+      /** Primary IOPS quantity **/
+      ut.iops_per_node,
+      case when sv.clique_config = 'MNC' then (ut.iops_per_node * sv.pog_node_cnt) else 0 end as pog_iops_qty,
+
+      /** Primary utilization **/
+      (pog_unit_per_node_per_min_qty * sv.pog_node_cnt) as pog_unit_utlztn_nbr,
+
+      /** Credit to Customer utilization **/
+      case when sv.bank_system_use in ('Trials', 'Self-Service Trials') then 0 else zeroifnull(ut.credit_unit_per_clstr_per_min_qty) end as credit_unit_utlztn_nbr,
+
+      /** Compute Worker utilization **/
+      zeroifnull(worker.cw_units_qty_ttl) as cw_unit_utlztn_nbr,
+
+      /** Compute Profile History (COG) utilization **/
+      zeroifnull(cmpt.cog_units_qty_ttl) as compute_unit_utlztn_nbr,
+
+      zeroifnull(mdm.frml_id)
+FROM subset_avail_final_min_v sv
+LEFT JOIN subset_worker_sum_v worker
+ ON sv.bank_id = worker.bank_id
+ AND sv.cust_site_id = worker.cust_site_id
+ AND sv.account_id = worker.account_id
+ AND sv.log_dt = worker.log_dt
+ AND sv.log_hr = worker.log_hr
+ AND sv.log_min = worker.log_min
+LEFT JOIN subset_compute_sum_v cmpt
+ ON sv.bank_id = cmpt.bank_id
+ AND sv.cust_site_id = cmpt.cust_site_id
+ AND sv.account_id = cmpt.account_id
+ AND sv.log_dt = cmpt.log_dt
+ AND sv.log_hr = cmpt.log_hr
+ AND sv.log_min = cmpt.log_min
+LEFT JOIN (SELECT bank_id, cust_site_id, price_pckg_name, pltfrm_name, instnc_type_name, instnc_config_strt_dt, instnc_config_end_dt
+           FROM uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist
+           WHERE dply_name = 'VantageCloud' and edition_name = 'Lake' and cluster_type_name = 'Primary Cluster' group by 1,2,3,4,5,6,7) ut_3
+  ON sv.bank_id = ut_3.bank_id
+  AND sv.cust_site_id = ut_3.cust_site_id
+  AND sv.lic_pckg_desc = ut_3.price_pckg_name
+  AND sv.pltfrm_desc = ut_3.pltfrm_name
+  AND sv.pog_instance_type = ut_3.instnc_type_name
+  AND sv.log_ts between ut_3.instnc_config_strt_dt and ut_3.instnc_config_end_dt
+LEFT JOIN (SELECT bank_id, price_pckg_name, pltfrm_name, instnc_type_name, instnc_config_strt_dt, instnc_config_end_dt
+           FROM uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist
+           WHERE cust_site_id = 'ALL' and dply_name = 'VantageCloud' and edition_name = 'Lake' and cluster_type_name = 'Primary Cluster' group by 1,2,3,4,5,6) ut_4
+  ON sv.bank_id = ut_4.bank_id
+  AND sv.lic_pckg_desc = ut_4.price_pckg_name
+  AND sv.pltfrm_desc = ut_4.pltfrm_name
+  AND sv.pog_instance_type = ut_4.instnc_type_name
+  AND sv.log_ts between ut_4.instnc_config_strt_dt and ut_4.instnc_config_end_dt
+JOIN uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist ut
+  ON (case when ut_3.bank_id is not null then ut_3.bank_id when ut_4.bank_id is not null then ut_4.bank_id else 'ALL' end) = ut.bank_id
+  AND (case when ut_3.cust_site_id is null then 'ALL' else ut_3.cust_site_id end) = ut.cust_site_id
+  AND ut.dply_name = 'VantageCloud'
+  AND ut.edition_name = 'Lake'
+  AND ut.cluster_type_name = 'Primary Cluster'
+  AND sv.lic_pckg_desc = ut.price_pckg_name
+  AND sv.pltfrm_desc = ut.pltfrm_name
+  AND sv.pog_instance_type = ut.instnc_type_name
+  AND sv.log_ts between ut.instnc_config_strt_dt and ut.instnc_config_end_dt
+LEFT JOIN uat_mdm_edw_sub.vantage_unit_frml_hist_vw mdm
+  ON frml_name = 'VantageCloud_Lake_On_Off'
+  AND sv.log_dt between mdm.frml_eff_begin_dt and mdm.frml_eff_end_dt;§TEDW§§ENDREC
+
+-------------
+
+   Transcend-DevTest§2026/06/08§30692§2026-06-07 22:15:17.630383§306922306950453263§1§INSERT INTO subset_compute_sum_v
+ SELECT scv.bank_id,
+          scv.cust_site_id,
+          scv.account_id,
+          scv.log_dt,
+          scv.log_hr,
+          scv.log_min,
+          sum(scv.cog_actv_min) as cog_actv_min_ttl,
+          sum(scv.cog_unit_per_clstr_per_min_qty) as cog_units_qty_ttl
+ FROM
+ ( SELECT bank_id,
+              cust_site_id,
+              account_id,
+              log_dt,
+              log_hr,
+              log_min,
+              cog_instnce_name,
+              cog_node_cnt,
+              case when log_min is not null then 1 else 0 end as cog_actv_min,
+              zeroifnull(cog_unit_per_clstr_per_min_qty) as cog_unit_per_clstr_per_min_qty
+   FROM subset_compute_v
+   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10) scv
+ GROUP BY 1, 2, 3, 4, 5, 6;§TEDW§§ENDREC
+
+-----------------------
+
+Transcend-DevTest§2026/06/08§30692§2026-06-07 22:15:17.630383§306922306950453260§1§INSERT INTO subset_compute_v
+ SELECT slv.bank_id,
+          slv.cust_site_id,
+          slv.account_id,
+          slv.system_id,
+          slv.log_dt,
+          slv.log_hr,
+          slv.log_min,
+          slv.log_ts,
+          cph.cog_dprtmnt_desc,
+          cph.cog_instnce_name,
+          cph.cog_profile_name,
+          cph.cog_map_name,
+          cph.cog_node_cnt,
+          ut_2.cog_unit_per_clstr_per_min_qty,
+          cph.start_ts,
+          cph.end_ts,
+          start_ts_nu,
+          end_ts_nu_new,
+          end_ts_nu,
+          cph.cog_instnce_type,
+          cph.cog_amps_per_node_cnt
+   FROM subset_avail_final_min_v slv
+   JOIN (SEL
+    account_id,
+    cog_system_id,
+    cog_dprtmnt_desc,
+    cog_instnce_name,
+    cog_profile_name,
+    cog_map_name,
+    cog_node_cnt,
+    start_ts,
+    end_ts,
+    CAST(CAST(((start_dt) (FORMAT 'yyyy-mm-dd')) AS VARCHAR(10)) || ' ' || TRIM((CAST ((start_hr || LPAD(TRIM(start_min),2,'0') || '00') AS INTEGER)) (FORMAT '99:99:99')) || '+00:00' AS TIMESTAMP(6) WITH TIME ZONE) AS start_ts_nu,
+    CAST(CAST(((end_dt) (FORMAT 'yyyy-mm-dd')) AS VARCHAR(10)) || ' ' || TRIM((CAST ((end_hr || LPAD(TRIM(end_min),2,'0') || '00') AS INTEGER)) (FORMAT '99:99:99')) || '+00:00' AS TIMESTAMP(6) WITH TIME ZONE) AS end_ts_nu_new,
+    COALESCE(end_ts_nu_new, CURRENT_TIMESTAMP AT TIME ZONE 'GMT' ) AS end_ts_nu,
+    cog_instnce_type,
+    cog_amps_per_node_cnt
+    FROM uat_acc_ted_con_vw.dbp_ms_site_compute_profile_hist_evnt_cmplt_aws_us_east_2) cph
+     ON slv.account_id = cph.account_id
+     AND slv.system_id = cph.cog_system_id
+   LEFT JOIN (SELECT bank_id, cust_site_id, price_pckg_name, pltfrm_name, cog_size_desc, cog_instnce_type, cog_config_strt_dt, cog_config_end_dt
+              FROM uat_acc_ted_con_vw.dbp_ms_site_cog_on_off_unit_config_hist
+              WHERE dply_name = 'VantageCloud' and edition_name = 'Lake' group by 1,2,3,4,5,6,7,8) ut_3
+       ON slv.bank_id = ut_3.bank_id
+       AND slv.cust_site_id = ut_3.cust_site_id
+       AND slv.lic_pckg_desc = ut_3.price_pckg_name
+       AND slv.pltfrm_desc = ut_3.pltfrm_name
+       AND cph.cog_map_name = ut_3.cog_size_desc
+       AND cph.cog_instnce_type = ut_3.cog_instnce_type
+       AND slv.log_ts between ut_3.cog_config_strt_dt and ut_3.cog_config_end_dt
+   LEFT JOIN (SELECT bank_id, price_pckg_name, pltfrm_name, cog_size_desc, cog_instnce_type, cog_config_strt_dt, cog_config_end_dt
+              FROM uat_acc_ted_con_vw.dbp_ms_site_cog_on_off_unit_config_hist
+              WHERE cust_site_id = 'ALL' and dply_name = 'VantageCloud' and edition_name = 'Lake' group by 1,2,3,4,5,6,7) ut_4
+       ON slv.bank_id = ut_4.bank_id
+       AND slv.lic_pckg_desc = ut_4.price_pckg_name
+       AND slv.pltfrm_desc = ut_4.pltfrm_name
+       AND cph.cog_map_name = ut_4.cog_size_desc
+       AND cph.cog_instnce_type = ut_4.cog_instnce_type
+       AND slv.log_ts between ut_4.cog_config_strt_dt and ut_4.cog_config_end_dt
+   JOIN uat_acc_ted_con_vw.dbp_ms_site_cog_on_off_unit_config_hist ut_2
+       ON (case when ut_3.bank_id is not null then ut_3.bank_id when ut_4.bank_id is not null then ut_4.bank_id else 'ALL' end) = ut_2.bank_id
+       AND (case when ut_3.cust_site_id is null then 'ALL' else ut_3.cust_site_id end) = ut_2.cust_site_id
+       AND ut_2.dply_name = 'VantageCloud'
+       AND ut_2.edition_name = 'Lake'
+       AND slv.lic_pckg_desc = ut_2.price_pckg_name
+       AND slv.pltfrm_desc = ut_2.pltfrm_name
+       AND cph.cog_map_name = ut_2.cog_size_desc
+       AND cph.cog_instnce_type = ut_2.cog_instnce_type
+       AND slv.log_ts between ut_2.cog_config_strt_dt and ut_2.cog_config_end_dt
+   WHERE slv.log_ts between start_ts_nu and end_ts_nu
+   GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21;§TEDW§§ENDREC
+   
+   ---------
+   

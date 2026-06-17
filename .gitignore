@@ -92,3 +92,9 @@ Microsoft/
 # Internal meeting transcripts — kept locally for context but not
 # part of the source tree.
 Transcripciones/
+
+# Test runner output
+tests/results/
+
+# Internal email files
+*.msg

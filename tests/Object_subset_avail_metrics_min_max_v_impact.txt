@@ -1,0 +1,9 @@
+Object name  : subset_avail_metrics_min_max_v
+Test type    : impact
+Min downstream : 1
+
+Note: subset_avail_metrics_min_max_v is the upstream source in the availability lineage chain:
+      subset_avail_metrics_min_max_v -> subset_avail_metrics_beg_btw_end_v -> subset_avail_final_min_v -> subset_v3
+      It should have at least 1 direct downstream node in SCION's graph.
+      Validates that a structural change to this object would cascade to downstream consumers.
+      Source: Ashish Suryawanshi lineage test files (email 2026-06-10).

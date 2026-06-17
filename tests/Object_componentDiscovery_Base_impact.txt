@@ -1,0 +1,9 @@
+Object name  : componentDiscovery_Base
+Test type    : impact
+Min downstream : 2
+
+Note: componentDiscovery_Base is the upstream source in the componentDiscovery lineage chain:
+      componentDiscovery_Base -> componentDiscovery_seq -> events_v -> dbp_ms_site_pog_config_hist
+      It should have at least 2 direct downstream nodes visible in SCION's graph.
+      Validates that a structural change to this object would cascade to downstream consumers.
+      Source: Ashish Suryawanshi lineage test files (email 2026-06-10).

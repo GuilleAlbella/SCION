@@ -1,0 +1,7 @@
+Object name  : componentDiscovery_Base
+Test type    : criticality
+
+Note: TEDW.COMPONENTDISCOVERY_BASE confirmed with criticality_level=LOW in snapshot 4.
+      Even without PDCR usage data, the graph_score is populated from lineage centrality.
+      Verifies UC-14: SCION computes criticality ranking based on structural graph position
+      when PDCR is not yet loaded. Combined score will increase once PDCR is ingested.

@@ -1,0 +1,6 @@
+Object name  : componentDiscovery_seq
+Test type    : exists
+
+Note: Confirms that componentDiscovery_seq exists in the lineage snapshot (#7).
+      This is a prerequisite check — if this fails, lineage tests for this object
+      are expected to fail too. Source: Ashish Suryawanshi (email 2026-06-10).

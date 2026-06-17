@@ -1,0 +1,8 @@
+Object name  : scion_instance
+Test type    : snapshot_health
+Min downstream : 100
+
+Note: Validates that the SCION instance is healthy and the active snapshot contains
+      a minimum number of objects (100 for lineage/parser snapshots). This is a smoke test that should be run
+      first to confirm the environment is operational before running functional tests.
+      Checks: /health/ready (DB + engines up) and /metrics/snapshot/{id} (object count).

@@ -1,0 +1,8 @@
+Object name  : incntv_cmpnstn_empl_ss_arcs_vw
+Schema       : STG_CALLIDUS_VW
+Test type    : dropped
+
+Note: TABLE_REMOVED confirmed in snapshots [4, 5, 7] via breaking-change test (44 breaking events).
+      This object also has 51 structural COLUMN_REMOVED events (snaps 5-6), but the
+      table-level drop in snap 7 confirms it was eventually removed entirely.
+      Verifies UC-06: high-level object drop detection.

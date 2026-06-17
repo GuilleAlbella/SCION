@@ -1,0 +1,8 @@
+Object name  : itc_ar_historical_global_report
+Schema       : UAT_RAW_ERP_OP_VW
+Test type    : added
+
+Note: Provided by Rahul Kulkarni as an "added or dropped object" (email 2026-06-10).
+      CreateTimestamp 2026-05-21 04:58:21, LastAlterTimestamp 2026-05-21 05:45:03.
+      Recently created object — expected to appear as TABLE_ADDED in a snapshot diff
+      where the "from" snapshot predates 2026-05-21.

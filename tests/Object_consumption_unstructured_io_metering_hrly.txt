@@ -1,0 +1,7 @@
+Object name  : consumption_unstructured_io_metering_hrly
+Schema       : UAT_raw_metricstreaming_VW
+Test type    : changed
+
+Note: Provided by Rahul Kulkarni as a "known changed table" (email 2026-06-10).
+      CreateTimestamp 2026-04-08 17:10:08, LastAlterTimestamp 2026-05-15 12:29:21.
+      Structural change expected between snapshots that bracket May 2026.

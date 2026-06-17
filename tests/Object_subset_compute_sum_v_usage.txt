@@ -1,0 +1,7 @@
+Object name  : subset_compute_sum_v
+Test type    : usage
+
+Note: Provided by Ashish Suryawanshi as part of the lineage test set (email 2026-06-10).
+      This view is part of the Transcend billing/usage pipeline and is expected to have
+      PDCR query activity. Validates that SCION correctly surfaces usage data for
+      objects that appear in the DataDNA DBQL extract (Medium 20260607).

@@ -1,0 +1,9 @@
+Object name  : snapshot_diff
+Test type    : diff_count
+Min downstream : 10
+
+Note: Verifies UC-03 (Large Snapshot Diff). Checks that the diff between the configured
+      snapshot pair (--snapshot-from / --snapshot args) returns at least 10 change rows,
+      confirming that the diff was computed and SCION can produce a structured change list.
+      Run with: --snapshot-from 6 --snapshot 7  (or any other pair with known changes).
+      The 10-change threshold is conservative; real Transcend diffs produce thousands.

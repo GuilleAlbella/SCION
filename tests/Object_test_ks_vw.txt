@@ -1,0 +1,8 @@
+Object name  : test_ks_vw
+Schema       : TD_METRIC_SVC
+Test type    : added
+
+Note: Provided by Rahul Kulkarni as an "added or dropped object" (email 2026-06-10).
+      CreateTimestamp 2026-05-29 13:01:12, LastAlterTimestamp 2026-05-29 13:01:12.
+      Recently created object — expected to appear as TABLE_ADDED in a snapshot diff
+      where the "from" snapshot predates 2026-05-29.

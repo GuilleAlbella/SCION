@@ -1,0 +1,8 @@
+Object name  : test_ks_vw
+Schema       : TD_METRIC_SVC
+Test type    : absent
+
+Note: Provided by Rahul Kulkarni as an "added or dropped object" (email 2026-06-10).
+      CreateTimestamp 2026-05-29. This schema was NOT present in the ingested snapshots.
+      Verifies that SCION correctly does not show this object — confirming the data gap
+      and that ingest coverage needs to be extended to TD_METRIC_SVC.

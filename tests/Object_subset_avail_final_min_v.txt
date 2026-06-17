@@ -1,0 +1,163 @@
+
+Object name : subset_avail_final_min_v
+
+Lineage flow : subset_avail_metrics_min_max_v -> subset_avail_metrics_beg_btw_end_v -> subset_avail_final_min_v -> subset_v3
+
+
+  Transcend-DevTest§2026/06/08§30692§2026-06-07 22:15:17.630383§306922306950453268§1§INSERT INTO subset_v3
+SELECT sv.bank_id,
+      sv.cust_site_id,
+      sv.account_id,
+      sv.log_dt,
+      sv.log_hr,
+      case when sv.log_min is not null then 1 else 0 end as pog_log_min,
+      case when worker.log_min is not null then 1 else 0 end as cw_log_min,
+      zeroifnull(cmpt.cog_actv_min_ttl) as compute_log_min,
+      sv.log_ts,
+      sv.pltfrm_desc,
+      sv.bank_system_use,
+      sv.lic_pckg_desc,
+      ut.tshirt_size_cd,
+      sv.pog_instance_type as pog_instnc_type_desc,
+      sv.clique_config,
+      sv.pog_node_cnt,
+      zeroifnull(worker.cw_node_cnt),
+
+      zeroifnull(ut.clstr_unit_per_node_per_min_qty) as pog_unit_per_node_per_min_qty,
+      zeroifnull(ut.credit_unit_per_clstr_per_min_qty) as credit_unit_per_clstr_per_min_qty,
+
+      /** Primary IOPS quantity **/
+      ut.iops_per_node,
+      case when sv.clique_config = 'MNC' then (ut.iops_per_node * sv.pog_node_cnt) else 0 end as pog_iops_qty,
+
+      /** Primary utilization **/
+      (pog_unit_per_node_per_min_qty * sv.pog_node_cnt) as pog_unit_utlztn_nbr,
+
+      /** Credit to Customer utilization **/
+      case when sv.bank_system_use in ('Trials', 'Self-Service Trials') then 0 else zeroifnull(ut.credit_unit_per_clstr_per_min_qty) end as credit_unit_utlztn_nbr,
+
+      /** Compute Worker utilization **/
+      zeroifnull(worker.cw_units_qty_ttl) as cw_unit_utlztn_nbr,
+
+      /** Compute Profile History (COG) utilization **/
+      zeroifnull(cmpt.cog_units_qty_ttl) as compute_unit_utlztn_nbr,
+
+      zeroifnull(mdm.frml_id)
+FROM subset_avail_final_min_v sv
+LEFT JOIN subset_worker_sum_v worker
+ ON sv.bank_id = worker.bank_id
+ AND sv.cust_site_id = worker.cust_site_id
+ AND sv.account_id = worker.account_id
+ AND sv.log_dt = worker.log_dt
+ AND sv.log_hr = worker.log_hr
+ AND sv.log_min = worker.log_min
+LEFT JOIN subset_compute_sum_v cmpt
+ ON sv.bank_id = cmpt.bank_id
+ AND sv.cust_site_id = cmpt.cust_site_id
+ AND sv.account_id = cmpt.account_id
+ AND sv.log_dt = cmpt.log_dt
+ AND sv.log_hr = cmpt.log_hr
+ AND sv.log_min = cmpt.log_min
+LEFT JOIN (SELECT bank_id, cust_site_id, price_pckg_name, pltfrm_name, instnc_type_name, instnc_config_strt_dt, instnc_config_end_dt
+           FROM uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist
+           WHERE dply_name = 'VantageCloud' and edition_name = 'Lake' and cluster_type_name = 'Primary Cluster' group by 1,2,3,4,5,6,7) ut_3
+  ON sv.bank_id = ut_3.bank_id
+  AND sv.cust_site_id = ut_3.cust_site_id
+  AND sv.lic_pckg_desc = ut_3.price_pckg_name
+  AND sv.pltfrm_desc = ut_3.pltfrm_name
+  AND sv.pog_instance_type = ut_3.instnc_type_name
+  AND sv.log_ts between ut_3.instnc_config_strt_dt and ut_3.instnc_config_end_dt
+LEFT JOIN (SELECT bank_id, price_pckg_name, pltfrm_name, instnc_type_name, instnc_config_strt_dt, instnc_config_end_dt
+           FROM uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist
+           WHERE cust_site_id = 'ALL' and dply_name = 'VantageCloud' and edition_name = 'Lake' and cluster_type_name = 'Primary Cluster' group by 1,2,3,4,5,6) ut_4
+  ON sv.bank_id = ut_4.bank_id
+  AND sv.lic_pckg_desc = ut_4.price_pckg_name
+  AND sv.pltfrm_desc = ut_4.pltfrm_name
+  AND sv.pog_instance_type = ut_4.instnc_type_name
+  AND sv.log_ts between ut_4.instnc_config_strt_dt and ut_4.instnc_config_end_dt
+JOIN uat_acc_ted_con_vw.dbp_ms_site_on_off_unit_config_hist ut
+  ON (case when ut_3.bank_id is not null then ut_3.bank_id when ut_4.bank_id is not null then ut_4.bank_id else 'ALL' end) = ut.bank_id
+  AND (case when ut_3.cust_site_id is null then 'ALL' else ut_3.cust_site_id end) = ut.cust_site_id
+  AND ut.dply_name = 'VantageCloud'
+  AND ut.edition_name = 'Lake'
+  AND ut.cluster_type_name = 'Primary Cluster'
+  AND sv.lic_pckg_desc = ut.price_pckg_name
+  AND sv.pltfrm_desc = ut.pltfrm_name
+  AND sv.pog_instance_type = ut.instnc_type_name
+  AND sv.log_ts between ut.instnc_config_strt_dt and ut.instnc_config_end_dt
+LEFT JOIN uat_mdm_edw_sub.vantage_unit_frml_hist_vw mdm
+  ON frml_name = 'VantageCloud_Lake_On_Off'
+  AND sv.log_dt between mdm.frml_eff_begin_dt and mdm.frml_eff_end_dt;§TEDW§§ENDREC
+
+------
+
+Transcend-DevTest§2026/06/08§30692§2026-06-07 22:15:17.630383§306922306950453251§1§INSERT INTO subset_avail_final_min_v
+ SELECT v1.bank_id,
+        v1.cust_site_id,
+        v1.account_id,
+        v1.system_id,
+        v1.btw_log_dt,
+        v1.btw_log_hr,
+        v1.btw_log_min,
+        v1.new_btw_log_ts,
+        v1.pltfrm_desc,
+        v1.bank_system_use,
+        coalesce(pch.tpa_primary_instance_type, '') as pog_instance_type,
+        coalesce(pch.tpa_cw_instance_type, '') as cw_instance_type,
+        v1.lic_pckg_desc,
+        zeroifnull(pch.tpa_primary_node_count) as pog_node_cnt,
+        zeroifnull(pch.tpa_cw_node_count) as cw_node_cnt,
+        pch.clique_config
+ FROM subset_avail_metrics_beg_btw_end_v v1
+ JOIN (SELECT account_id,
+              system_id,
+              tpa_primary_instance_type,
+              tpa_cw_instance_type,
+              tpa_primary_node_count,
+              tpa_cw_node_count,
+              clique_config,
+              CAST(src_strt_ts as date format 'YYYY-MM-DD' at Source Time Zone) as strt_log_dt,
+              extract(hour from src_strt_ts) as strt_log_hr,
+              extract(minute from src_strt_ts) as strt_log_min,
+              cast(cast(((strt_log_dt) (format 'yyyy-mm-dd')) as varchar(10)) || ' ' || trim((cast ((strt_log_hr || LPAD(TRIM(strt_log_min),2,'0') || '00') as Integer)) (format '99:99:99')) || '+00:00' as timestamp(6) with time zone) as strt_log_ts,
+              CAST(src_end_ts as date format 'YYYY-MM-DD' at Source Time Zone) as end_log_dt,
+              extract(hour from src_end_ts) as end_log_hr,
+              extract(minute from src_end_ts) as end_log_min,
+              (cast(cast(((end_log_dt) (format 'yyyy-mm-dd')) as varchar(10)) || ' ' || trim((cast ((end_log_hr || LPAD(TRIM(end_log_min),2,'0') || '00') as Integer)) (format '99:99:99')) || '+00:00' as timestamp(6) with time zone) - INTERVAL '1' MINUTE) as end_log_ts,
+            di_rec_del_ind
+       FROM uat_acc_ted_tbl.dbp_ms_site_pog_config_hist_aws_us_east_2
+       WHERE di_rec_del_ind = 0
+        AND action not like '%state_change%') pch
+  ON v1.account_id = pch.account_id
+   AND v1.system_id = pch.system_id
+  WHERE v1.new_btw_log_ts between pch.strt_log_ts and pch.end_log_ts
+   AND v1.new_btw_log_ts >= (SELECT start_di_created_ts_new from batch_create_update_v)
+  GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16;§TEDW§§ENDREC
+  
+  ---------------
+  
+  Transcend-DevTest§2026/06/08§30692§2026-06-07 22:15:17.630383§306922306950453248§1§INSERT INTO subset_avail_metrics_beg_btw_end_v
+ SELECT v1.bank_id,
+        v1.cust_site_id,
+        v1.account_id,
+        v1.system_id,
+        case when v1.min_log_ts = v1.max_log_ts then (v1.min_log_ts - INTERVAL '1' MINUTE)
+             else v1.min_log_ts end as new_min_log_ts,
+        v1.max_log_ts,
+        last(prd) as btw_log_ts,
+        CAST(new_min_log_ts as date format 'YYYY-MM-DD' at Source Time Zone) as beg_log_dt,
+        extract(hour from new_min_log_ts) as beg_log_hr,
+        extract(minute from new_min_log_ts) as beg_log_min,
+        CAST(v1.max_log_ts as date format 'YYYY-MM-DD' at Source Time Zone) as end_log_dt,
+        extract(hour from v1.max_log_ts) as end_log_hr,
+        extract(minute from v1.max_log_ts) as end_log_min,
+        CAST(btw_log_ts as date format 'YYYY-MM-DD' at Source Time Zone) as btw_log_dt,
+        extract(hour from btw_log_ts) as btw_log_hr,
+        extract(minute from btw_log_ts) as btw_log_min,
+        cast(cast(((btw_log_dt) (format 'yyyy-mm-dd')) as varchar(10)) || ' ' || trim((cast ((btw_log_hr || LPAD(TRIM(btw_log_min),2,'0') || '00') as Integer)) (format '99:99:99')) || '+00:00' as timestamp(6) with time zone) as new_btw_log_ts,
+        v1.pltfrm_desc,
+        v1.bank_system_use,
+        v1.lic_pckg_desc
+  FROM subset_avail_metrics_min_max_v v1
+  EXPAND ON PERIOD( new_min_log_ts, v1.max_log_ts) AS prd BY ANCHOR PERIOD ANCHOR_MINUTE;§TEDW§§ENDREC
+  

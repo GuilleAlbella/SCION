@@ -1,0 +1,7 @@
+Object name  : subset_avail_final_min_v
+Test type    : usage
+
+Note: Provided by Ashish Suryawanshi as part of the availability test set (email 2026-06-10).
+      This view feeds subset_v3 in the Transcend billing pipeline and is expected to have
+      PDCR query activity. Validates usage data availability for objects in the
+      DataDNA DBQL extract (Medium 20260607).
