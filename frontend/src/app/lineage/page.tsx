@@ -70,8 +70,38 @@ const LINEAGE_MAX_HOPS = 5;
 // "table feeds 100 reports" case before we'd want to surface a hint.
 const LINEAGE_MAX_NODES = 300;
 
+// Heights for expanded nodes (when column lineage is active)
+const COL_ROW_H = 19;  // px per column row
+const COL_TOP_PAD = 8; // padding above the column strip
+const MAX_COLS_SHOWN = 7;
+
+type NodeData = { label: string; type: string; metrics?: GN["metrics"]; columns?: string[] };
+
+/* ── Column strip rendered inside expanded nodes ── */
+function ColumnStrip({ columns, accent }: { columns: string[]; accent: string }) {
+  const shown = columns.slice(0, MAX_COLS_SHOWN);
+  const extra = columns.length - shown.length;
+  return (
+    <div style={{ borderTop: `1px solid ${accent}30`, marginTop: 7, paddingTop: 5 }}>
+      {shown.map((col) => (
+        <div key={col} style={{
+          display: "flex", alignItems: "center", gap: 5,
+          fontSize: 9, fontFamily: "monospace", color: "#5B21B6",
+          background: "rgba(109,40,217,0.08)", borderRadius: 3,
+          padding: "2px 6px", marginBottom: 2,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#8B5CF6", flexShrink: 0, display: "inline-block" }} />
+          {col}
+        </div>
+      ))}
+      {extra > 0 && <div style={{ fontSize: 8, color: "#8B5CF6", paddingLeft: 8, marginTop: 1 }}>+{extra} more</div>}
+    </div>
+  );
+}
+
 /* ---- Custom nodes for the lineage subgraph ---- */
-function UpstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
+function UpstreamNode({ data }: { data: NodeData }) {
   return (
     <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#DC2626" }} />
@@ -79,11 +109,12 @@ function UpstreamNode({ data }: { data: { label: string; type: string; metrics?:
       <div style={{ fontSize: 9, color: "#DC2626", fontWeight: 600, letterSpacing: "0.03em" }}>SOURCE · {data.type}</div>
       <div style={{ fontSize: 13, fontWeight: 600, color: "#991B1B" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#B91C1C", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections</div>}
+      {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#DC2626" />}
     </div>
   );
 }
 
-function CenterNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
+function CenterNode({ data }: { data: NodeData }) {
   return (
     <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)", cursor: "default" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#2563EB" }} />
@@ -91,11 +122,12 @@ function CenterNode({ data }: { data: { label: string; type: string; metrics?: G
       <div style={{ fontSize: 9, color: "#2563EB", fontWeight: 600 }}>SELECTED · {data.type}</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: "#1E40AF" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#3B82F6", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections · {((data.metrics.fragility ?? 0) * 100).toFixed(0)}% risk exposure</div>}
+      {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#2563EB" />}
     </div>
   );
 }
 
-function DownstreamNode({ data }: { data: { label: string; type: string; metrics?: GN["metrics"] } }) {
+function DownstreamNode({ data }: { data: NodeData }) {
   return (
     <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#16A34A" }} />
@@ -103,6 +135,7 @@ function DownstreamNode({ data }: { data: { label: string; type: string; metrics
       <div style={{ fontSize: 9, color: "#16A34A", fontWeight: 600, letterSpacing: "0.03em" }}>CONSUMER · {data.type}</div>
       <div style={{ fontSize: 13, fontWeight: 600, color: "#166534" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#15803D", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections</div>}
+      {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#16A34A" />}
     </div>
   );
 }
@@ -113,16 +146,20 @@ const nodeTypes: NodeTypes = {
   downstream: DownstreamNode,
 };
 
-function layoutNodes(nodes: Node[], edges: Edge[]): Node[] {
+function layoutNodes(nodes: Node[], edges: Edge[], nodeHeightMap?: Map<string, number>): Node[] {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "TB", nodesep: 40, ranksep: 80 });
-  for (const n of nodes) g.setNode(n.id, { width: NODE_W, height: NODE_H });
+  for (const n of nodes) {
+    const h = nodeHeightMap?.get(n.id) ?? NODE_H;
+    g.setNode(n.id, { width: NODE_W, height: h });
+  }
   for (const e of edges) g.setEdge(e.source, e.target);
   dagre.layout(g);
   return nodes.map((n) => {
+    const h = nodeHeightMap?.get(n.id) ?? NODE_H;
     const pos = g.node(n.id);
-    return { ...n, position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 } };
+    return { ...n, position: { x: pos.x - NODE_W / 2, y: pos.y - h / 2 } };
   });
 }
 
@@ -194,9 +231,14 @@ function LineagePage() {
   // to the /graph/focus `direction` param.
   const [direction, setDirection] = useState<"both" | "up" | "down">("both");
 
-  // Column-level lineage for the currently selected node.
+  // Column-level lineage for the currently selected node (bottom panel).
   const [columnLineage, setColumnLineage] = useState<ColumnLineageResponse | null>(null);
   const [colLineageLoading, setColLineageLoading] = useState(false);
+
+  // Column lineage graph overlay — toggle + map over ALL visible nodes.
+  const [showColumnLineage, setShowColumnLineage] = useState(false);
+  const [columnLineageMap, setColumnLineageMap] = useState<Map<string, ColumnLineageResponse>>(new Map());
+  const [colMapLoading, setColMapLoading] = useState(false);
 
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
@@ -306,7 +348,7 @@ function LineagePage() {
     };
   }, [snapshotId, selectedObject, hops, direction]);
 
-  // Fetch column-level lineage whenever the selected object changes.
+  // Fetch column-level lineage whenever the selected object changes (bottom panel).
   useEffect(() => {
     if (!snapshotId || !selectedObject) {
       setColumnLineage(null);
@@ -320,6 +362,30 @@ function LineagePage() {
       .finally(() => { if (!cancelled) setColLineageLoading(false); });
     return () => { cancelled = true; };
   }, [snapshotId, selectedObject]);
+
+  // Fetch column lineage for EVERY visible node when the graph overlay toggle is ON.
+  useEffect(() => {
+    if (!showColumnLineage || !focusData || !snapshotId) {
+      setColumnLineageMap(new Map());
+      return;
+    }
+    setColMapLoading(true);
+    const objects = focusData.nodes
+      .filter((n) => !["SCHEMA", "DATABASE"].includes(n.object_type))
+      .map((n) => (n.object_name.includes(".") ? n.object_name : `${n.schema_name}.${n.object_name}`));
+    Promise.allSettled(
+      objects.map((obj) =>
+        getColumnLineage(snapshotId, obj).then((r) => [obj.toUpperCase(), r] as const),
+      ),
+    ).then((results) => {
+      const m = new Map<string, ColumnLineageResponse>();
+      for (const r of results)
+        if (r.status === "fulfilled" && r.value[1].total_edges > 0)
+          m.set(r.value[0], r.value[1]);
+      setColumnLineageMap(m);
+      setColMapLoading(false);
+    });
+  }, [showColumnLineage, focusData, snapshotId]);
 
   // ──── Build the 5-lane lineage view from the focused subgraph ────
   // The backend hands us a (capped) BFS neighbourhood; here we tag each
@@ -451,7 +517,84 @@ function LineagePage() {
       });
     }
 
-    const laidOut = layoutNodes(rfNodes, rfEdges);
+    // ── Column lineage overlay ──────────────────────────────────────
+    // Build a lookup: uppercase "SCHEMA.TABLE" → ReactFlow node id.
+    const nodeIdByKey = new Map<string, string>();
+    for (const n of focusData.nodes) {
+      const k = (n.object_name.includes(".")
+        ? n.object_name
+        : `${n.schema_name}.${n.object_name}`
+      ).toUpperCase();
+      nodeIdByKey.set(k, n.node_id);
+    }
+
+    // Which columns are mapped for each node (for the column strip).
+    const colsByNode = new Map<string, string[]>();
+    if (showColumnLineage) {
+      for (const [objKey, lineage] of columnLineageMap) {
+        const nid = nodeIdByKey.get(objKey);
+        if (nid) colsByNode.set(nid, lineage.columns.map((c) => c.column_name));
+      }
+    }
+
+    // Inject column strips + compute per-node heights.
+    const nodeHeightMap = new Map<string, number>();
+    const rfNodesFinal = rfNodes.map((n) => {
+      const cols = colsByNode.get(n.id);
+      if (!cols || cols.length === 0) return n;
+      const shown = Math.min(cols.length, MAX_COLS_SHOWN);
+      const extra = cols.length > MAX_COLS_SHOWN ? 1 : 0;
+      nodeHeightMap.set(n.id, NODE_H + COL_TOP_PAD + (shown + extra) * COL_ROW_H);
+      return { ...n, data: { ...n.data, columns: cols } };
+    });
+
+    // Dim table-level edges when column overlay is active.
+    const tableEdgesFinal = rfEdges.map((e) =>
+      showColumnLineage && columnLineageMap.size > 0
+        ? { ...e, style: { ...e.style, opacity: 0.3 }, animated: false }
+        : e,
+    );
+
+    // Build column-to-column edges, grouped by node pair.
+    const colEdges: Edge[] = [];
+    if (showColumnLineage) {
+      const pairLabels = new Map<string, string[]>();
+      for (const [objKey, lineage] of columnLineageMap) {
+        const srcId = nodeIdByKey.get(objKey);
+        if (!srcId || !added.has(srcId)) continue;
+        for (const col of lineage.columns) {
+          for (const edge of col.downstream) {
+            const tgtId = nodeIdByKey.get(edge.table_key.toUpperCase());
+            if (!tgtId || !added.has(tgtId) || tgtId === srcId) continue;
+            const pk = `${srcId}||${tgtId}`;
+            if (!pairLabels.has(pk)) pairLabels.set(pk, []);
+            pairLabels.get(pk)!.push(
+              `${col.column_name} → ${edge.column_name}${edge.transformation_type ? `  ·  ${edge.transformation_type}` : ""}`,
+            );
+          }
+        }
+      }
+      let ci = 0;
+      for (const [pk, labels] of pairLabels) {
+        const [srcId, tgtId] = pk.split("||");
+        const first = labels[0];
+        const edgeLabel = labels.length > 1 ? `${first}\n+${labels.length - 1} more` : first;
+        colEdges.push({
+          id: `col-${ci++}`,
+          source: srcId,
+          target: tgtId,
+          label: edgeLabel,
+          type: "smoothstep",
+          style: { stroke: "#7C3AED", strokeWidth: 1.5, strokeDasharray: "5 3" },
+          labelStyle: { fontSize: 8, fill: "#6D28D9", fontFamily: "monospace", fontWeight: 500 },
+          labelBgStyle: { fill: "#F5F3FF", fillOpacity: 0.95 },
+          animated: false,
+        });
+      }
+    }
+
+    const allEdges = [...tableEdgesFinal, ...colEdges];
+    const laidOut = layoutNodes(rfNodesFinal, allEdges, nodeHeightMap);
 
     // The side lists keep their "immediate producers / consumers"
     // meaning: only depth-1 neighbours, no matter how deep the graph
@@ -463,13 +606,13 @@ function LineagePage() {
 
     return {
       nodes: laidOut,
-      edges: rfEdges,
+      edges: allEdges,
       upstreamList: directNeighbours("upstream"),
       downstreamList: directNeighbours("downstream"),
       selectedNodeData: selectedNode,
       isSelfReferencing: selfLoopNodeIds.has(String(rootId)),
     };
-  }, [focusData, selectedObject]);
+  }, [focusData, selectedObject, showColumnLineage, columnLineageMap]);
 
   // If the user ran an Impact analysis earlier, cachedImpactResults tells us
   // whether the selected object was part of that diff — used to show the
@@ -644,6 +787,27 @@ function LineagePage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Column lineage toggle */}
+          <div className="ml-auto">
+            <label className="text-xs text-td-gray-dark block mb-1">
+              Column detail
+              <span className="ml-1 text-[10px] text-td-gray-dark font-normal">— show in graph</span>
+            </label>
+            <button
+              type="button"
+              disabled={!selectedObject || !focusData}
+              onClick={() => setShowColumnLineage((v) => !v)}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                showColumnLineage
+                  ? "bg-purple-600 border-purple-600 text-white shadow-md shadow-purple-200"
+                  : "bg-white border-gray-300 text-td-gray-dark hover:border-purple-400 hover:text-purple-600"
+              }`}
+            >
+              <GitBranch size={12} />
+              {colMapLoading ? "Loading…" : showColumnLineage ? "Column view ON" : "Column view"}
+            </button>
           </div>
         </div>
 
