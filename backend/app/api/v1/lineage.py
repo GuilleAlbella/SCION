@@ -80,6 +80,9 @@ def get_column_lineage(
 
         rows = q.all()
 
+    # col_map[col_upper] = {"name": str, "upstream": dict[tgt_key, ColumnEdge], "downstream": dict[tgt_key, ColumnEdge]}
+    # Using dicts keyed by the partner column_key deduplicates rows that the parser
+    # emitted multiple times for the same (source, target) pair across different steps.
     col_map: dict[str, dict] = {}
 
     def _edge(row: AttributeLineage, key: str) -> ColumnEdge:
@@ -101,28 +104,34 @@ def get_column_lineage(
             _, col = _split_key(src)
             key = col.upper()
             if key not in col_map:
-                col_map[key] = {"name": col, "upstream": [], "downstream": []}
-            col_map[key]["downstream"].append(_edge(row, tgt))
+                col_map[key] = {"name": col, "upstream": {}, "downstream": {}}
+            tgt_upper = tgt.upper()
+            if tgt_upper not in col_map[key]["downstream"]:
+                col_map[key]["downstream"][tgt_upper] = _edge(row, tgt)
 
         if tgt.upper().startswith(prefix):
             _, col = _split_key(tgt)
             key = col.upper()
             if key not in col_map:
-                col_map[key] = {"name": col, "upstream": [], "downstream": []}
-            col_map[key]["upstream"].append(_edge(row, src))
+                col_map[key] = {"name": col, "upstream": {}, "downstream": {}}
+            src_upper = src.upper()
+            if src_upper not in col_map[key]["upstream"]:
+                col_map[key]["upstream"][src_upper] = _edge(row, src)
 
     columns = [
         ColumnLineageEntry(
             column_name=v["name"],
-            upstream=v["upstream"],
-            downstream=v["downstream"],
+            upstream=list(v["upstream"].values()),
+            downstream=list(v["downstream"].values()),
         )
         for v in sorted(col_map.values(), key=lambda x: x["name"].upper())
     ]
+
+    total_edges = sum(len(c.upstream) + len(c.downstream) for c in columns)
 
     return ColumnLineageResponse(
         object=object,
         snapshot_id=snapshot_id,
         columns=columns,
-        total_edges=len(rows),
+        total_edges=total_edges,
     )
