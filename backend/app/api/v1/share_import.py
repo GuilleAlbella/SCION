@@ -19,11 +19,15 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
 from app.config import SCION_SHARE_MOUNT_PATH
 from app.api.v1 import import_progress
 from app.api.v1.dict_import import DictImportResponse, import_dict_batch
+from app.db.engine import engine
+from app.db.models.snapshot import Snapshot
+from app.metadata import dict_batch_validator, dict_flat_file_reader
 from app.parser_ingest import ingestor, noise_filter, teradata_parser
 
 router = APIRouter(prefix="/share-import", tags=["share-import"])
@@ -51,6 +55,9 @@ class ShareScanResponse(BaseModel):
     dict_files: List[str]
     pdcr_files: List[str]
     lineage_files: List[str]
+    already_imported: bool = False
+    existing_snapshot_id: Optional[int] = None
+    extract_run_id: Optional[str] = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -80,6 +87,52 @@ def _path_to_upload(path: Path) -> UploadFile:
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _check_already_imported(dict_paths: List[Path]) -> tuple[bool, Optional[int], Optional[str]]:
+    """Peek the first record from any dict file to get extract_run_id, then
+    check whether that run was already persisted as a snapshot.
+
+    Returns (already_imported, existing_snapshot_id, extract_run_id).
+    On any read error returns (False, None, None) — scan stays non-destructive.
+    """
+    databases_file = next(
+        (p for p in dict_paths if "database" in p.name.lower()),
+        dict_paths[0] if dict_paths else None,
+    )
+    if databases_file is None:
+        return False, None, None
+
+    try:
+        iter_fn = (
+            dict_flat_file_reader.iter_databases
+            if "database" in databases_file.name.lower()
+            else dict_flat_file_reader.iter_tables
+        )
+        record = dict_batch_validator.peek_first_record(databases_file, iter_fn)
+    except Exception:
+        return False, None, None
+
+    if record is None:
+        return False, None, None
+
+    source_system = record.tech.source_system_name
+    run_id = record.tech.extract_run_id
+
+    with Session(bind=engine) as db:
+        existing = (
+            db.query(Snapshot)
+            .filter(Snapshot.source_system == source_system)
+            .filter(
+                (Snapshot.extract_run_id == run_id)
+                | Snapshot.description.like(f"%extract_run_id={run_id}%")
+            )
+            .first()
+        )
+
+    if existing is not None:
+        return True, existing.snapshot_id, run_id
+    return False, None, run_id
+
+
 @router.get("/scan", response_model=ShareScanResponse)
 def scan_share(
     path: Optional[str] = None,
@@ -88,6 +141,8 @@ def scan_share(
 
     `path` overrides the server-default SCION_SHARE_MOUNT_PATH for this
     request — useful when the share is mounted at a different location.
+    Includes an already_imported check: peeks the first record of any dict
+    file to read extract_run_id, then queries existing snapshots.
     """
     mount = path or SCION_SHARE_MOUNT_PATH
     base = Path(mount)
@@ -97,12 +152,19 @@ def scan_share(
             share_path=mount,
             dict_files=[], pdcr_files=[], lineage_files=[],
         )
+
+    dict_paths = _iter_share_files(_DICT_DIR, mount)
+    already_imported, existing_snapshot_id, run_id = _check_already_imported(dict_paths)
+
     return ShareScanResponse(
         share_available=True,
         share_path=mount,
-        dict_files=[f.name for f in _iter_share_files(_DICT_DIR, mount)],
+        dict_files=[f.name for f in dict_paths],
         pdcr_files=[f.name for f in _iter_share_files(_PDCR_DIR, mount)],
         lineage_files=[f.name for f in _iter_share_files(_LINEAGE_DIR, mount)],
+        already_imported=already_imported,
+        existing_snapshot_id=existing_snapshot_id,
+        extract_run_id=run_id,
     )
 
 

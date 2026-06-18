@@ -908,6 +908,17 @@ export default function SnapshotsPage() {
                   </div>
                 )}
 
+                {shareScan.share_available && shareScan.already_imported && !shareResult && (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2.5 mb-3 text-xs text-amber-900">
+                    <span className="text-amber-500 mt-0.5">⚠</span>
+                    <div>
+                      <span className="font-semibold">Already imported</span> — these files were already ingested as{" "}
+                      <span className="font-mono font-semibold">Snapshot #{shareScan.existing_snapshot_id}</span>.
+                      Importing again will be skipped automatically (idempotent).
+                    </div>
+                  </div>
+                )}
+
                 {shareScan.share_available && !shareResult && (
                   <button
                     onClick={handleShareImport}

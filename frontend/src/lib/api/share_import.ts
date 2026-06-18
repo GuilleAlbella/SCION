@@ -7,6 +7,9 @@ export interface ShareScanResponse {
   dict_files: string[];
   pdcr_files: string[];
   lineage_files: string[];
+  already_imported: boolean;
+  existing_snapshot_id: number | null;
+  extract_run_id: string | null;
 }
 
 export interface ShareImportResponse {
