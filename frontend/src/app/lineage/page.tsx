@@ -1059,19 +1059,28 @@ function LineagePage() {
           {(colLineageLoading || (columnLineage && columnLineage.total_edges > 0)) && (
             <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               {/* Header */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
-                <GitBranch size={14} className="text-purple-600" />
-                <h3 className="text-sm font-semibold text-gray-700">Column-Level Lineage</h3>
-                {!colLineageLoading && columnLineage && (
-                  <>
-                    <span className="text-[10px] bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-medium">
-                      {columnLineage.total_edges} edges · Tier 1/2
-                    </span>
-                    <span className="ml-auto text-[10px] text-td-gray-dark">
-                      {columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped
-                    </span>
-                  </>
-                )}
+              <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <GitBranch size={14} className="text-purple-600" />
+                  <h3 className="text-sm font-semibold text-gray-700">Column-Level Lineage</h3>
+                  {!colLineageLoading && columnLineage && (
+                    <>
+                      <span className="text-[10px] bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-medium">
+                        {columnLineage.total_edges} edges · Tier 1/2
+                      </span>
+                      <span className="ml-auto text-[10px] text-td-gray-dark">
+                        {columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[11px] text-td-gray-dark mt-1.5 leading-relaxed">
+                  Finer-grained view of <strong>which specific columns feed which</strong>, derived from the DataDNA parser
+                  Tier&nbsp;1/2 output. <strong>Red cards</strong> show where each column&apos;s value originates (sources);{" "}
+                  <strong>green cards</strong> show which downstream columns it populates (consumers). The transformation
+                  type — <em>Direct Copy</em>, <em>Aggregate</em>, <em>Type Cast</em>, etc. — describes how the value
+                  changes in transit.
+                </p>
               </div>
 
               {/* Body */}
