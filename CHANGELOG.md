@@ -8,6 +8,18 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.21 (2026-06-18) - Add per-change filter to impact screen
+
+**Per-change drill-down now has a search box**
+Section 4 (Per-change drill-down) on the Impact page now has a text filter
+above the table. Typing any substring (e.g. `td.my_view` or just `td`)
+instantly narrows the visible rows client-side. A `3 / 2302` counter shows
+how many rows match. The filter resets automatically on each new analysis.
+
+No backend changes, no schema changes.
+
+---
+
 ### v1.21.20 (2026-06-18) - Fix case-sensitivity in graph, diff linker, usage and timeline
 
 **Four case-insensitive fixes across the backend**

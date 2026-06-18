@@ -68,6 +68,7 @@ export default function ImpactPage() {
   // Free-text filter for the "Affected objects, by database" section.
   // Scoped to that section only so it never re-runs the impact analysis.
   const [dbSearch, setDbSearch] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
   // Which schema rows are expanded. Empty by default — at Transcend
   // scale auto-expanding 10k databases would defeat the whole point
   // of the accordion.
@@ -86,6 +87,7 @@ export default function ImpactPage() {
     setLoading(true);
     setError(null);
     setItems([]);
+    setTableSearch("");
 
     try {
       const data = await runBatchImpact(from, to, {
@@ -232,6 +234,12 @@ export default function ImpactPage() {
       }))
       .sort((a, b) => b.tables.length - a.tables.length);
   }, [result]);
+
+  const filteredItems = useMemo(() => {
+    const q = tableSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((r) => r.object_identifier.toLowerCase().includes(q));
+  }, [items, tableSearch]);
 
   const filteredAffectedDatabases = useMemo(() => {
     const q = dbSearch.trim().toLowerCase();
@@ -581,6 +589,23 @@ export default function ImpactPage() {
               </>
             }
           >
+            {/* Search filter for the per-change table */}
+            <div className="relative max-w-sm mb-3">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-td-gray-dark pointer-events-none" />
+              <input
+                type="text"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                placeholder="Filter by object name..."
+                className="w-full border border-gray-300 rounded pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
+              />
+              {tableSearch && (
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-td-gray-dark">
+                  {filteredItems.length.toLocaleString()} / {items.length.toLocaleString()}
+                </span>
+              )}
+            </div>
+
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -607,7 +632,14 @@ export default function ImpactPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {filteredItems.length === 0 && tableSearch ? (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-6 text-center text-xs text-td-gray-dark italic">
+                      No changes match &ldquo;{tableSearch}&rdquo;.
+                    </td>
+                  </tr>
+                ) : null}
+                {filteredItems.map((row) => (
                   <tr key={row.change_id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs">{row.change_id}</td>
                     <td className="px-4 py-3 font-mono text-xs">{row.object_identifier}</td>
