@@ -155,6 +155,28 @@ export interface FocusedGraphResponse {
   capped: boolean;
 }
 
+export interface ColumnEdge {
+  column_key: string;
+  table_key: string;
+  column_name: string;
+  expression: string | null;
+  transformation_type: string | null;
+  tier: string | null;
+}
+
+export interface ColumnLineageEntry {
+  column_name: string;
+  upstream: ColumnEdge[];
+  downstream: ColumnEdge[];
+}
+
+export interface ColumnLineageResponse {
+  object: string;
+  snapshot_id: number;
+  columns: ColumnLineageEntry[];
+  total_edges: number;
+}
+
 export interface ImpactItem {
   object_type: string;
   object_name: string;

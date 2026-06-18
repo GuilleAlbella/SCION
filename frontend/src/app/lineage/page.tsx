@@ -43,8 +43,9 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { getFocusedGraph } from "@/lib/api/graph";
+import { getColumnLineage, getFocusedGraph } from "@/lib/api/graph";
 import type {
+  ColumnLineageResponse,
   FocusedGraphResponse,
   GraphNode as GN,
 } from "@/lib/api/types";
@@ -193,6 +194,10 @@ function LineagePage() {
   // to the /graph/focus `direction` param.
   const [direction, setDirection] = useState<"both" | "up" | "down">("both");
 
+  // Column-level lineage for the currently selected node.
+  const [columnLineage, setColumnLineage] = useState<ColumnLineageResponse | null>(null);
+  const [colLineageLoading, setColLineageLoading] = useState(false);
+
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
   // aren't lineage-level nodes in SCION — only databases / tables / views /
@@ -300,6 +305,21 @@ function LineagePage() {
       cancelled = true;
     };
   }, [snapshotId, selectedObject, hops, direction]);
+
+  // Fetch column-level lineage whenever the selected object changes.
+  useEffect(() => {
+    if (!snapshotId || !selectedObject) {
+      setColumnLineage(null);
+      return;
+    }
+    let cancelled = false;
+    setColLineageLoading(true);
+    getColumnLineage(snapshotId, selectedObject)
+      .then((data) => { if (!cancelled) setColumnLineage(data); })
+      .catch(() => { if (!cancelled) setColumnLineage(null); })
+      .finally(() => { if (!cancelled) setColLineageLoading(false); });
+    return () => { cancelled = true; };
+  }, [snapshotId, selectedObject]);
 
   // ──── Build the 5-lane lineage view from the focused subgraph ────
   // The backend hands us a (capped) BFS neighbourhood; here we tag each
@@ -843,6 +863,58 @@ function LineagePage() {
                 )}
               </div>
             </div>
+
+            {/* Column Lineage */}
+            {(colLineageLoading || (columnLineage && columnLineage.total_edges > 0)) && (
+              <div className="bg-white rounded-lg shadow-sm border-2 border-emerald-400 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <GitBranch size={16} className="text-emerald-600" />
+                  <h3 className="text-sm font-semibold text-emerald-700">Column Lineage</h3>
+                  {!colLineageLoading && columnLineage && (
+                    <span className="ml-auto text-[10px] text-td-gray-dark">{columnLineage.total_edges} edges</span>
+                  )}
+                </div>
+                {colLineageLoading ? (
+                  <p className="text-xs text-td-gray-dark">Loading…</p>
+                ) : columnLineage && columnLineage.columns.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {columnLineage.columns.map((col) => (
+                      <div key={col.column_name} className="text-xs border border-gray-100 rounded p-2 bg-gray-50">
+                        <div className="font-mono font-semibold text-gray-800 mb-1 truncate" title={col.column_name}>
+                          {col.column_name}
+                        </div>
+                        {col.upstream.length > 0 && (
+                          <div className="mb-1">
+                            {col.upstream.map((e, i) => (
+                              <div key={i} className="flex items-start gap-1 text-[10px]">
+                                <span className="text-red-500 shrink-0">←</span>
+                                <span className="font-mono text-red-700 truncate" title={e.column_key}>{e.table_key.split(".").pop()}.{e.column_name}</span>
+                                {e.transformation_type && (
+                                  <span className="text-td-gray-dark shrink-0">· {e.transformation_type}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {col.downstream.length > 0 && (
+                          <div>
+                            {col.downstream.map((e, i) => (
+                              <div key={i} className="flex items-start gap-1 text-[10px]">
+                                <span className="text-green-500 shrink-0">→</span>
+                                <span className="font-mono text-green-700 truncate" title={e.column_key}>{e.table_key.split(".").pop()}.{e.column_name}</span>
+                                {e.transformation_type && (
+                                  <span className="text-td-gray-dark shrink-0">· {e.transformation_type}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {/* Downstream */}
             <div className="bg-white rounded-lg shadow-sm border-2 border-td-downstream p-4">

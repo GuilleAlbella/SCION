@@ -1,5 +1,5 @@
 import client from "./client";
-import type { FocusedGraphParams, FocusedGraphResponse, GraphResponse } from "./types";
+import type { ColumnLineageResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse } from "./types";
 
 export async function getGraph(snapshotId: number): Promise<GraphResponse> {
   const { data } = await client.get<GraphResponse>(`/graph/${snapshotId}`);
@@ -16,6 +16,17 @@ export async function getGraph(snapshotId: number): Promise<GraphResponse> {
  * and by `/graph` when the full graph exceeds the truncation cap and
  * the user picks an anchor to focus on.
  */
+export async function getColumnLineage(
+  snapshotId: number,
+  object: string,
+  tier?: string,
+): Promise<ColumnLineageResponse> {
+  const params: Record<string, string | number> = { snapshot_id: snapshotId, object };
+  if (tier) params.tier = tier;
+  const { data } = await client.get<ColumnLineageResponse>("/lineage/columns", { params });
+  return data;
+}
+
 export async function getFocusedGraph(
   params: FocusedGraphParams,
 ): Promise<FocusedGraphResponse> {
