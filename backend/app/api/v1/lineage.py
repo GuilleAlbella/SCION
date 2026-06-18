@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.db.engine import engine
 from app.db.models.attribute_lineage import AttributeLineage
 
 router = APIRouter(prefix="/lineage", tags=["lineage"])
@@ -56,7 +56,6 @@ def get_column_lineage(
     snapshot_id: int = Query(...),
     object: str = Query(..., description="Object identifier, e.g. SCHEMA.TABLE"),
     tier: Optional[str] = Query(None, description="Filter by tier: TIER1 or TIER2"),
-    db: Session = Depends(get_db),
 ):
     """Return column-level lineage for a given table or view.
 
@@ -68,17 +67,18 @@ def get_column_lineage(
     obj_upper = object.upper()
     prefix = obj_upper + "|"
 
-    q = db.query(AttributeLineage).filter(
-        AttributeLineage.snapshot_id == snapshot_id,
-        or_(
-            func.upper(AttributeLineage.source_attribute_natural_key).like(prefix + "%"),
-            func.upper(AttributeLineage.target_attribute_natural_key).like(prefix + "%"),
-        ),
-    )
-    if tier:
-        q = q.filter(func.upper(AttributeLineage.tier) == tier.upper())
+    with Session(bind=engine) as db:
+        q = db.query(AttributeLineage).filter(
+            AttributeLineage.snapshot_id == snapshot_id,
+            or_(
+                func.upper(AttributeLineage.source_attribute_natural_key).like(prefix + "%"),
+                func.upper(AttributeLineage.target_attribute_natural_key).like(prefix + "%"),
+            ),
+        )
+        if tier:
+            q = q.filter(func.upper(AttributeLineage.tier) == tier.upper())
 
-    rows = q.all()
+        rows = q.all()
 
     col_map: dict[str, dict] = {}
 
