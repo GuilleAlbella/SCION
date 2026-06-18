@@ -864,58 +864,6 @@ function LineagePage() {
               </div>
             </div>
 
-            {/* Column Lineage */}
-            {(colLineageLoading || (columnLineage && columnLineage.total_edges > 0)) && (
-              <div className="bg-white rounded-lg shadow-sm border-2 border-emerald-400 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <GitBranch size={16} className="text-emerald-600" />
-                  <h3 className="text-sm font-semibold text-emerald-700">Column Lineage</h3>
-                  {!colLineageLoading && columnLineage && (
-                    <span className="ml-auto text-[10px] text-td-gray-dark">{columnLineage.total_edges} edges</span>
-                  )}
-                </div>
-                {colLineageLoading ? (
-                  <p className="text-xs text-td-gray-dark">Loading…</p>
-                ) : columnLineage && columnLineage.columns.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {columnLineage.columns.map((col) => (
-                      <div key={col.column_name} className="text-xs border border-gray-100 rounded p-2 bg-gray-50">
-                        <div className="font-mono font-semibold text-gray-800 mb-1 truncate" title={col.column_name}>
-                          {col.column_name}
-                        </div>
-                        {col.upstream.length > 0 && (
-                          <div className="mb-1">
-                            {col.upstream.map((e, i) => (
-                              <div key={i} className="flex items-start gap-1 text-[10px]">
-                                <span className="text-red-500 shrink-0">←</span>
-                                <span className="font-mono text-red-700 truncate" title={e.column_key}>{e.table_key.split(".").pop()}.{e.column_name}</span>
-                                {e.transformation_type && (
-                                  <span className="text-td-gray-dark shrink-0">· {e.transformation_type}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {col.downstream.length > 0 && (
-                          <div>
-                            {col.downstream.map((e, i) => (
-                              <div key={i} className="flex items-start gap-1 text-[10px]">
-                                <span className="text-green-500 shrink-0">→</span>
-                                <span className="font-mono text-green-700 truncate" title={e.column_key}>{e.table_key.split(".").pop()}.{e.column_name}</span>
-                                {e.transformation_type && (
-                                  <span className="text-td-gray-dark shrink-0">· {e.transformation_type}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            )}
-
             {/* Downstream */}
             <div className="bg-white rounded-lg shadow-sm border-2 border-td-downstream p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -943,6 +891,87 @@ function LineagePage() {
               )}
             </div>
           </div>
+
+          {/* ── Column-Level Lineage ── full-width row below the 3 panels */}
+          {(colLineageLoading || (columnLineage && columnLineage.total_edges > 0)) && (
+            <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
+                <GitBranch size={14} className="text-purple-600" />
+                <h3 className="text-sm font-semibold text-gray-700">Column-Level Lineage</h3>
+                {!colLineageLoading && columnLineage && (
+                  <>
+                    <span className="text-[10px] bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-medium">
+                      {columnLineage.total_edges} edges · Tier 1/2
+                    </span>
+                    <span className="ml-auto text-[10px] text-td-gray-dark">
+                      {columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Body */}
+              {colLineageLoading ? (
+                <div className="px-4 py-6 text-xs text-td-gray-dark">Loading column mappings…</div>
+              ) : columnLineage && columnLineage.columns.length > 0 ? (
+                <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {columnLineage.columns.map((col) => (
+                    <div key={col.column_name} className="rounded-lg border border-gray-200 overflow-hidden text-xs shadow-sm">
+                      {/* Column name pill */}
+                      <div className="bg-gray-800 px-3 py-2">
+                        <span className="font-mono font-bold text-white text-[11px] truncate block" title={col.column_name}>
+                          {col.column_name}
+                        </span>
+                      </div>
+
+                      {/* Sources (upstream → this column) */}
+                      {col.upstream.length > 0 && (
+                        <div className="bg-red-50 px-3 py-2 border-b border-red-100">
+                          <div className="text-[9px] font-bold text-red-400 uppercase tracking-widest mb-1.5">Sources</div>
+                          <div className="space-y-1">
+                            {col.upstream.map((e, i) => (
+                              <div key={i} className="flex items-center justify-between gap-1.5">
+                                <span className="font-mono text-[10px] text-red-900 truncate" title={e.column_key}>
+                                  <span className="text-red-400">{e.table_key.split(".").pop()}.</span>{e.column_name}
+                                </span>
+                                {e.transformation_type && (
+                                  <span className="shrink-0 text-[8px] bg-red-100 text-red-600 rounded px-1 py-0.5 font-medium whitespace-nowrap">
+                                    {e.transformation_type}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Feeds into (this column → downstream) */}
+                      {col.downstream.length > 0 && (
+                        <div className="bg-green-50 px-3 py-2">
+                          <div className="text-[9px] font-bold text-green-500 uppercase tracking-widest mb-1.5">Feeds into</div>
+                          <div className="space-y-1">
+                            {col.downstream.map((e, i) => (
+                              <div key={i} className="flex items-center justify-between gap-1.5">
+                                <span className="font-mono text-[10px] text-green-900 truncate" title={e.column_key}>
+                                  <span className="text-green-500">{e.table_key.split(".").pop()}.</span>{e.column_name}
+                                </span>
+                                {e.transformation_type && (
+                                  <span className="shrink-0 text-[8px] bg-green-100 text-green-700 rounded px-1 py-0.5 font-medium whitespace-nowrap">
+                                    {e.transformation_type}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
           </GuidedSection>
         </>
       )}
