@@ -85,13 +85,13 @@ Everything ships as **two public-facing containers + one private installer** tha
 
 | ✅ Does TODAY (v1.21.6) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
 |---|---|---|
-| Ingest 6-file dictionary extract from Rahul's exporter | In-app "Update now" button (v1.22) | Parse SQL, scripts, BTEQ, or KSH — that's **DataDNA** |
-| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, v1.21.6) | Multi-region awareness (`DATA_REGION`, v1.23) | Connect to a live Teradata over JDBC/ODBC |
-| Snapshot + diff + structural hash | Parser lineage feed integration when Rahul ships it (v1.24) | Capture lineage in real time from running queries |
-| Server-side paginated change feed (Changes page) | Postgres migration when multi-tenant arrives (v1.25) | Edit the warehouse — no DDL emitted, no DML, no GRANT |
-| Blast-radius computation + impact summaries | SSO / RBAC when first multi-user deploy lands (backlog) | Store row-level customer data — only metadata |
-| Click-to-expand graph exploration (`/graph/focus`) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Replace the steward — assists, never decides |
-| TAISA Q&A grounded on real metadata, bounded context | DataDNA correlation against `dbql_query.sql_text` (backlog, depends on Rahul's parser shipping the QueryID join key) | Provide a query optimizer or recommend index changes |
+| Ingest 6-file dictionary extract from the Metadata Extractor | In-app "Update now" button (v1.22) | Parse SQL, scripts, BTEQ, or KSH — that's **the Code Parser (DataDNA)** |
+| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, v1.21.6) | Postgres migration when multi-tenant arrives (backlog) | Connect to a live Teradata over JDBC/ODBC |
+| Snapshot + diff + structural hash | Code Parser lineage feed integration — column-level lineage panel live (v1.21.23); full end-to-end scenario testing pending reference ETL fixture | Capture lineage in real time from running queries |
+| Server-side paginated change feed (Changes page) | SSO / RBAC when first multi-user deploy lands (backlog) | Edit the warehouse — SCION never sends DDL/DML/GRANT to the database |
+| Blast-radius computation + impact summaries | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Store row-level customer data — only metadata |
+| Click-to-expand graph exploration (`/graph/focus`) | Export streaming / CSV pagination (backlog) | Replace the steward — assists, never decides |
+| TAISA Q&A grounded on real metadata, bounded context | DataDNA QueryID correlation — pending Code Parser shipping the QueryID join key in its lineage feed | Provide a query optimizer or recommend index changes |
 | Usage signals + usage-weighted criticality scoring (real PDCR data, Pipeline 3) | | |
 | Snapshot-pair simulation ("what if I make this change?") | Export streaming / CSV pagination (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
 | Containerised deploy (one-liner installer Linux + Windows) | Naming audit final sweep (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
@@ -104,7 +104,7 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
 ```
    ┌────────────────────────┐                       ┌────────────────────────┐
    │       DATADNA          │ ─── lineage JSON ───▶ │         SCION          │
-   │     (Rahul's Parser)   │     via parser-import │     (this system)      │
+   │    (Code Parser)       │     via parser-import │     (this system)      │
    ├────────────────────────┤                       ├────────────────────────┤
    │ Parses Teradata SQL    │                       │ Snapshots dictionary   │
    │ Builds AST via ANTLR4  │                       │ Diffs versions         │
@@ -135,10 +135,10 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
 
 The two meet at two points:
 
-1. **Lineage flows DataDNA → SCION** via `/parser-import` — DataDNA emits parsed-SQL lineage JSON; SCION persists it as graph edges.
-2. **Query correlation flows SCION → DataDNA** via shared QueryID — SCION's `dbql_query.sql_text` (Pipeline 3) holds the verbatim statements; DataDNA joins by QueryID to enrich its own lineage with the actual SQL Teradata ran.
+1. **Lineage flows Code Parser → SCION** via `/parser-import` — the Code Parser emits parsed-SQL lineage JSON; SCION persists it as graph edges.
+2. **QueryID correlation (planned)** — SCION's `dbql_query` table (Pipeline 3) stores DBQL query text keyed by QueryID. When the Code Parser ships a version that accepts a QueryID join key, the ETL team can feed SCION's query text into the Code Parser to enrich lineage with the actual SQL Teradata ran. Note: the Code Parser has **no persistent storage of its own** — it processes inputs and emits outputs; any correlation requires an external orchestration step, not a direct DB-to-DB join.
 
-PDCR's per-object counters land in SCION's UsageEvent table without ever being parsed — that's the FR-1.3 boundary: SCION counts accesses, DataDNA interprets statements.
+PDCR's per-object counters land in SCION's UsageEvent table without ever being parsed — that's the FR-1.3 boundary: SCION counts accesses, the Code Parser interprets statements.
 
 ---
 
@@ -173,7 +173,7 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 | **NG1** | SCION will **never parse SQL, scripts, BTEQ, or KSH** | That's DataDNA. Two products on the same team with overlapping scope is a maintenance nightmare. Receive lineage as JSON, don't compute it. |
 | **NG2** | SCION will **never connect to a live Teradata** (JDBC/ODBC/REST) | Customer security teams object to a tool that needs live read access. Offline-only is a deliberate architectural choice that unblocks every deal. |
 | **NG3** | SCION will **never capture lineage in real time** from running queries | Real-time observability is a different product class. Batch-on-demand keeps the implementation simple and the resource footprint bounded. |
-| **NG4** | SCION will **never modify the warehouse** | No DDL emitted, no DML, no GRANT. SCION is observation, not control. If the user wants to act on a finding, they leave SCION and use their normal change-management flow. |
+| **NG4** | SCION will **never send DDL/DML/GRANT to the warehouse** | SCION is observation, not control. It never executes any statement against a live Teradata. The **Generate DDL** feature in the Changes page reconstructs DDL text from the stored dictionary snapshot — it produces a downloadable text artefact for the user's change-management workflow, but does not and cannot execute that DDL anywhere. |
 | **NG5** | SCION will **never store row-level customer data** | The DB only contains structural metadata (snapshot of dictionary views) plus optionally usage aggregates. No data values are ever persisted. |
 | **NG6** | SCION is **not a data catalog** | No business glossary, no certifications, no stewardship workflows. The customer has Collibra / Alation / Atlan for that. SCION fills the **structural intelligence** gap that catalogs handle poorly. |
 | **NG7** | SCION is **not a query optimizer** | Index recommendations, statistics suggestions, and physical-design advice are out of scope. The customer has Teradata Workload Analyzer and human DBAs for that. |
@@ -1873,7 +1873,7 @@ and are pre-GA blockers for any customer-facing deploy.
 | Term | Definition |
 |---|---|
 | **SCION** | **S**tructural **C**hange **I**ntelligence & **O**bservability **N**ode. This product. |
-| **DataDNA** | Rahul's SQL parser. Sits upstream of SCION (see §1.5). |
+| **DataDNA** | Also referred to as the **Code Parser**. The SQL parsing product that sits upstream of SCION. Parses Teradata SQL/BTEQ/KSH files, extracts Tier-1/2/3 lineage, and emits a JSON feed that SCION ingests. Has no persistent storage of its own — it processes inputs and emits outputs (see §1.5). |
 | **Snapshot** | Immutable record of warehouse structure at a point in time. Owns `structural_hash` and the related per-schema/table/column rows. |
 | **ChangeEvent** | One typed difference between two snapshots (ADDED / DROPPED / ALTERED / RENAMED) with severity and `is_breaking`. |
 | **Blast radius** | Set of downstream objects affected by a ChangeEvent. Computed by walking `graph_edge` from the changed object. |

@@ -8,6 +8,97 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.26 (2026-06-18) - Import: already-imported detection before Import All
+
+**Share scan now warns before a no-op import**
+The `/share-import/scan` endpoint now peeks the first record of any dict file to
+read `extract_run_id` + `source_system_name`, then cross-checks against existing
+snapshots. If a match is found, the response carries `already_imported: true` and
+`existing_snapshot_id`.
+
+The frontend renders an amber warning banner ("Already imported — Snapshot #N")
+between the file list and the Import All button, so the operator knows the result
+before clicking. The backend duplicate-detection is unchanged — re-importing was
+already a no-op; this makes it visible upfront.
+
+No schema changes.
+
+---
+
+### v1.21.25 (2026-06-18) - Lineage graph: long object names now truncate correctly
+
+**Node labels no longer overflow the card boundary**
+Object names longer than ~22 chars (e.g. `SUBSET_AVAIL_METRICS_MIN_MAX_V`) were
+breaking outside the 220px node card. Added `overflow: hidden`,
+`text-overflow: ellipsis`, and `white-space: nowrap` to the label div in all three
+node types (UpstreamNode, CenterNode, DownstreamNode). Full name still visible on
+hover via the browser's native `title` attribute.
+
+No backend changes, no schema changes.
+
+---
+
+### v1.21.24 (2026-06-18) - Fix column lineage duplicate edges
+
+**122 identical edges per logical mapping reduced to 1**
+The DataDNA parser stores one row in `attribute_lineage` per SQL step processed,
+so the same column→column mapping can appear 122+ times (e.g.
+`SUBSET_AVAIL_FINAL_MIN_V` showed 1,464 edges instead of ~11). The
+`/lineage/columns` endpoint now deduplicates by `(source_key, target_key)` pair
+using per-column dicts rather than lists. `total_edges` in the response now
+reflects unique mappings.
+
+The duplication in the DB is intentional — the parser preserves step-level
+granularity for audit traceability. Deduplication happens at the API layer only.
+
+No schema changes.
+
+---
+
+### v1.21.23 (2026-06-18) - Column view toggle in lineage graph
+
+**Column strips and "N cols" edges in the graph**
+A "Column view" pill button in the Lineage graph controls row now toggles column
+mode. When active:
+- All visible nodes expand to show their column names as purple dot pills (max 7,
+  "+N more" overflow).
+- Edges between tables that share column-level lineage are grouped and drawn as
+  purple dashed lines with a compact "N cols" badge.
+- Table-to-table edges are dimmed (opacity 0.3) to keep the column edges legible.
+- Node heights are recomputed dynamically via dagre so the layout stays clean.
+
+Also in this release:
+- Descriptive intro text added below the Column-Level Lineage section title
+  ("Column-level lineage shows, for each column in this object, which upstream
+  columns feed it (SOURCES) and which downstream columns it feeds (FEEDS INTO).")
+- Column edge labels changed from verbose text to compact "N cols" badge to
+  eliminate the overlap/overlap problem seen in earlier screenshots.
+
+No schema changes.
+
+---
+
+### v1.21.22 (2026-06-18) - Column-Level Lineage: new endpoint and panel
+
+**Column-to-column lineage surfaced for the first time**
+New `/api/v1/lineage/columns?snapshot_id=N&object=SCHEMA.TABLE` endpoint queries
+the `attribute_lineage` table (populated by the DataDNA parser, Tier 1/2) and
+returns per-column upstream/downstream edge lists. Groups results by column and
+separates SOURCES (things that feed this column) from FEEDS INTO (things this
+column feeds), with `transformation_type` and `expression` on each edge.
+
+New full-width **Column-Level Lineage** panel at the bottom of the Lineage page
+(visible when an object is selected). Shows a grid of per-column cards — each
+card has a dark header, a red SOURCES section, and a green FEEDS INTO section
+with colored transformation badges.
+
+Backend changes: new file `backend/app/api/v1/lineage.py`; registered in
+`backend/app/api/v1/__init__.py`.
+
+No schema changes.
+
+---
+
 ### v1.21.21 (2026-06-18) - Add per-change filter to impact screen
 
 **Per-change drill-down now has a search box**
