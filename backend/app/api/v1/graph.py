@@ -337,10 +337,10 @@ def _resolve_root(session: Session, snapshot_id: int, root: str) -> Optional[Gra
     conds = []
     if schema_part is not None and object_part is not None:
         conds.append(
-            (GraphNode.schema_name == schema_part)
-            & (GraphNode.object_name == object_part)
+            (func.lower(GraphNode.schema_name) == schema_part.lower())
+            & (func.lower(GraphNode.object_name) == object_part.lower())
         )
-    conds.append(GraphNode.object_name == root)
+    conds.append(func.lower(GraphNode.object_name) == root.lower())
     candidates_q = candidates_q.where(or_(*conds)).limit(1)
 
     return session.execute(candidates_q).scalars().first()

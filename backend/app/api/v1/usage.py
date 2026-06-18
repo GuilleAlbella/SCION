@@ -168,7 +168,7 @@ def get_object_usage_detail(snapshot_id: int, object: str) -> Dict[str, Any]:
             session.execute(
                 select(ObjectCriticality).where(
                     ObjectCriticality.snapshot_id == snapshot_id,
-                    ObjectCriticality.object_name == qualified,
+                    func.lower(ObjectCriticality.object_name) == qualified.lower(),
                 )
             )
             .scalars()

@@ -67,7 +67,9 @@ def _link_changes_to_graph_in_session(
     nodes_by_name: Dict[str, int] = {}
 
     for node in nodes:
-        key = (node.object_type, node.object_name, node.snapshot_id)
+        # Keys are lowercased so ChangeEvent identifiers from PDCR (UPPERCASE)
+        # and dict snapshots (mixed case) resolve to the same node.
+        key = (node.object_type, node.object_name.lower(), node.snapshot_id)
         if key in nodes_by_key:
             # Multiple nodes with the same natural key represent an invalid
             # state for linking; fail explicitly.
@@ -75,13 +77,8 @@ def _link_changes_to_graph_in_session(
                 "Multiple graph_node rows match the same natural key: "
                 f"{key!r}"
             )
-        # Use the integer primary key `node_id` of GraphNode as the graph node
-        # identifier used by downstream impact analysis and edges.
         nodes_by_key[key] = node.node_id
-        # Index by name too. Last-writer-wins if the same object_name
-        # exists under multiple types (edge case — shouldn't happen in
-        # practice because schema namespaces are unique per snapshot).
-        nodes_by_name[node.object_name] = node.node_id
+        nodes_by_name[node.object_name.lower()] = node.node_id
 
     # ──── Step 3: Join change events to node ids ────
     # Two-stage resolution: exact (type, name) match first; if that
@@ -93,7 +90,7 @@ def _link_changes_to_graph_in_session(
     mapping: Dict[int, int] = {}
 
     for event in change_events:
-        key = (event.object_type, event.object_identifier, snapshot_to)
+        key = (event.object_type, (event.object_identifier or "").lower(), snapshot_to)
         node_id = nodes_by_key.get(key)
 
         if node_id is None:
@@ -104,7 +101,7 @@ def _link_changes_to_graph_in_session(
             if event.object_type == "COLUMN":
                 parts = (event.object_identifier or "").rsplit(".", 1)
                 if len(parts) == 2:
-                    parent_name = parts[0]
+                    parent_name = parts[0].lower()
                     node_id = nodes_by_name.get(parent_name)
 
         if node_id is None:

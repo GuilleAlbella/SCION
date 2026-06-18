@@ -8,6 +8,27 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.20 (2026-06-18) - Fix case-sensitivity in graph, diff linker, usage and timeline
+
+**Four case-insensitive fixes across the backend**
+
+- **Graph focus resolver** (`api/v1/graph.py`): root-node lookup now uses
+  `func.lower()` on both `schema_name` and `object_name`, so navigating to
+  `td.my_view` and `TD.MY_VIEW` resolve to the same node.
+- **Graph diff linker** (`graph/graph_diff_linker.py`): ChangeEvent → GraphNode
+  key matching now lowercases both sides. Previously a dict-snapshot node stored
+  as `"TD.my_view"` would not link to a change event whose identifier arrived as
+  `"td.my_view"` from PDCR, silently zeroing out its impact count.
+- **Usage criticality lookup** (`api/v1/usage.py`): `ObjectCriticality` is now
+  queried with `func.lower(object_name) == qualified.lower()` to match across
+  mixed-case object names.
+- **Timeline** (`api/v1/timeline.py`): replaced `==` and `.contains()` (both
+  case-sensitive in SQLite) with `.ilike()` for object_identifier filtering.
+
+No schema changes.
+
+---
+
 ### v1.21.19 (2026-06-17) - Fix PDCR orphan lookup
 
 **PDCR object_usage rows now resolve correctly**

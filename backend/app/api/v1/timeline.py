@@ -85,8 +85,8 @@ def get_timeline(
     # Shared filter — applied to both COUNT and the page query. Pre-built
     # once so the two queries can't drift if the filter logic changes.
     where_clause = or_(
-        ChangeEvent.object_identifier == object_name,
-        ChangeEvent.object_identifier.contains(object_name),
+        ChangeEvent.object_identifier.ilike(object_name),
+        ChangeEvent.object_identifier.ilike(f"%{object_name}%"),
     )
 
     with Session(bind=engine) as session:
