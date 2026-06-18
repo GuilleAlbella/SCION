@@ -120,7 +120,7 @@ Parser/                  # Sample payloads from the extractor team
 | **Changes** | Compare snapshots, filters, expandable before/after, **DDL Generator**, **Visual Diff**, **quick links** to Lineage/Timeline/Impact/Usage, **CSV export** |
 | **Impact Analysis** | Batch blast radius, donut charts, per-change table with **queries/users affected**, **Export Report** (HTML), **CSV export**, confetti on LOW risk |
 | **What-If Simulation** | Preview a hypothetical change's impact without applying it |
-| **Data Lineage** | Interactive ReactFlow graph centered on selected object (accepts `?object=X`) |
+| **Data Lineage** | Interactive ReactFlow graph centered on selected object (accepts `?object=X`). **Column-Level Lineage** panel shows per-column SOURCES / FEEDS INTO with transformation types. **Column view** toggle overlays column strips on graph nodes with grouped "N cols" edges |
 | **System Graph** | Full dependency visualization, 10+ object types each with own color |
 | **Metrics** | Volatility index, trends, **Structure Change Timeline** |
 | **Usage** | Usage heatmap, criticality distribution, **Risk Heatmap**, focused-object highlighting |
@@ -158,7 +158,7 @@ Parser/                  # Sample payloads from the extractor team
 |--------|------|-------------|
 | POST | `/api/v1/parser-import/lineage?dry_run=true\|false` | Import DataDNA parser JSON. Dry-run returns preview; real run persists snapshot + process + step + attribute_lineage; optional `snapshot_id` attaches lineage to an existing dict snapshot |
 | POST | `/api/v1/dict-import` | Multipart upload of 1–6 dict `.dat` files. Auto-detects content type per file, validates batch consistency (source + run_id + temporal coherence), persists as one snapshot keyed by `extract_run_id`. Idempotent re-import |
-| GET | `/api/v1/share-import/scan?path=...` | Scan mounted share or alternate server path for dict, PDCR, and lineage files |
+| GET | `/api/v1/share-import/scan?path=...` | Scan mounted share for dict, PDCR, and lineage files. Peeks `extract_run_id` from dict files and checks against existing snapshots — returns `already_imported` + `existing_snapshot_id` |
 | POST | `/api/v1/share-import?force=false&path=...` | Import dict + PDCR + lineage from the mounted share as one unified snapshot |
 | GET | `/api/v1/notifications/share` | Check whether new files are available in the mounted share |
 
@@ -176,6 +176,11 @@ Parser/                  # Sample payloads from the extractor team
 | POST | `/api/v1/impact/{change_id}` | Impact analysis for single change |
 | POST | `/api/v1/impact/batch` | Batch impact + queries affected |
 | POST | `/api/v1/simulation` | What-If hypothetical change impact |
+
+### Column-Level Lineage
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/lineage/columns?snapshot_id=N&object=SCHEMA.TABLE&tier=TIER1` | Column-to-column lineage for a given table/view from the `attribute_lineage` table (DataDNA Tier 1/2). Returns per-column upstream/downstream edges deduplicated by `(source_key, target_key)` pair |
 
 ### Reasoning, Intelligence & Usage
 | Method | Path | Description |
@@ -271,9 +276,13 @@ dict_persister.persist_batch()→ one snapshot keyed by extract_run_id (idempote
 
 Tested end-to-end against the real sample at `Parser/Data extract 2/Sample 1/` (`Transcend-DevTest`, 6 files × 10 records = 60 records). 41 metadata tests pass, including 9 edge-case temporal-coherence tests added in v1.13.01.
 
-### Pipelines 3 & 4 — Usage and raw code (planned)
+### Pipeline 3 — PDCR Usage statistics (live since v1.21.6)
 
-Out of scope for the current build. Same architecture: offline extractor produces files, SCION consumes. See `docs/ingestion_pipelines.md` for the full 4-pipeline picture.
+Consumes `pdcr_object_usage_*.dat` files from Rahul's extractor. Auto-detected in the same dict-import batch. Feeds the criticality engine (60% usage weight + 40% graph weight). Case-insensitive lookups fixed in v1.21.20; orphan root cause (qualified name prefix) fixed in v1.21.19.
+
+### Pipeline 4 — Raw code (planned)
+
+Deferred until at least one customer asks for it. See `docs/ingestion_pipelines.md` for the full 4-pipeline picture.
 
 ---
 
@@ -433,7 +442,7 @@ Top-level phases at a glance:
 | Phase | Status | Highlights |
 |-------|--------|------------|
 | **0 · Foundations** | ✅ Done | 7 engines, 14 UI pages, parser + dict ingest, narrative UX |
-| **1 · Pipelines 2 & 3** | 🟡 In flight | Pipeline 2 (dict) live; Pipeline 3 (usage) format pending |
+| **1 · Pipelines 2 & 3** | ✅ Done | Pipeline 2 (dict) live v1.12; Pipeline 3 (PDCR usage) live v1.21.6; column-level lineage v1.21.23 |
 | **2 · Scale & hardening** | 🔵 Planned | Benchmark on real data, SQLite→Postgres decision, Docker packaging |
 | **3 · First customer pilot** | 🔴 Future | Auth, infosec, release discipline (`docs/release_policy.md`) |
 | **4 · v1.0 GA** | 🔴 Future | Flip `APP_STAGE` from `BETA` once GA criteria are satisfied |

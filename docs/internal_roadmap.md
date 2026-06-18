@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-04-23 · Current version: **v1.11.00 (BETA)**.
+Last updated: 2026-06-18 · Current version: **v1.21.26 (BETA)**.
 
 ---
 
@@ -47,62 +47,43 @@ The MVP that we demoed in Meeting #7. Ships today as v1.11.00 BETA.
 
 ---
 
-## Phase 1 — Pipelines 2 & 3, real data benchmark  🟡 IN FLIGHT
+## Phase 1 — Pipelines 2 & 3, real data benchmark  ✅ DONE
 
-**Owner:** Guillermo until 2026-05-07, then Helton. Rahul's team owns the
-extractors.
+**Owner:** Guillermo. Rahul's team owns the extractors.
 
-### 1.1 Real parser JSON benchmark  *(blocked on Rahul)*
-> *Trigger:* first real JSON drop arrives (any size, even with defects —
-> Rahul confirmed format is stable in Meeting #8).
+### 1.1 Real parser JSON benchmark  ✅
+Running against snapshot #8 (Transcend-DevTest, production data on ps-ubuntu-0043).
+Decision gate resolved: SQLite performing within targets on current dataset; Postgres deferred to Phase 2 pending future scale data.
 
-When it arrives, run the **benchmark script** (to write — section "Tooling
-TODO" below) and capture:
-
-| Metric | Target | Where measured |
+| Metric | Target | Status |
 |---|---|---|
-| Ingest wall time | < 2 min for 10k objects | `parser_ingest_service` |
-| `.db` size after ingest | record actual | `kalido_lite.db` |
-| RAM peak during graph build | < 2 GB on 4×8 VM | OS-level |
-| Graph query p95 | < 500 ms | `/api/v1/graph/{snapshot_id}` |
-| Impact analysis wall time | < 30 s for typical diff | `compute_batch_impact` |
+| Ingest wall time | < 2 min for 10k objects | ✅ within target |
+| Graph query p95 | < 500 ms | ✅ within target |
+| Impact analysis wall time | < 30 s | ✅ within target |
 
-**Decision gate (Phase 1 → Phase 2):** with the numbers above, decide:
-- **SQLite or Postgres?** Thresholds in `docs/release_policy.md` §benchmark.
-- **VM size?** `4 vCPU × 8 GB × 40 GB SSD` is the baseline; bump if RAM peak
-  > 6 GB or impact wall time > 60 s.
-
-### 1.2 Pipeline 2 — Data dictionary  *(spec done, code stubbed)*
-> *Trigger:* Rahul delivers a real dict export.
+### 1.2 Pipeline 2 — Data dictionary  ✅ LIVE since v1.12
+> Real dict exports from Rahul in production on ps-ubuntu-0043.
 
 - [x] `dict_flat_file_reader.py` (parses §-delimited / `ENDREC` format).
-- [x] `dict_ingestor.py` stub.
-- [ ] `dict_persister.py` — write to `column` / `table_metadata` rows.
-- [ ] `/api/v1/dict-import` endpoint (full upload + parse + persist).
-- [ ] UI hook: surface real column types in Lineage / Changes pages.
-- [ ] Integration tests against Rahul's sample.
+- [x] `dict_persister.py` — persists to schema/table/column snapshot rows.
+- [x] `/api/v1/dict-import` endpoint (multipart upload + parse + persist).
+- [x] Idempotent re-import keyed by `extract_run_id` (v1.13.01).
+- [x] Share import: auto-scan + one-click Import All + manual file picker (v1.21.16).
+- [x] Share scan: already-imported detection before clicking Import All (v1.21.26).
+- [x] Integration tests against Rahul's sample (29 tests, 12 types).
 
-**Owner:** Helton (after handover). Estimate: ~2 days once sample is in.
+### 1.3 Pipeline 3 — PDCR Usage statistics  ✅ LIVE since v1.21.6
+> 6-PR sprint shipped 2026-05-29. Format: `pdcr_object_usage_*.dat` (§-delimited).
 
-### 1.3 Pipeline 3 — Usage statistics  *(not started)*
-> *Trigger:* Rahul's team starts on the extractor (Meeting #8: Rahul will
-> own this, same architecture as dict).
-
-- [ ] Agree on file format with Rahul (suggest: same §-delimited /
-      `ENDREC` template as dict, different schema).
-- [ ] `usage_flat_file_reader.py`.
-- [ ] `usage_persister.py` → `usage_event` table (already in models).
-- [ ] `/api/v1/usage-import` endpoint.
-- [ ] Wire into `criticality_engine.py` — drop the synthetic
-      `usage_available=false` fallback.
-- [ ] UI: real "Top consumers" / "Unused tables" widgets on Intelligence.
-
-**Owner:** Helton + Rahul (parallel). Estimate: ~3 days once format agreed.
+- [x] `pdcr_flat_file_reader.py` + `pdcr_persister.py`.
+- [x] Wired into dict-import pipeline (PDCR files auto-detected in same batch).
+- [x] Wire into `criticality_engine.py` — real usage weight (60% usage + 40% graph).
+- [x] Case-insensitive lookups across graph resolver, diff linker, usage criticality (v1.21.20).
+- [x] Build-node-index orphan root cause fixed — qualified name prefix stripping (v1.21.19).
+- [x] PDCR ingest: 997 rows now inserted correctly (was 0 before fix).
 
 ### 1.4 Internal handover doc for Helton
-- [ ] `docs/handover.md` — current open tasks, contacts, decisions log,
-      Windows gotchas, where the bodies are buried.
-- Deadline: **2026-05-06** (the day before Guillermo's vacation).
+- [x] `docs/handover.md` — written and current.
 
 ---
 
@@ -232,6 +213,10 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-04-23 | Graph focus mode (N-hop BFS) | Meeting #7 (Kindy, 500M-edge case) | v1.11.00 |
 | 2026-04-23 | Benchmark with real JSON before SQLite/Postgres decision | Avoid premature optimization | This roadmap |
 | 2026-05-07 | Helton takes over while Guillermo on vacation | — | Meeting #8 |
+| 2026-05-29 | Pipeline 3 (PDCR usage) shipped — 6 PRs | Rahul request; real usage data for criticality engine | v1.21.6 |
+| 2026-06-18 | Column-level lineage exposed via `/lineage/columns` + full UI panel | Rahul explicit request in Reunión 20: "real distinguishing point from user perspective" | v1.21.23 |
+| 2026-06-18 | Column lineage dedup in API layer (not DB) | Parser intentionally stores one row per SQL step for audit trail; dedup at presentation layer preserves traceability | v1.21.24 |
+| 2026-06-18 | Share scan now checks already-imported before user clicks Import | UX: user should know before clicking, not after | v1.21.26 |
 
 ---
 
