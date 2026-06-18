@@ -1,8 +1,0 @@
-Object name  : asmt_roles_config_vw
-Schema       : APP_ANTHROPIC_SPEND_MGMT
-Test type    : absent
-
-Note: Provided by Rahul Kulkarni as an "added or dropped object" (email 2026-06-10).
-      CreateTimestamp 2026-06-02. This schema was NOT present in the ingested snapshots.
-      Verifies that SCION correctly does not show this object — confirming the data gap
-      and that ingest coverage needs to be extended to APP_ANTHROPIC_SPEND_MGMT.

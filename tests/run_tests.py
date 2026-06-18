@@ -169,6 +169,14 @@ def run_lineage_test(base_url: str, snapshot_id: int, test: dict, hops: int) -> 
         return _result(test, "FAIL",
                        f"Object '{test['object_name']}' not found in snapshot #{snapshot_id}.")
 
+    # Narrow candidates to the hinted schema when one is provided, to avoid
+    # picking the wrong schema instance when the same bare name exists in many schemas.
+    schema_hint = test.get("schema_name")
+    if schema_hint and len(matches) > 1:
+        filtered = [m for m in matches if m.upper().startswith(schema_hint.upper() + ".")]
+        if filtered:
+            matches = filtered
+
     # When multiple schemas match, pick the root with the most chain coverage.
     # Tiebreaker: edge coverage (number of expected edges found).
     if len(matches) > 1:
