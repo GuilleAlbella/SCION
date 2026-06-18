@@ -577,17 +577,16 @@ function LineagePage() {
       let ci = 0;
       for (const [pk, labels] of pairLabels) {
         const [srcId, tgtId] = pk.split("||");
-        const first = labels[0];
-        const edgeLabel = labels.length > 1 ? `${first}\n+${labels.length - 1} more` : first;
         colEdges.push({
           id: `col-${ci++}`,
           source: srcId,
           target: tgtId,
-          label: edgeLabel,
+          label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
           type: "smoothstep",
           style: { stroke: "#7C3AED", strokeWidth: 1.5, strokeDasharray: "5 3" },
-          labelStyle: { fontSize: 8, fill: "#6D28D9", fontFamily: "monospace", fontWeight: 500 },
-          labelBgStyle: { fill: "#F5F3FF", fillOpacity: 0.95 },
+          labelStyle: { fontSize: 9, fill: "#6D28D9", fontWeight: 700 },
+          labelBgStyle: { fill: "#F5F3FF", fillOpacity: 0.95, rx: 8, ry: 8 },
+          labelBgPadding: [4, 6] as [number, number],
           animated: false,
         });
       }
