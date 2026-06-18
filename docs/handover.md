@@ -1,257 +1,256 @@
-# SCION — Handover for Helton
+# SCION — Maintainer Onboarding
 
-**Author:** Guillermo Albella.
-**Audience:** Helton Guedes, primary maintainer **2026-05-07 → return TBD**.
-**Purpose:** everything you'd want to ask me in person but I won't be
-around to answer. Pair this with `docs/internal_roadmap.md` (the
-*what's next*) — this doc is the *how to actually do it day one*.
+**Author:** Guillermo Albella · guillermo.albella@teradata.com
+**Audience:** Anyone taking over as primary maintainer, contributing for
+the first time, or picking up after a context switch.
+**Purpose:** Everything you'd want to ask in person. Pair with
+`docs/internal_roadmap.md` (the *what's next*) and `docs/SPEC.md`
+(the *what and why*). This doc is the *how to actually do it day one*.
+
+**Current version:** v1.21.26 (2026-06-18)
 
 ---
 
-## 1. The five docs you have to read first (in order)
+## 1. The docs you must read first (in order)
 
 | Order | File | Why |
 |---|---|---|
-| 1 | `README.md` | Architecture, engines, Quick Start, full changelog. |
-| 2 | `docs/internal_roadmap.md` | Phases, gates, owner cheat-sheet, decision log. |
-| 3 | `docs/use_cases.md` | What SCION actually does, in 8 bullet points. |
-| 4 | `docs/ingestion_pipelines.md` | The 4-pipeline architecture (committee decision). |
-| 5 | `docs/release_policy.md` | Versioning + release discipline. |
+| 1 | `README.md` | Architecture, engines, Quick Start, API surface. |
+| 2 | `docs/SPEC.md` §1–§4 | What SCION is, what it deliberately isn't, tech stack. ~30 min. |
+| 3 | `docs/internal_roadmap.md` | Phases, decision log, owner cheat-sheet. |
+| 4 | `docs/use_cases.md` | What SCION does in 8 bullet points — how to explain it. |
+| 5 | `docs/ingestion_pipelines.md` | The 4-pipeline architecture (committee decision). |
+| 6 | `docs/release_policy.md` | Versioning + release discipline. |
 
-`docs/demo.txt` (Spanish) and `docs/demo_en.txt` (English) are the
-demo walkthrough scripts. Useful when you want to validate end-to-end
-that nothing broke after a change.
+`docs/demo_en.txt` (English) and `docs/demo.txt` (Spanish) are the
+demo walkthrough scripts — useful for end-to-end validation after a change.
+
+---
 
 ## 2. First-day checklist
 
-Once you've cloned the repo (**not inside OneDrive** — see §6):
+Clone **outside OneDrive** (see §6 — this is critical on Windows):
 
 ```powershell
 # 1. Set up the venv + node_modules
 python -m venv .venv
 .venv\Scripts\pip install -r backend\requirements\dev.txt
-cd frontend
-npm install
-cd ..
+cd frontend && npm install && cd ..
 
-# 2. Create the SQLite DB (alembic upgrade head, idempotent) and seed demo data.
-#    `db_init.py` is the single canonical entry point: it auto-detects fresh /
-#    managed / legacy DB states and applies the correct path. The old
-#    `bootstrap_sqlite_db.py` (which used Base.metadata.create_all and could
-#    drift from migrations) is gone — `db_init.py reset --with-seed` replaces it.
+# 2. Create the SQLite DB + demo seed
+#    db_init.py is the single canonical entry point for all DB lifecycle ops.
+#    `reset --with-seed` drops everything and rebuilds with demo data.
+#    `init` is idempotent — safe to run on an existing DB.
 .venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed
 
-# 4. Run both services
+# 3. Run both services
 .\dev.ps1
 ```
 
-UI on http://localhost:3000 · API on http://localhost:8000 ·
-docs/swagger on /docs.
+UI → http://localhost:3000 · API → http://localhost:8000 · OpenAPI → /docs
 
-If `dev.ps1` exits silently right after starting, that's the WatchFiles
-bug — the file `dev.ps1` already has the fix (`--reload-dir app`), so
-you should not see it. If you do, see §6.
+If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
 
-## 3. What's open right now
+---
 
-**Open PRs (as of 2026-04-29):**
-- **#1 `feat/dict-ingest`** — Pipeline 2 backend (data dictionary
-  ingest). Reader + detector + validator + persister + endpoint +
-  5 integration tests against Rahul's first real sample. Ready to
-  merge after your review.
-- **#2 `feat/dict-followups`** — Builds on #1 with: Alembic migration
-  for `extract_run_id` column (replaces the LIKE lookup), 17 edge-case
-  tests for the format detector, the `/import` page with drag-and-drop,
-  and this handover doc. Merge after #1.
+## 3. Current state of the codebase (as of v1.21.26)
 
-**Waiting on Rahul:**
-- Confirmation on whether dict stays `.dat` or migrates to JSON, and
-  whether parser stays JSON. Email sent 2026-04-29 — check his reply
-  before any work that locks in format assumptions. Background:
-  `Transcripciones/Reunion 8.txt`.
+### What's live and stable
 
-**Phase-1 to-dos in priority order** (full list in `internal_roadmap.md`):
-1. **Real-JSON benchmark** the moment Rahul ships a full extract
-   (target metrics in roadmap §1.1). This decides SQLite vs Postgres
-   for the pilot VM.
-2. UI page for **parser-import** in addition to dict-import (today
-   only the backend exists).
-3. Persist **indices / partitioning / tabletext** to dedicated tables
-   (today they're parsed and counted but not stored). Phase-2 schema
-   migration when graph engine actually consumes them.
-4. **Wire dict snapshots into the change-event engine** so `/changes`
-   shows column-type changes derived from dict diffs.
+| Area | Status | Notes |
+|---|---|---|
+| **Pipeline 1** — Code Parser JSON ingest | ✅ Stable | `/parser-import`. Parser output → graph edges + attribute_lineage. |
+| **Pipeline 2** — Data Dictionary ingest | ✅ Stable | `/dict-import`. 6-file .dat batch; idempotent on `extract_run_id`. |
+| **Pipeline 3** — PDCR usage ingest | ✅ Stable | Bundled with dict-import. Real criticality scoring (60% usage + 40% graph). |
+| **Share import** | ✅ Stable | Auto-scan, one-click Import All, manual picker, already-imported detection. |
+| **Column-level lineage** | ✅ Live since v1.21.23 | `/lineage/columns` endpoint + full panel + Column view toggle in graph. |
+| **Graph / impact / diff / TAISA** | ✅ Stable | All engines pre-aggregating at ingest time. |
+| **Containerised deploy** | ✅ Stable | GHCR private images, one-liner installer, `update.sh`. |
+
+### Known open items / follow-ups
+
+- **Incremental snapshot handling** — today every import creates a fresh snapshot; no delta-only update path yet.
+- **DataDNA QueryID correlation** — `dbql_query` stores DBQL query text; wiring it to the Code Parser output requires the Code Parser team to ship a QueryID join key.
+- **Postgres migration** — roadmap item for when multi-tenant arrives. SQLAlchemy + Alembic do most of the work; see SPEC §7.3.
+- **Security architecture doc** — still missing (tracked in `docs/SPEC.md` §13.4).
+- **Operations / on-call runbook** — still missing (tracked in §13.4).
+- **Cross-team reference ETL fixture** — §10.10 + §11.5 in SPEC; pending Code Parser team selecting a candidate flow.
+
+### Running tests
+
+```powershell
+# All backend tests (29 test files, ~12 types)
+.venv\Scripts\pytest backend/tests/ -v
+
+# TypeScript strict check
+cd frontend && npm run lint && npx tsc --noEmit
+```
+
+---
 
 ## 4. Where things live (mental map)
 
 ```
 backend/
 ├─ app/
-│  ├─ api/v1/             # FastAPI routes — one file per resource
-│  │  ├─ dict_import.py     ← v1.12.00, the multipart endpoint
-│  │  ├─ parser_import.py   ← v1.04, JSON ingest
-│  │  └─ ...                ← snapshots, changes, impact, graph, etc.
+│  ├─ api/v1/                 # FastAPI routes — one file per resource
+│  │  ├─ dict_import.py         ← Pipeline 2: 6-file dict + PDCR ingest
+│  │  ├─ parser_import.py       ← Pipeline 1: Code Parser JSON ingest
+│  │  ├─ share_import.py        ← Server-side share scan + import
+│  │  ├─ lineage.py             ← Column-level lineage (/lineage/columns)
+│  │  ├─ graph.py               ← Full graph + BFS focus subgraph
+│  │  ├─ impact.py              ← Blast radius + batch impact
+│  │  ├─ import_progress.py     ← SSE/polling progress channel
+│  │  └─ ...                    ← snapshots, diff, reasoning, usage, …
 │  ├─ db/
-│  │  ├─ engine.py        # global SQLAlchemy engine (SQLite by default)
-│  │  └─ models/          # 1 file per ORM entity
-│  ├─ engines/            # the 7 analytical engines (graph, impact, …)
-│  ├─ metadata/           # data-dictionary readers + persisters
-│  │  ├─ dict_flat_file_reader.py    ← v1.12, real 16-col layout
-│  │  ├─ format_detector.py          ← content-based dispatch
-│  │  ├─ dict_batch_validator.py     ← same source+run_id check
-│  │  └─ dict_persister.py           ← snapshot keyed by run_id
-│  └─ ...
-├─ tests/                 # pytest, mostly unit + a few integration
-└─ tools/                 # db_init.py (schema + seed lifecycle), rich_seed.py, …
+│  │  ├─ engine.py              # global SQLAlchemy engine (SQLite)
+│  │  └─ models/                # 20 ORM models (1 file per entity)
+│  │     ├─ attribute_lineage.py   ← Tier 1/2 column→column edges
+│  │     ├─ graph_node/edge.py     ← dependency graph
+│  │     └─ ...
+│  ├─ metadata/                 # readers + validators + persisters
+│  │  ├─ dict_flat_file_reader.py  ← §-delimited / ENDREC parser
+│  │  ├─ format_detector.py        ← content-based file type dispatch
+│  │  ├─ dict_batch_validator.py   ← same source+run_id + temporal check
+│  │  ├─ dict_persister.py         ← snapshot keyed by extract_run_id
+│  │  └─ pdcr_persister.py         ← PDCR usage → UsageEvent rows
+│  ├─ graph/                    # graph builder, impact engine, blast radius
+│  ├─ diff/                     # diff engine + change classification
+│  ├─ taisa/                    # TAISA LLM client + context builder
+│  ├─ usage/                    # usage_event + criticality + dbql_query
+│  ├─ parser_ingest/            # Code Parser JSON → internal payload
+│  └─ snapshot/                 # snapshot engine + structural hash
+├─ tests/                       # pytest — unit + integration
+└─ tools/
+   ├─ db_init.py                  ← canonical DB lifecycle (init/reset/seed)
+   └─ validate_only.py            ← pre-flight validator (no DB required)
 
 frontend/
 └─ src/
-   ├─ app/                # one folder per route, Next.js App Router
-   │  ├─ import/             ← v1.13, the drag-and-drop page
-   │  ├─ lineage/, impact/, graph/, …
+   ├─ app/                      # Next.js App Router — one folder per page
+   │  ├─ lineage/page.tsx          ← Lineage graph + Column-Level Lineage panel
+   │  ├─ snapshots/page.tsx        ← Import from Share + Live Capture
+   │  ├─ impact/, changes/, graph/, …
    ├─ components/
-   │  ├─ shared/             ← ObjectPicker, GuidedSection, etc.
-   │  └─ layout/             ← PageShell, Sidebar
+   │  ├─ shared/                  ← GuidedSection, ObjectPicker, etc.
+   │  └─ layout/                  ← PageShell, Sidebar
    └─ lib/
-      ├─ api/                # 1 file per resource — typed Axios clients
-      ├─ constants.ts        # APP_VERSION, CHART_COLORS, …
-      └─ terminology.ts      # changeTypeLabel(), OBJECT_TYPE_STYLES
+      ├─ api/                     # typed Axios clients (1 file per resource)
+      ├─ constants.ts              ← APP_VERSION (single source of truth)
+      └─ terminology.ts            ← changeTypeLabel(), OBJECT_TYPE_STYLES
 
-docs/                     # everything you should know about the project
-Parser/                   # Rahul's contracts + sample data
-alembic/versions/         # migrations — new ones go here
+docs/                           # all project documentation
+alembic/versions/               # migrations — new ones go here
+Parser/                         # Code Parser contracts + sample data
 ```
 
-## 5. Conventions we follow (so you don't have to relearn)
+---
 
-- **Branches:** `feat/<slug>`, `fix/<slug>`, `chore/<slug>`. Never push
-  to `main`.
-- **PRs:** one feature per PR. Always use the template (auto-loads).
-  CODEOWNERS auto-requests reviewers. Squash-merge by default.
-- **Commits:** short imperative subject, optional body. No conventional-
-  commit prefixes — too noisy for a 2-person team. See `CONTRIBUTING.md`.
-- **Versioning:** single source of truth is
-  `frontend/src/lib/constants.ts::APP_VERSION`. README header + changelog
-  must be bumped in the same commit. Use semver.
-- **Comments:** explain *why*, not *what*. Files in this repo lean heavy
-  on inline narrative — match that style. New empty files with sparse
-  comments will get review feedback.
-- **Narrative UX:** any new page goes through `GuidedSection` for
-  numbered intro-boxed sections. Don't break the pattern silently.
-- **Tests:** new backend code ships with a test in `backend/tests/`.
-  Frontend smoke tests are aspirational — focus on `npx tsc --noEmit`
-  passing.
+## 5. Conventions we follow
 
-## 6. Windows gotchas (real ones I hit)
+- **Branches:** `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `design/<slug>`. Never push to `main` directly.
+- **Commits:** conventional commits — `feat:`, `fix:`, `chore:`, `design:`, `docs:`. Short imperative subject, optional body. CI gates on this.
+- **Versioning:** `v1.MINOR.PATCH`. Single source of truth → `frontend/src/lib/constants.ts::APP_VERSION`. Bump `README.md` + `CHANGELOG.md` in the same commit. Tag = CI publishes GHCR images.
+- **Release flow:** `git tag vX.Y.Z && git push origin main --tags` → GitHub Actions builds and pushes GHCR images → manual deploy via `update.sh` on production VM (ps-ubuntu-0043).
+- **Comments:** explain *why*, not *what*. Match the inline-narrative style. One-line max — no multi-paragraph docstrings.
+- **Narrative UX:** any new page goes through `GuidedSection` for numbered intro-boxed sections. Keep the pattern consistent.
+- **Tests:** new backend code ships with a test in `backend/tests/`. `test_schema_parity.py` must always be green — it guards ORM/Alembic drift and is the single most important safety net.
+- **Session patterns:** use `with Session(bind=engine) as db:` (NOT `Depends(get_db)`) in new endpoints. See `backend/app/api/v1/lineage.py` for the pattern.
+
+---
+
+## 6. Windows gotchas (real ones)
 
 ### OneDrive corrupts `.git/index`
 **The single most painful issue on this project.** OneDrive sync
-slowly mangles `.git/index` over weeks. Symptoms: random
-`fatal: index file corrupt`, `error: bad index file sha signature`,
-weird ghost commits.
+mangles `.git/index` over weeks. Symptoms: random `fatal: index file
+corrupt`, weird ghost commits, `bad index file sha signature`.
 
 **Fix:** clone outside OneDrive. `C:\dev\SCION` is fine. Already in
-`CONTRIBUTING.md` but worth saying twice.
-
-If you inherit my OneDrive copy and it breaks, do a fresh clone from
-GitHub — never try to "fix" the index. You'll lose more time than the
-clone takes.
+`CONTRIBUTING.md` but worth saying twice. If you inherit a broken copy,
+do a fresh clone from GitHub — never try to fix the index.
 
 ### PowerShell 5.1 vs 7
 `dev.ps1` is ASCII-only deliberately because PS 5.1 reads files with
-the system codepage (not UTF-8) and chokes on Unicode box-drawing
-characters. If you edit it in VSCode, **save as ASCII**, not UTF-8 with
-BOM. PS 7 doesn't care, but we have to stay 5.1-compatible.
+the system codepage and chokes on Unicode. If you edit it in VSCode,
+**save as ASCII**, not UTF-8 with BOM. PS 7 doesn't care, but we stay
+5.1-compatible.
 
-### `--reload-dir app` on uvicorn (the silent-shutdown bug)
-WatchFiles on Windows propagates a signal that PowerShell interprets
-as Ctrl+C on the parent script when it triggers a backend reload.
-We fixed it by limiting reload to `backend/app/` only. If editing
-`tools/`, `alembic/`, or `tests/` ever starts killing the dev server
-again, that scope was widened — narrow it back.
+### `--reload-dir app` on uvicorn
+WatchFiles on Windows propagates a signal that PowerShell interprets as
+Ctrl+C on the parent script when a backend reload triggers. We fixed it
+by limiting reload to `backend/app/` only. Don't widen that scope.
 
-### `taskkill /T /F` instead of `Kill-Process`
+### `taskkill /T /F` in dev.ps1
 npm and uvicorn spawn grandchildren. `dev.ps1` uses `taskkill /T /F`
-on the PIDs because PS's native kill leaves orphans holding ports
-3000 and 8000. Don't "simplify" it.
+on the PIDs because PS's native kill leaves orphans holding ports 3000
+and 8000.
 
-### `gh` CLI is at `%LOCALAPPDATA%\GitHubCLI\bin\gh.exe`
-Installed portable on 2026-04-29 because winget was broken on this
-machine. Already on the user PATH for new terminals. If you join the
-project on a different machine, install gh CLI normally — the portable
-install was a one-off.
+### SSH key for production deploy
+Production VM (ps-ubuntu-0043, 10.27.122.64) requires the SSH key at
+`C:/Users/<you>/.ssh/scion_key`. Keep it in KeePass — never commit it.
+Deploy command:
+```powershell
+ssh -i C:/Users/<you>/.ssh/scion_key scionadmin@10.27.122.64 "curl -fsSL https://raw.githubusercontent.com/GuilleAlbella/scion-deploy/main/update.sh | bash"
+```
+
+---
 
 ## 7. Decisions you should know about (so you don't re-litigate)
 
-Full table is in `internal_roadmap.md`'s decision log; the highlights:
+Full table in `internal_roadmap.md` decision log. Highlights:
 
-- **SCION never connects to a customer DB.** Committee decision,
-  re-confirmed by Luis in Meeting #7. All inputs come from Rahul's
-  offline extractors as files. Don't add a JDBC/ODBC connector
-  "because it'd be easier" — it would, but politically it's a
-  different conversation.
-- **`extract_run_id` is the snapshot key for dict-import.** Every
-  record stamped by Rahul's extractor shares this UUID-ish identifier;
-  validating consistency at ingest time is what prevents mixed-batch
-  corruption.
-- **Two ingest endpoints, one detector.** `/parser-import` and
-  `/dict-import` stay separate because they consume different content.
-  `format_detector.py` is the shared dispatch piece — reuse it if a
-  third pipeline (usage) needs it.
-- **Column changes redirect to parent table for /lineage.** Columns
-  aren't graph nodes in SCION — only databases / tables / views /
-  procs are. The redirect happens in `/lineage` UI (green banner) and
-  in `/impact` backend (column → parent fallback in `graph_diff_linker`).
-- **FK direction in graph: referenced → fk_holder.** A FK from
-  accounts(customer_id) to customers means accounts depends on
-  customers, not the other way around. This was a bug fix in v1.10.
+| Decision | Rationale | Since |
+|---|---|---|
+| SCION never connects to a customer DB | Committee decision re-confirmed by Luis in Meeting #7 | Always |
+| All inputs from offline extractor files | Security teams object to live read access | Always |
+| `extract_run_id` is the snapshot dedup key | Prevents mixed-batch corruption; stamped by the Metadata Extractor on every record | v1.13 |
+| `/dict-import` and `/parser-import` stay separate endpoints | Different content types, different validation pipelines | v1.04 |
+| Column changes redirect to parent table for /lineage | Columns aren't graph nodes — only databases/tables/views/procs are | v1.10 |
+| FK direction: referenced → fk_holder | accounts(customer_id) → customers means accounts *depends on* customers | v1.10 |
+| Dedup column lineage at API layer, not in DB | Parser intentionally stores one row per SQL step for audit trail; dedup at presentation preserves traceability | v1.21.24 |
+| Watchtower removed | 31 inherited CVEs + `docker.sock` = root-equivalent. Users run `update.sh` manually | v1.21.4 |
+| SQLite + WAL for now | Single-VM, single-tenant. Postgres on roadmap when multi-tenant arrives | Always |
+| "No DDL emitted to the warehouse" (NG4) | SCION is observation, not control. Generate DDL produces a *text artefact* only — it never executes | Always |
+| Code Parser has no persistent storage | It processes inputs and emits outputs; any QueryID correlation requires external orchestration | Clarified 2026-06-18 |
 
-## 8. Things I'd do if I had one more day
+---
 
-(In case you have a slow day and want a backlog. None of these block
-anything.)
+## 8. Backlog items (none of these block anything today)
 
-1. **Replace the description-LIKE idempotency fallback in
-   `dict_persister.py`** with a single `extract_run_id` lookup once
-   v1.13 has shipped. Drop ~5 lines of code, no semantic change.
-2. **Persist indices to a dedicated `index_snapshot` table** — model
-   already has `IndexRecord`, just need migration + persister update.
-   Unblocks "what indexes did this object have?" in `/lineage`.
-3. **Server-side pagination for `/changes`** when event count crosses
-   ~10k. Today the page loads everything; fine on demo data, fragile
-   on real customer extracts.
-4. **`tools/benchmark_ingest.py`** end-to-end timing script. Spec is
-   in `internal_roadmap.md` §1.1 — runs an ingest and prints the
-   metrics we care about for SQLite-vs-Postgres decision.
+1. **Postgres portability sweep** (v1.22 hygiene step) — replace `INSERT OR IGNORE` / `strftime` / `julianday` with ANSI equivalents before the Postgres migration. SQLAlchemy handles most of it; a few raw SQL strings need touching.
+2. **`tools/benchmark_ingest.py`** — end-to-end timing script. Spec in `internal_roadmap.md` §1.1. Needed before the SQLite-vs-Postgres decision at Transcend scale.
+3. **Per-object usage idempotency** — `pdcr_object_usage_*.dat` re-upload currently doesn't deduplicate (no natural key). Tracked as v1.22 follow-up.
+4. **Security architecture doc** — auth, secrets, GHCR, threat model. Pre-GA blocker per SPEC §13.4.
+5. **Operations / on-call runbook** — what to do when something fails in prod. Pre-GA blocker per SPEC §13.4.
+6. **Customer onboarding guide** — what a customer-side deployer needs to know. Pre-GA blocker per SPEC §13.4.
+
+---
 
 ## 9. Who to ping when
 
 | Topic | Person | Channel |
 |---|---|---|
 | What is SCION supposed to do? | Pilar (PM) | Teams |
-| Parser / dict / extractor questions | Rahul Kulkarni | Teams |
+| Code Parser / Metadata Extractor / dict format | Rahul Kulkarni | Teams |
 | Infra / VM provisioning | Rahul Shiyekar | Teams (via Pilar) |
 | Scope / release sign-off | Chris | through Pilar |
 | Sales-readiness / customer feedback | Kindy Flyvholm | through Pilar |
 | Time-tracking / project codes | Pilar / Luis | Teams |
-| Codebase questions | me, when I'm back | — |
+| Codebase questions | Guillermo Albella | guillermo.albella@teradata.com |
 
-Save Pilar's number. She's the central node and unblocks 80% of
+Save Pilar's contact. She's the central node and unblocks 80% of
 non-technical questions in one ping.
 
-## 10. If you're stuck on something I didn't anticipate
+---
 
-- **First**, search `Transcripciones/`. Every meeting since project
-  start is transcribed. Most "why is X this way?" answers live there.
-- **Second**, search the README changelog. Each version has a one-bullet
-  "why" for every change.
-- **Third**, look at the decision log in `internal_roadmap.md`.
-- **Fourth**, look at recent PR descriptions on GitHub.
-- **Fifth**, ask Pilar.
+## 10. If you're stuck on something
 
-I'll be back. Ping me on email if it's truly blocking and not
-embarrassing — `[email]@teradata.com`. (Vacation message will be on,
-expect 24h delay.)
-
-Good luck — you've got everything you need. The codebase is in a
-healthy state and the roadmap is realistic. Don't over-engineer.
+1. **First** — search `Transcripciones/`. Every meeting since project start is
+   transcribed. Most "why is X this way?" answers live there.
+2. **Second** — `CHANGELOG.md`. Each version has a "why" for every change.
+3. **Third** — decision log in `internal_roadmap.md`.
+4. **Fourth** — recent PR descriptions on GitHub.
+5. **Fifth** — `docs/SPEC.md` §2.2 (non-goals) if you're wondering whether
+   something is in scope.
+6. **Last resort** — ping Guillermo.
