@@ -28,12 +28,31 @@ class ColumnEdge(BaseModel):
     expression: Optional[str]
     transformation_type: Optional[str]
     tier: Optional[str]
+    step_natural_key: Optional[str] = None
+
+
+class IndirectEdge(BaseModel):
+    """A column used in a filter or join condition — no direct target column.
+
+    Rows where target_attribute_natural_key == "NOT APPLICABLE" represent
+    SQL predicates (WHERE filters, JOIN conditions, GROUP BY keys, HAVING
+    clauses) that affect *which rows* flow to the target, but don't map the
+    column value to a named target column.  The parser still records the
+    source column and the SQL fragment (expression) so analysts can trace
+    indirect data influence.
+    """
+
+    source_column_key: str
+    source_column_name: str
+    transformation_type: Optional[str]
+    expression: Optional[str]
 
 
 class ColumnLineageEntry(BaseModel):
     column_name: str
     upstream: list[ColumnEdge]
     downstream: list[ColumnEdge]
+    indirect: list[IndirectEdge] = []
 
 
 class ColumnLineageResponse(BaseModel):
@@ -80,10 +99,23 @@ def get_column_lineage(
 
         rows = q.all()
 
-    # col_map[col_upper] = {"name": str, "upstream": dict[tgt_key, ColumnEdge], "downstream": dict[tgt_key, ColumnEdge]}
-    # Using dicts keyed by the partner column_key deduplicates rows that the parser
-    # emitted multiple times for the same (source, target) pair across different steps.
+    # col_map[col_upper] = {
+    #   "name": str,
+    #   "upstream": dict[src_key, ColumnEdge],    — deduped by partner key
+    #   "downstream": dict[tgt_key, ColumnEdge],  — deduped by partner key
+    #   "indirect": list[IndirectEdge],            — filter/join predicates (not deduped)
+    # }
+    # Rows where target == "NOT APPLICABLE" are parser-encoded indirect impacts
+    # (filter conditions, JOIN predicates, GROUP BY keys) that affect *which rows*
+    # flow but do not map the column value to a named target.  They are separated
+    # from the direct upstream/downstream edges so the UI can show them in a
+    # dedicated collapsible section.
+    _NOT_APPLICABLE = "NOT APPLICABLE"
+
     col_map: dict[str, dict] = {}
+
+    def _init_entry(col_name: str) -> dict:
+        return {"name": col_name, "upstream": {}, "downstream": {}, "indirect": []}
 
     def _edge(row: AttributeLineage, key: str) -> ColumnEdge:
         table_key, col_name = _split_key(key)
@@ -94,6 +126,7 @@ def get_column_lineage(
             expression=row.expression,
             transformation_type=row.transformation_type,
             tier=row.tier,
+            step_natural_key=row.step_natural_key,
         )
 
     for row in rows:
@@ -104,16 +137,26 @@ def get_column_lineage(
             _, col = _split_key(src)
             key = col.upper()
             if key not in col_map:
-                col_map[key] = {"name": col, "upstream": {}, "downstream": {}}
-            tgt_upper = tgt.upper()
-            if tgt_upper not in col_map[key]["downstream"]:
-                col_map[key]["downstream"][tgt_upper] = _edge(row, tgt)
+                col_map[key] = _init_entry(col)
+
+            if tgt.upper().startswith(_NOT_APPLICABLE):
+                # Indirect: this column is used in a predicate, not as a value source
+                col_map[key]["indirect"].append(IndirectEdge(
+                    source_column_key=src,
+                    source_column_name=col,
+                    transformation_type=row.transformation_type,
+                    expression=row.expression,
+                ))
+            else:
+                tgt_upper = tgt.upper()
+                if tgt_upper not in col_map[key]["downstream"]:
+                    col_map[key]["downstream"][tgt_upper] = _edge(row, tgt)
 
         if tgt.upper().startswith(prefix):
             _, col = _split_key(tgt)
             key = col.upper()
             if key not in col_map:
-                col_map[key] = {"name": col, "upstream": {}, "downstream": {}}
+                col_map[key] = _init_entry(col)
             src_upper = src.upper()
             if src_upper not in col_map[key]["upstream"]:
                 col_map[key]["upstream"][src_upper] = _edge(row, src)
@@ -123,6 +166,7 @@ def get_column_lineage(
             column_name=v["name"],
             upstream=list(v["upstream"].values()),
             downstream=list(v["downstream"].values()),
+            indirect=v["indirect"],
         )
         for v in sorted(col_map.values(), key=lambda x: x["name"].upper())
     ]

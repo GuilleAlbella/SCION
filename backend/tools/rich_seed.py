@@ -54,6 +54,7 @@ from app.graph.graph_diff_linker import link_changes_to_graph
 from app.graph.impact_analyzer import compute_downstream_impact, compute_upstream_impact
 from app.graph.impact_persister import persist_impact_events
 from app.diff.diff_models import ChangeEvent
+from app.db.models.attribute_lineage import AttributeLineage
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -733,6 +734,160 @@ def _persist_explicit_edges(snapshot_id: int) -> int:
 
 
 # ───────────────────────────────────────────────────────────────────────
+# Attribute-level lineage rows (column-to-column, v1.21.x)
+#
+# Each tuple is a seed row for AttributeLineage. Rows with
+# target_attribute_natural_key == "NOT APPLICABLE" are INDIRECT edges:
+# the source column is used in a filter, JOIN predicate, or GROUP BY —
+# it shapes WHICH rows flow to the target but doesn't supply the value.
+#
+# Format: (source_key, target_key, tier, transformation_type, expression, step_natural_key)
+# step_natural_key is the SQL job/step that produced the mapping — exposed
+# in the column lineage graph so analysts can trace the originating SQL.
+# Indirect rows (NOT APPLICABLE target) have no step key.
+# ───────────────────────────────────────────────────────────────────────
+_LINEAGE_ROWS: List[Tuple[str, str, str, str, str | None, str | None]] = [
+    # ── transactions → daily_pl_summary ──────────────────────────────
+    (
+        "core_banking.transactions|amount",
+        "reporting.daily_pl_summary|gross_revenue",
+        "TIER2", "Aggregate", "SUM(amount)",
+        "STEP.DAILY_PL.001",
+    ),
+    (
+        "core_banking.transactions|amount",
+        "reporting.daily_pl_summary|net_revenue",
+        "TIER2", "Aggregate", "SUM(amount) - SUM(fees)",
+        "STEP.DAILY_PL.001",
+    ),
+    # transaction_ts — GROUP BY key → INDIRECT
+    (
+        "core_banking.transactions|transaction_ts",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "CAST(transaction_ts AS DATE) = report_date",
+        None,
+    ),
+    # transaction_type — WHERE filter → INDIRECT
+    (
+        "core_banking.transactions|transaction_type",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "transaction_type IN ('DEBIT','CREDIT')",
+        None,
+    ),
+
+    # ── accounts → daily_pl_summary ──────────────────────────────────
+    (
+        "core_banking.accounts|overdraft_limit",
+        "reporting.daily_pl_summary|fx_impact",
+        "TIER2", "Type Cast", "CAST(overdraft_limit AS DECIMAL(18,2))",
+        "STEP.DAILY_PL.002",
+    ),
+
+    # ── customers → customer_360_view ────────────────────────────────
+    (
+        "core_banking.customers|first_name",
+        "reporting.customer_360_view|full_name",
+        "TIER2", "Expression", "first_name || ' ' || last_name",
+        "STEP.C360.001",
+    ),
+    (
+        "core_banking.customers|last_name",
+        "reporting.customer_360_view|full_name",
+        "TIER2", "Expression", "first_name || ' ' || last_name",
+        "STEP.C360.001",
+    ),
+    (
+        "core_banking.customers|customer_id",
+        "reporting.customer_360_view|customer_id",
+        "TIER2", "Direct Copy", None,
+        "STEP.C360.001",
+    ),
+    # kyc_status — gates which customers appear → INDIRECT
+    (
+        "core_banking.customers|kyc_status",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "kyc_status = 'APPROVED'",
+        None,
+    ),
+    # customer_id — JOIN key to credit_scores → INDIRECT
+    (
+        "core_banking.customers|customer_id",
+        "NOT APPLICABLE",
+        "TIER1", "Join", "customers.customer_id = credit_scores.customer_id",
+        None,
+    ),
+
+    # ── loans → loan_portfolio_report ────────────────────────────────
+    (
+        "core_banking.loans|principal",
+        "reporting.loan_portfolio_report|total_outstanding",
+        "TIER2", "Aggregate", "SUM(principal)",
+        "STEP.LOANRPT.001",
+    ),
+    (
+        "core_banking.loans|interest_rate",
+        "reporting.loan_portfolio_report|avg_interest_rate",
+        "TIER2", "Aggregate", "AVG(interest_rate)",
+        "STEP.LOANRPT.001",
+    ),
+    # loan_type — GROUP BY key → INDIRECT
+    (
+        "core_banking.loans|loan_type",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "GROUP BY loan_type",
+        None,
+    ),
+    # status — WHERE filter → INDIRECT
+    (
+        "core_banking.loans|status",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "status = 'ACTIVE'",
+        None,
+    ),
+
+    # ── credit_scores → customer_360_view ────────────────────────────
+    (
+        "risk_management.credit_scores|score_value",
+        "reporting.customer_360_view|credit_score",
+        "TIER2", "Direct Copy", None,
+        "STEP.C360.002",
+    ),
+    (
+        "risk_management.credit_scores|risk_category",
+        "reporting.customer_360_view|risk_category",
+        "TIER2", "Direct Copy", None,
+        "STEP.C360.002",
+    ),
+    # score_date — HAVING filter → INDIRECT
+    (
+        "risk_management.credit_scores|score_date",
+        "NOT APPLICABLE",
+        "TIER1", "Filter", "score_date = MAX(score_date) OVER (PARTITION BY customer_id)",
+        None,
+    ),
+]
+
+
+def _persist_lineage(snapshot_id: int) -> int:
+    """Insert LINEAGE_ROWS for the given snapshot. Returns rows inserted."""
+    count = 0
+    with Session(engine) as session:
+        with session.begin():
+            for src_key, tgt_key, tier, ttype, expr, step in _LINEAGE_ROWS:
+                session.add(AttributeLineage(
+                    snapshot_id=snapshot_id,
+                    source_attribute_natural_key=src_key,
+                    target_attribute_natural_key=tgt_key,
+                    tier=tier,
+                    transformation_type=ttype,
+                    expression=expr,
+                    step_natural_key=step,
+                ))
+                count += 1
+    return count
+
+
+# ───────────────────────────────────────────────────────────────────────
 def wipe_demo_data() -> None:
     """DELETE all rows from demo + parser tables in FK-safe order.
 
@@ -861,6 +1016,12 @@ def main() -> None:
                 )
                 total_impacts += len(impacts)
     print(f"[rich_seed] Persisted {total_impacts} impact event(s) across all diffs")
+
+    # ──── 6b. Column-level lineage (indirect edges) ────
+    # Seeded on the latest snapshot so the Lineage page shows the
+    # "⊿ Indirect impacts" section for transactions, customers, loans.
+    lineage_count = _persist_lineage(snapshot_ids[-1])
+    print(f"[rich_seed] Attribute lineage rows: {lineage_count} (snapshot {snapshot_ids[-1]})")
 
     # ──── 7. Usage data + criticality ────
     # Usage rows are global (not per-snapshot). Criticality uses the latest

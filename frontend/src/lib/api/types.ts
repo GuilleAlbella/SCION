@@ -162,12 +162,21 @@ export interface ColumnEdge {
   expression: string | null;
   transformation_type: string | null;
   tier: string | null;
+  step_natural_key: string | null;
+}
+
+export interface IndirectEdge {
+  source_column_key: string;
+  source_column_name: string;
+  transformation_type: string | null;
+  expression: string | null;
 }
 
 export interface ColumnLineageEntry {
   column_name: string;
   upstream: ColumnEdge[];
   downstream: ColumnEdge[];
+  indirect: IndirectEdge[];
 }
 
 export interface ColumnLineageResponse {

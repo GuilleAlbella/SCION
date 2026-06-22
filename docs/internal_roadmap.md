@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-06-18 · Current version: **v1.21.26 (BETA)**.
+Last updated: 2026-06-22 · Current version: **v1.21.28 (BETA)**.
 
 ---
 
@@ -87,14 +87,73 @@ Decision gate resolved: SQLite performing within targets on current dataset; Pos
 
 ---
 
-## Phase 2 — Scale & Hardening  🔵 PLANNED
+## Phase 2 — Scale & Hardening + ED Integration  🔵 PLANNED
 
-**Trigger:** Phase 1 benchmark results.
-**Owner:** Helton + Guillermo on return.
+**Trigger:** Phase 1 benchmark results. Phase 2 scope confirmed in Reunión 21 (2026-06-19).
+**Owner:** Guillermo. Rahul Kulkarni presenting integration proposal to Rahul Shiyekar 2026-06-23, then to Chris/Pilar week of 2026-06-23.
+
+> **DataDNA Lite v1.0 declared complete by Rahul (Reunión 21, 2026-06-19).** End-to-end testing passed. One minor parser defect assigned to Soham (non-blocking). Solution ready to roll out.
 
 Subject to what the real-data numbers tell us. Likely items:
 
-### 2.1 SQLite → Postgres (if benchmark says so)
+### 2.0 Column-level lineage enhancements (Reunión 21 feature requests)
+
+Three concrete requests from Rahul after the live demo of column-level lineage:
+
+- [x] **Indirect lineage display** — collapsible "⊿ Indirect impacts" section per column card; amber rows with icon + expression. 10/10 tests. *(v1.21.27)*
+- [x] **Transformation-type icons on column nodes** — `TransformBadge` component maps 8 types to Unicode glyphs (→ Σ ⊿ ≠ ƒ ⊞ ⊟) with full-name tooltip; replaces text badges in Sources, Feeds-into, and Indirect sections. *(v1.21.28)*
+- [x] **Step / Query ID on edge click** — `step_natural_key` exposed in `ColumnEdge`; clicking a dashed column edge reveals originating SQL step IDs in a dismissable purple panel. *(v1.21.28)*
+
+### 2.1 Ecosystem Decoded (ED) integration  *(new — Reunión 21)*
+
+**Idea:** Combine SCION's strengths (structure, change intelligence, column-level lineage) with Ecosystem Decoded's strengths (rich usage metrics, business context / user-group mapping).
+
+Ecosystem Decoded is an existing but dormant Teradata service that analyzes CPU usage by user group, table affinity, query complexity, migration readiness, etc. It has data SCION lacks: detailed performance metrics, user-to-group mappings, and some business context.
+
+**Capability gap summary:**
+
+| Dimension | SCION | Ecosystem Decoded |
+|---|---|---|
+| Structure | ✅ Strong | ❌ Limited |
+| Change intelligence | ✅ Strong | ❌ None |
+| Lineage | ✅ Column-level | ❌ None |
+| Usage | 🟡 Basic | ✅ Strong |
+| Business context | ❌ Limited | ✅ Strong |
+
+**Use cases proposed for Phase 2 (from Reunión 21 + ED use-case spreadsheet):**
+
+- [ ] **ED-06 — PII data identification**: AI-based classification of columns as likely PII (name, address, credit card, etc.) + lineage propagation (if source column is PII → downstream columns inherit PII tag).
+- [ ] **ED-05 — Duplicate / unused data**: Fuzzy-logic detection of redundant datasets (ED flagged this as SCION-suited).
+- [ ] **ED-08 — Archivable data**: Identify data that can be archived (similar to ED-05).
+- [ ] **ED-09 — Migration plan**: Build migration plans based on data association / affinity.
+- [ ] **ED-10 — Business data use map**: Understand how different business functions use data across the org (sales, marketing, ops, finance). Requires user-group mapping from ED.
+
+**Dependencies / open questions:**
+- Rahul Kulkarni presenting proposal to Rahul Shiyekar (2026-06-23).
+- Effort estimate for Phase 2 items to be presented to Chris/Pilar week of 2026-06-23.
+- ED data format / availability not yet confirmed — Rahul studying with a second person.
+- PII propagation via lineage requires column-level lineage to be stable (just shipped v1.21.23).
+
+### 2.2 Incremental snapshot handling *(confirmed Reunión 18)*
+
+- [ ] SCION must compare incremental batches against a "day zero" baseline (not the previous incremental).
+- [ ] Track cumulative object count across batches.
+- [ ] On full reset (gap in data), create a new day zero and reset baseline.
+
+### 2.3 Dict view-definition parsing *(confirmed Reunión 18 — parser team)*
+
+- [ ] Code Parser to parse view DDLs from the data dictionary (not just DBQL).
+- [ ] Covers views created before the extraction window (lineage gaps in DBQL-only mode).
+- [ ] Output: same JSON lineage format; SCION ingests alongside existing dict batch.
+- [ ] Execution model: run once on "day zero", then incremental via DBQL.
+
+### 2.4 DDL timestamp merge *(confirmed Reunión 19)*
+
+- [ ] Same object can arrive from DBQL extract AND dict extract with different timestamps.
+- [ ] SCION must keep the *latest* version (compare DDL timestamps on ingest).
+- [ ] Applies to: views, stored procedures, macros, triggers.
+
+### 2.5 SQLite → Postgres (if benchmark says so)
 - SQLAlchemy abstracts the engine — bulk of work is operational, not code.
 - [ ] Connection-string + driver dependency switch.
 - [ ] Run all Alembic migrations against Postgres in a staging DB.
@@ -102,7 +161,7 @@ Subject to what the real-data numbers tell us. Likely items:
 - [ ] Update `dev.ps1` / Linux scripts for both modes.
 - [ ] `DATABASE_URL` env var; default still SQLite for dev.
 
-### 2.2 Graph engine performance
+### 2.6 Graph engine performance
 - [ ] Lazy-load graph nodes on demand (today: full snapshot in RAM).
 - [ ] Persist computed metrics in DB so re-render doesn't recompute.
       (Partly done — extend.)
@@ -111,13 +170,13 @@ Subject to what the real-data numbers tell us. Likely items:
 - [ ] Consider Cython / Rust for `compute_impact` if BFS becomes the
       bottleneck (last resort — the algorithm itself is O(N+E)).
 
-### 2.3 Frontend rendering
+### 2.7 Frontend rendering
 - [x] Focus mode for /graph (v1.11.00).
 - [ ] Server-side pagination on /changes if event count crosses 10k.
 - [ ] Lazy graph fetch — only request the focused subgraph from backend
       instead of the whole snapshot.
 
-### 2.4 Production runtime
+### 2.8 Production runtime
 - [ ] `docker-compose.yml` — backend + frontend (production build) +
       optional Postgres.
 - [ ] Linux systemd units (no PowerShell in production).
@@ -217,6 +276,9 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-06-18 | Column-level lineage exposed via `/lineage/columns` + full UI panel | Rahul explicit request in Reunión 20: "real distinguishing point from user perspective" | v1.21.23 |
 | 2026-06-18 | Column lineage dedup in API layer (not DB) | Parser intentionally stores one row per SQL step for audit trail; dedup at presentation layer preserves traceability | v1.21.24 |
 | 2026-06-18 | Share scan now checks already-imported before user clicks Import | UX: user should know before clicking, not after | v1.21.26 |
+| 2026-06-19 | DataDNA Lite v1.0 declared complete by Rahul (Reunión 21) | End-to-end testing passed with Ashish; one minor parser defect (Soham) non-blocking | Reunión 21 |
+| 2026-06-19 | Phase 2 expands to include Ecosystem Decoded (ED) integration | Combine SCION structure/lineage with ED usage/business context; Rahul presenting to Rahul Shiyekar 2026-06-23 | Reunión 21 |
+| 2026-06-19 | Three column-lineage enhancements queued (indirect lineage, type icons, step ID on edge) | Rahul requests after live demo; non-blocking for v1.0 rollout | Reunión 21 |
 
 ---
 

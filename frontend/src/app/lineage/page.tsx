@@ -21,7 +21,7 @@
 // when BFS ran out of room, so the UI can suggest widening the
 // search.
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ReactFlow,
@@ -48,10 +48,11 @@ import type {
   ColumnLineageResponse,
   FocusedGraphResponse,
   GraphNode as GN,
+  IndirectEdge,
 } from "@/lib/api/types";
 import { changeTypeLabel } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
-import { ArrowUp, ArrowDown, Info, Network, GitBranch, Layers } from "lucide-react";
+import { ArrowUp, ArrowDown, Info, Network, GitBranch, Layers, ChevronDown, ChevronUp } from "lucide-react";
 
 const NODE_W = 220;
 const NODE_H = 60;
@@ -76,6 +77,98 @@ const COL_TOP_PAD = 8; // padding above the column strip
 const MAX_COLS_SHOWN = 7;
 
 type NodeData = { label: string; type: string; metrics?: GN["metrics"]; columns?: string[] };
+
+/* ── Transformation-type icon badge (Feature 2) ─────────────────────── */
+// Maps the 10 parser-emitted transformation_type values to a single
+// Unicode glyph + descriptive tooltip. The glyphs were chosen so that
+// the intent is legible at 9 px without a font-icon library:
+//   → direct value pass-through   ⊿ funnel (filter / join predicate)
+//   Σ aggregation                 ƒ computed expression
+//   ⊞ window function             ⊟ group-by key
+//   ≠ type coercion               ? unknown
+const TRANSFORM_GLYPHS: Record<string, { g: string; tip: string }> = {
+  "Direct Copy":  { g: "→",  tip: "Direct Copy"    },
+  "Filter":       { g: "⊿",  tip: "Filter"         },
+  "Aggregate":    { g: "Σ",  tip: "Aggregate"       },
+  "Type Cast":    { g: "≠",  tip: "Type Cast"       },
+  "Join":         { g: "⊿",  tip: "Join predicate"  },
+  "Expression":   { g: "ƒ",  tip: "Expression"      },
+  "Window":       { g: "⊞",  tip: "Window function" },
+  "Group By":     { g: "⊟",  tip: "Group By key"    },
+};
+
+function TransformBadge({
+  type,
+  className = "",
+}: {
+  type: string | null;
+  className?: string;
+}) {
+  if (!type) return null;
+  const info = TRANSFORM_GLYPHS[type] ?? { g: "·", tip: type };
+  return (
+    <span
+      title={info.tip}
+      aria-label={info.tip}
+      className={`shrink-0 font-bold cursor-default select-none ${className}`}
+    >
+      {info.g}
+    </span>
+  );
+}
+
+/* ── Indirect impacts section inside a column card ── */
+function IndirectSection({
+  indirect,
+  expanded,
+  onToggle,
+}: {
+  indirect: IndirectEdge[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="bg-amber-50 border-t border-amber-100">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[9px] font-bold text-amber-700 uppercase tracking-widest hover:bg-amber-100 transition-colors"
+      >
+        <span className="flex-1 text-left">
+          ⊿ Indirect impacts ({indirect.length})
+        </span>
+        {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 space-y-1.5">
+          <p className="text-[8px] text-amber-600 leading-snug mb-1">
+            Used in filter / join — affects which rows flow, not which value is copied.
+          </p>
+          {indirect.map((e, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <TransformBadge
+                type={e.transformation_type}
+                className="text-[10px] bg-amber-200 text-amber-800 rounded px-1 py-0.5 whitespace-nowrap mt-0.5"
+              />
+              {e.expression ? (
+                <span
+                  className="font-mono text-[9px] text-amber-900 break-all leading-tight"
+                  title={e.expression}
+                >
+                  {e.expression.length > 70
+                    ? e.expression.slice(0, 70) + "…"
+                    : e.expression}
+                </span>
+              ) : (
+                <span className="text-[9px] text-amber-500 italic">no expression</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ── Column strip rendered inside expanded nodes ── */
 function ColumnStrip({ columns, accent }: { columns: string[]; accent: string }) {
@@ -235,10 +328,25 @@ function LineagePage() {
   const [columnLineage, setColumnLineage] = useState<ColumnLineageResponse | null>(null);
   const [colLineageLoading, setColLineageLoading] = useState(false);
 
+  // Which column card has its "Indirect impacts" section expanded.
+  // null = all collapsed; string = column_name of the expanded card.
+  const [expandedIndirect, setExpandedIndirect] = useState<string | null>(null);
+
   // Column lineage graph overlay — toggle + map over ALL visible nodes.
   const [showColumnLineage, setShowColumnLineage] = useState(false);
   const [columnLineageMap, setColumnLineageMap] = useState<Map<string, ColumnLineageResponse>>(new Map());
   const [colMapLoading, setColMapLoading] = useState(false);
+
+  // Feature 3: floating popup for the last clicked column-to-column edge.
+  // x/y are coordinates relative to the graph container so the popup
+  // appears at the click point, inside the canvas.
+  const [clickedEdge, setClickedEdge] = useState<{
+    labels: string[];
+    steps: string[];
+    x: number;
+    y: number;
+  } | null>(null);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
 
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
@@ -556,9 +664,12 @@ function LineagePage() {
     );
 
     // Build column-to-column edges, grouped by node pair.
+    // pairSteps accumulates unique step_natural_key values per pair so
+    // Feature 3 (edge click → step detail) can surface the originating SQL.
     const colEdges: Edge[] = [];
     if (showColumnLineage) {
       const pairLabels = new Map<string, string[]>();
+      const pairSteps = new Map<string, Set<string>>();
       for (const [objKey, lineage] of columnLineageMap) {
         const srcId = nodeIdByKey.get(objKey);
         if (!srcId || !added.has(srcId)) continue;
@@ -571,17 +682,23 @@ function LineagePage() {
             pairLabels.get(pk)!.push(
               `${col.column_name} → ${edge.column_name}${edge.transformation_type ? `  ·  ${edge.transformation_type}` : ""}`,
             );
+            if (edge.step_natural_key) {
+              if (!pairSteps.has(pk)) pairSteps.set(pk, new Set());
+              pairSteps.get(pk)!.add(edge.step_natural_key);
+            }
           }
         }
       }
       let ci = 0;
       for (const [pk, labels] of pairLabels) {
         const [srcId, tgtId] = pk.split("||");
+        const steps = [...(pairSteps.get(pk) ?? [])];
         colEdges.push({
           id: `col-${ci++}`,
           source: srcId,
           target: tgtId,
           label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
+          data: { labels, steps },
           type: "smoothstep",
           style: { stroke: "#7C3AED", strokeWidth: 1.5, strokeDasharray: "5 3" },
           labelStyle: { fontSize: 9, fill: "#6D28D9", fontWeight: 700 },
@@ -656,6 +773,24 @@ function LineagePage() {
     },
     [focusData, selectedNodeData, focusOn],
   );
+
+  // Feature 3: clicking a column-to-column edge (dashed purple) opens a
+  // floating popup inside the graph at the click coordinates.
+  // Table-level edges (solid colour, no `data`) are intentionally ignored.
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    if (!edge.data || !Array.isArray((edge.data as { labels?: unknown }).labels)) return;
+    const rect = graphContainerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const POPUP_W = 288; // w-72
+    const POPUP_H = 200; // rough estimate
+    const rawX = event.clientX - rect.left + 12;
+    const rawY = event.clientY - rect.top + 12;
+    setClickedEdge({
+      ...(edge.data as { labels: string[]; steps: string[] }),
+      x: Math.max(4, Math.min(rawX, rect.width - POPUP_W - 4)),
+      y: Math.max(4, Math.min(rawY, rect.height - POPUP_H - 4)),
+    });
+  }, []);
 
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
@@ -918,20 +1053,76 @@ function LineagePage() {
 
           {/* Lineage graph */}
           {nodes.length > 1 ? (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6" style={{ height: 450 }}>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={nodeTypes}
-                onNodeClick={onNodeClick}
-                fitView
-                minZoom={0.3}
-                maxZoom={2}
-                attributionPosition="bottom-left"
-              >
-                <Background gap={16} size={1} />
-                <Controls />
-              </ReactFlow>
+            /* Outer div is `relative` (no overflow-clip) so the popup can
+               render as an absolute child without being clipped. The inner
+               div clips the ReactFlow canvas at the rounded border. */
+            <div
+              ref={graphContainerRef}
+              className="relative bg-white rounded-lg shadow-sm border border-gray-200 mb-4"
+              style={{ height: 450 }}
+            >
+              <div className="absolute inset-0 overflow-hidden rounded-lg">
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={nodeTypes}
+                  onNodeClick={onNodeClick}
+                  onEdgeClick={onEdgeClick}
+                  onPaneClick={() => setClickedEdge(null)}
+                  fitView
+                  minZoom={0.3}
+                  maxZoom={2}
+                  attributionPosition="bottom-left"
+                >
+                  <Background gap={16} size={1} />
+                  <Controls />
+                </ReactFlow>
+              </div>
+
+              {/* Feature 3 — floating popup at the click position */}
+              {clickedEdge && (
+                <div
+                  className="absolute z-50 w-72 bg-white border border-purple-300 rounded-xl shadow-2xl overflow-hidden"
+                  style={{ left: clickedEdge.x, top: clickedEdge.y }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center gap-1.5 px-3 py-2 bg-purple-600">
+                    <GitBranch size={11} className="text-purple-200" />
+                    <span className="text-[11px] font-bold text-white flex-1">Column edge</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setClickedEdge(null); }}
+                      className="text-purple-300 hover:text-white text-xs font-bold leading-none"
+                      aria-label="Cerrar"
+                    >✕</button>
+                  </div>
+                  {/* Column mappings */}
+                  <div className="px-3 py-2 space-y-0.5 max-h-28 overflow-y-auto border-b border-purple-100">
+                    {clickedEdge.labels.map((lbl, i) => (
+                      <div key={i} className="font-mono text-[9px] text-purple-900 bg-purple-50 rounded px-1.5 py-0.5">
+                        {lbl}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Step IDs */}
+                  <div className="px-3 py-2 bg-gray-50">
+                    <p className="text-[8px] font-bold text-purple-400 uppercase tracking-widest mb-1">
+                      SQL step{clickedEdge.steps.length !== 1 ? "s" : ""}
+                    </p>
+                    {clickedEdge.steps.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {clickedEdge.steps.map((s) => (
+                          <span key={s} className="font-mono text-[9px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5 border border-purple-200">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-gray-400 italic">No step ID recorded.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-sm text-td-gray-dark mb-6">
@@ -941,11 +1132,12 @@ function LineagePage() {
           )}
 
           {/* Legend */}
-          <div className="flex items-center gap-6 text-xs text-td-gray-dark">
+          <div className="flex items-center gap-6 text-xs text-td-gray-dark mb-6">
             <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-red-600 bg-red-50" /> Provides data</div>
             <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-blue-600 bg-blue-50" /> Selected object</div>
             <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border-2 border-green-600 bg-green-50" /> Receives data</div>
             <div className="flex items-center gap-1.5"><span className="w-6 border-t-2 border-dashed border-blue-500" /> Data flow</div>
+            {showColumnLineage && <div className="flex items-center gap-1.5"><span className="w-6 border-t-2 border-dashed border-purple-500" /> Column flow · click edge to inspect</div>}
           </div>
           </GuidedSection>
 
@@ -1107,11 +1299,10 @@ function LineagePage() {
                                 <span className="font-mono text-[10px] text-red-900 truncate" title={e.column_key}>
                                   <span className="text-red-400">{e.table_key.split(".").pop()}.</span>{e.column_name}
                                 </span>
-                                {e.transformation_type && (
-                                  <span className="shrink-0 text-[8px] bg-red-100 text-red-600 rounded px-1 py-0.5 font-medium whitespace-nowrap">
-                                    {e.transformation_type}
-                                  </span>
-                                )}
+                                <TransformBadge
+                                  type={e.transformation_type}
+                                  className="text-[10px] bg-red-100 text-red-600 rounded px-1 py-0.5"
+                                />
                               </div>
                             ))}
                           </div>
@@ -1120,7 +1311,7 @@ function LineagePage() {
 
                       {/* Feeds into (this column → downstream) */}
                       {col.downstream.length > 0 && (
-                        <div className="bg-green-50 px-3 py-2">
+                        <div className={`bg-green-50 px-3 py-2${col.indirect?.length > 0 ? " border-b border-green-100" : ""}`}>
                           <div className="text-[9px] font-bold text-green-500 uppercase tracking-widest mb-1.5">Feeds into</div>
                           <div className="space-y-1">
                             {col.downstream.map((e, i) => (
@@ -1128,15 +1319,27 @@ function LineagePage() {
                                 <span className="font-mono text-[10px] text-green-900 truncate" title={e.column_key}>
                                   <span className="text-green-500">{e.table_key.split(".").pop()}.</span>{e.column_name}
                                 </span>
-                                {e.transformation_type && (
-                                  <span className="shrink-0 text-[8px] bg-green-100 text-green-700 rounded px-1 py-0.5 font-medium whitespace-nowrap">
-                                    {e.transformation_type}
-                                  </span>
-                                )}
+                                <TransformBadge
+                                  type={e.transformation_type}
+                                  className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5"
+                                />
                               </div>
                             ))}
                           </div>
                         </div>
+                      )}
+
+                      {/* Indirect impacts (filter / join conditions, no target column) */}
+                      {col.indirect?.length > 0 && (
+                        <IndirectSection
+                          indirect={col.indirect}
+                          expanded={expandedIndirect === col.column_name}
+                          onToggle={() =>
+                            setExpandedIndirect((prev) =>
+                              prev === col.column_name ? null : col.column_name
+                            )
+                          }
+                        />
                       )}
                     </div>
                   ))}
