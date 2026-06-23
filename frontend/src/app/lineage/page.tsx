@@ -328,6 +328,13 @@ function LineagePage() {
   const [columnLineage, setColumnLineage] = useState<ColumnLineageResponse | null>(null);
   const [colLineageLoading, setColLineageLoading] = useState(false);
 
+  // Active edge filter: when user clicks a col-edge ("8 cols"), the bottom
+  // panel narrows to only the columns involved in that specific connection.
+  const [activeEdgeFilter, setActiveEdgeFilter] = useState<{
+    srcObjKey: string; tgtObjKey: string;
+    srcColNames: string[]; tgtColNames: string[];
+  } | null>(null);
+
   // Which column card has its "Indirect impacts" section expanded.
   // null = all collapsed; string = column_name of the expanded card.
   const [expandedIndirect, setExpandedIndirect] = useState<string | null>(null);
@@ -457,7 +464,9 @@ function LineagePage() {
   }, [snapshotId, selectedObject, hops, direction]);
 
   // Fetch column-level lineage whenever the selected object changes (bottom panel).
+  // Also clear any active edge filter — it belongs to the previous object.
   useEffect(() => {
+    setActiveEdgeFilter(null);
     if (!snapshotId || !selectedObject) {
       setColumnLineage(null);
       return;
@@ -626,7 +635,7 @@ function LineagePage() {
     }
 
     // ── Column lineage overlay ──────────────────────────────────────
-    // Build a lookup: uppercase "SCHEMA.TABLE" → ReactFlow node id.
+    // Build a lookup: uppercase "SCHEMA.TABLE" → ReactFlow node id (and reverse).
     const nodeIdByKey = new Map<string, string>();
     for (const n of focusData.nodes) {
       const k = (n.object_name.includes(".")
@@ -635,6 +644,8 @@ function LineagePage() {
       ).toUpperCase();
       nodeIdByKey.set(k, n.node_id);
     }
+    const nodeKeyById = new Map<string, string>();
+    for (const [k, id] of nodeIdByKey) nodeKeyById.set(id, k);
 
     // Which columns are mapped for each node (for the column strip).
     const colsByNode = new Map<string, string[]>();
@@ -670,6 +681,8 @@ function LineagePage() {
     if (showColumnLineage) {
       const pairLabels = new Map<string, string[]>();
       const pairSteps = new Map<string, Set<string>>();
+      const pairSrcCols = new Map<string, Set<string>>();
+      const pairTgtCols = new Map<string, Set<string>>();
       for (const [objKey, lineage] of columnLineageMap) {
         const srcId = nodeIdByKey.get(objKey);
         if (!srcId || !added.has(srcId)) continue;
@@ -686,6 +699,10 @@ function LineagePage() {
               if (!pairSteps.has(pk)) pairSteps.set(pk, new Set());
               pairSteps.get(pk)!.add(edge.step_natural_key);
             }
+            if (!pairSrcCols.has(pk)) pairSrcCols.set(pk, new Set());
+            pairSrcCols.get(pk)!.add(col.column_name);
+            if (!pairTgtCols.has(pk)) pairTgtCols.set(pk, new Set());
+            pairTgtCols.get(pk)!.add(edge.column_name);
           }
         }
       }
@@ -698,7 +715,13 @@ function LineagePage() {
           source: srcId,
           target: tgtId,
           label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
-          data: { labels, steps },
+          data: {
+            labels, steps,
+            srcObjKey: nodeKeyById.get(srcId) ?? srcId,
+            tgtObjKey: nodeKeyById.get(tgtId) ?? tgtId,
+            srcColNames: [...(pairSrcCols.get(pk) ?? [])],
+            tgtColNames: [...(pairTgtCols.get(pk) ?? [])],
+          },
           type: "smoothstep",
           style: { stroke: "#7C3AED", strokeWidth: 1.5, strokeDasharray: "5 3" },
           labelStyle: { fontSize: 9, fill: "#6D28D9", fontWeight: 700 },
@@ -781,16 +804,48 @@ function LineagePage() {
     if (!edge.data || !Array.isArray((edge.data as { labels?: unknown }).labels)) return;
     const rect = graphContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const POPUP_W = 288; // w-72
-    const POPUP_H = 200; // rough estimate
+    const POPUP_W = 288;
+    const POPUP_H = 200;
     const rawX = event.clientX - rect.left + 12;
     const rawY = event.clientY - rect.top + 12;
+    const edata = edge.data as {
+      labels: string[]; steps: string[];
+      srcObjKey: string; tgtObjKey: string;
+      srcColNames: string[]; tgtColNames: string[];
+    };
     setClickedEdge({
-      ...(edge.data as { labels: string[]; steps: string[] }),
+      labels: edata.labels,
+      steps: edata.steps,
       x: Math.max(4, Math.min(rawX, rect.width - POPUP_W - 4)),
       y: Math.max(4, Math.min(rawY, rect.height - POPUP_H - 4)),
     });
+    setActiveEdgeFilter({
+      srcObjKey: edata.srcObjKey,
+      tgtObjKey: edata.tgtObjKey,
+      srcColNames: edata.srcColNames,
+      tgtColNames: edata.tgtColNames,
+    });
   }, []);
+
+  // When an edge is clicked, narrow the bottom panel to just the columns
+  // involved in that specific connection. The srcObjKey/tgtObjKey are
+  // uppercase (matching nodeIdByKey format); compare case-insensitively.
+  const filteredColLineage = useMemo(() => {
+    if (!columnLineage || !activeEdgeFilter) return columnLineage;
+    const selectedUpper = selectedObject.toUpperCase();
+    const isSelectedSrc = activeEdgeFilter.srcObjKey === selectedUpper;
+    const colSet = new Set(isSelectedSrc ? activeEdgeFilter.srcColNames : activeEdgeFilter.tgtColNames);
+    return { ...columnLineage, columns: columnLineage.columns.filter((c) => colSet.has(c.column_name)) };
+  }, [columnLineage, activeEdgeFilter, selectedObject]);
+
+  const neighborLabel = useMemo(() => {
+    if (!activeEdgeFilter) return null;
+    const selectedUpper = selectedObject.toUpperCase();
+    const other = activeEdgeFilter.srcObjKey === selectedUpper
+      ? activeEdgeFilter.tgtObjKey
+      : activeEdgeFilter.srcObjKey;
+    return other.split(".").pop() ?? other;
+  }, [activeEdgeFilter, selectedObject]);
 
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
@@ -1068,7 +1123,7 @@ function LineagePage() {
                   nodeTypes={nodeTypes}
                   onNodeClick={onNodeClick}
                   onEdgeClick={onEdgeClick}
-                  onPaneClick={() => setClickedEdge(null)}
+                  onPaneClick={() => { setClickedEdge(null); setActiveEdgeFilter(null); }}
                   fitView
                   minZoom={0.3}
                   maxZoom={2}
@@ -1261,7 +1316,10 @@ function LineagePage() {
                         {columnLineage.total_edges} edges · Tier 1/2
                       </span>
                       <span className="ml-auto text-[10px] text-td-gray-dark">
-                        {columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped
+                        {activeEdgeFilter
+                          ? <>{filteredColLineage?.columns.length ?? 0} <span className="text-purple-600 font-medium">filtered</span> / {columnLineage.columns.length} columns</>
+                          : <>{columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped</>
+                        }
                       </span>
                     </>
                   )}
@@ -1272,15 +1330,35 @@ function LineagePage() {
                   <strong>green cards</strong> show which downstream columns it populates (consumers). The transformation
                   type — <em>Direct Copy</em>, <em>Aggregate</em>, <em>Type Cast</em>, etc. — describes how the value
                   changes in transit.
+                  {!activeEdgeFilter && showColumnLineage && (
+                    <> <span className="text-purple-600">Click a dashed purple edge in the graph above to filter this panel to a specific connection.</span></>
+                  )}
                 </p>
               </div>
+
+              {/* Active edge filter badge */}
+              {activeEdgeFilter && neighborLabel && (
+                <div className="px-4 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2">
+                  <GitBranch size={10} className="text-purple-500 shrink-0" />
+                  <span className="text-[10px] text-purple-700">
+                    Showing {filteredColLineage?.columns.length ?? 0} column{(filteredColLineage?.columns.length ?? 0) !== 1 ? "s" : ""} connected to <strong>{neighborLabel}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveEdgeFilter(null)}
+                    className="ml-auto text-[10px] text-purple-500 hover:text-purple-800 font-semibold"
+                  >
+                    × Clear filter
+                  </button>
+                </div>
+              )}
 
               {/* Body */}
               {colLineageLoading ? (
                 <div className="px-4 py-6 text-xs text-td-gray-dark">Loading column mappings…</div>
-              ) : columnLineage && columnLineage.columns.length > 0 ? (
+              ) : filteredColLineage && filteredColLineage.columns.length > 0 ? (
                 <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {columnLineage.columns.map((col) => (
+                  {filteredColLineage.columns.map((col) => (
                     <div key={col.column_name} className="rounded-lg border border-gray-200 overflow-hidden text-xs shadow-sm">
                       {/* Column name pill */}
                       <div className="bg-gray-800 px-3 py-2">

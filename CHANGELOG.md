@@ -8,6 +8,41 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.29 (2026-06-23) — fix(col-lineage): filter bottom panel to clicked edge pair (Bug 1)
+
+**Column detail panel now filters to the clicked edge**
+Clicking a col-lineage edge ("N cols") in the graph now filters the bottom
+Column-Level Lineage panel to show only the columns involved in that specific
+source→target pair. A purple badge shows the active filter with the neighbor
+object name and a "× Clear filter" button. The count updates to "X filtered / Y columns".
+
+Navigating to a different object automatically clears the stale filter.
+
+No schema or API changes.
+
+---
+
+### v1.21.28 (2026-06-22) - Col-lineage: indirect edges + transform icons + step-ID popup
+
+**Three column-lineage enhancements shipped together**
+- NOT APPLICABLE rows from the parser now render as an amber "⊿ Indirect impacts" section
+  inside each column card (join/filter predicates, not direct column mappings).
+- `transformation_type` values map to Unicode glyphs (→ Σ ⊿ ≠ ƒ ⊞ ⊟) shown as
+  `TransformBadge` chips with tooltips.
+- Clicking a col-lineage edge opens a floating popup inside the graph canvas showing the
+  `step_natural_key` (Query/Step ID) for each transformation involved.
+
+Backend: new `IndirectEdge` + `ColumnEdge.step_natural_key` fields in `/api/v1/lineage`.
+10 new tests in `test_lineage_indirect.py`, all passing.
+
+---
+
+### v1.21.27 (2026-06-22) - Col-lineage: indirect edges + transform icons + step-ID popup (part 1)
+
+Internal build — superseded by v1.21.28.
+
+---
+
 ### v1.21.26 (2026-06-18) - Import: already-imported detection before Import All
 
 **Share scan now warns before a no-op import**
