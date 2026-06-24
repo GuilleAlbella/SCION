@@ -1156,6 +1156,13 @@ function LineagePage() {
                       aria-label="Cerrar"
                     >✕</button>
                   </div>
+                  {/* DEBUG — remove after diagnosing filter issue */}
+                  <div className="px-3 py-1 bg-yellow-50 border-b border-yellow-200 text-[8px] font-mono text-yellow-800 break-all">
+                    src: {clickedEdge.srcObjKey}<br/>
+                    tgt: {clickedEdge.tgtObjKey}<br/>
+                    sel: {selectedObject.toUpperCase()}<br/>
+                    filter: {filterIsActive ? "✓ ACTIVE" : "✗ NOT ACTIVE"}
+                  </div>
                   {/* Column mappings */}
                   <div className="px-3 py-2 space-y-0.5 max-h-28 overflow-y-auto border-b border-purple-100">
                     {clickedEdge.labels.map((lbl, i) => (
