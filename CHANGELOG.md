@@ -8,6 +8,21 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.36 (2026-06-24) — fix(col-lineage): filter bottom panel by srcColNames/tgtColNames instead of table_key
+
+Root cause: the overlay's columnLineageMap (built once when overlay toggled on)
+can have a partial/stale count of column pairs for a given edge, producing an
+"8 cols" label while the fresh columnLineage fetch for the bottom panel sees
+more pairs (16 unique source cols vs 8 label). The old filter used table_key
+comparison against the full columnLineage data and returned more rows than
+the popup showed.
+
+Fix: store srcColNames and tgtColNames in clickedEdge (they are the exact
+unique column names used to build the edge popup). Filter columnLineage.columns
+by name match against that set — now filtered count == popup label count.
+
+---
+
 ### v1.21.35 (2026-06-24) — debug(col-lineage): add snap/total/filtered counts to diagnostic overlay
 
 ---

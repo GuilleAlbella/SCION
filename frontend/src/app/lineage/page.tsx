@@ -350,6 +350,8 @@ function LineagePage() {
     y: number;
     srcObjKey: string;
     tgtObjKey: string;
+    srcColNames: string[];
+    tgtColNames: string[];
   } | null>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
 
@@ -817,6 +819,8 @@ function LineagePage() {
       y: Math.max(4, Math.min(rawY, rect.height - POPUP_H - 4)),
       srcObjKey: edata.srcObjKey,
       tgtObjKey: edata.tgtObjKey,
+      srcColNames: edata.srcColNames,
+      tgtColNames: edata.tgtColNames,
     });
   }, []);
 
@@ -830,11 +834,17 @@ function LineagePage() {
     const isSrc = clickedEdge.srcObjKey === selectedUpper;
     const isTgt = clickedEdge.tgtObjKey === selectedUpper;
     if (!isSrc && !isTgt) return columnLineage;
-    const neighborKey = isSrc ? clickedEdge.tgtObjKey : clickedEdge.srcObjKey;
-    const filtered = columnLineage.columns.filter((c) => {
-      const edges = isSrc ? c.downstream : c.upstream;
-      return edges.some((e) => e.table_key.toUpperCase() === neighborKey);
-    });
+    // Filter by the exact column names stored in the edge (same set shown in
+    // the popup). Using srcColNames/tgtColNames avoids the mismatch between
+    // the overlay's columnLineageMap (may be partial/stale) and the fresh
+    // columnLineage fetch used by the bottom panel.
+    const colSet = new Set(
+      (isSrc ? clickedEdge.srcColNames : clickedEdge.tgtColNames)
+        .map((n) => n.toUpperCase()),
+    );
+    const filtered = columnLineage.columns.filter((c) =>
+      colSet.has(c.column_name.toUpperCase()),
+    );
     return { ...columnLineage, columns: filtered };
   }, [columnLineage, clickedEdge, selectedObject]);
 
