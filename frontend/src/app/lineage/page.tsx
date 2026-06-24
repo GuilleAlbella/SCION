@@ -834,8 +834,18 @@ function LineagePage() {
     if (!columnLineage || !activeEdgeFilter) return columnLineage;
     const selectedUpper = selectedObject.toUpperCase();
     const isSelectedSrc = activeEdgeFilter.srcObjKey === selectedUpper;
-    const colSet = new Set(isSelectedSrc ? activeEdgeFilter.srcColNames : activeEdgeFilter.tgtColNames);
-    return { ...columnLineage, columns: columnLineage.columns.filter((c) => colSet.has(c.column_name)) };
+    // Determine the "other" object in this edge.
+    const neighborKey = isSelectedSrc
+      ? activeEdgeFilter.tgtObjKey
+      : activeEdgeFilter.srcObjKey;
+    // Filter columns by whether they have a direct edge to/from the neighbor.
+    // This uses columnLineage's own upstream/downstream data (always loaded)
+    // rather than the col-overlay edge data (which may be stale or empty).
+    const filtered = columnLineage.columns.filter((c) => {
+      const edges = isSelectedSrc ? c.downstream : c.upstream;
+      return edges.some((e) => e.table_key.toUpperCase() === neighborKey);
+    });
+    return { ...columnLineage, columns: filtered };
   }, [columnLineage, activeEdgeFilter, selectedObject]);
 
   const neighborLabel = useMemo(() => {
