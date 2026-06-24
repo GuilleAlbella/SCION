@@ -689,17 +689,23 @@ function LineagePage() {
             const tgtId = nodeIdByKey.get(edge.table_key.toUpperCase());
             if (!tgtId || !added.has(tgtId) || tgtId === srcId) continue;
             const pk = `${srcId}||${tgtId}`;
-            if (!pairLabels.has(pk)) pairLabels.set(pk, []);
-            pairLabels.get(pk)!.push(
-              `${col.column_name} → ${edge.column_name}${edge.transformation_type ? `  ·  ${edge.transformation_type}` : ""}`,
-            );
+            if (!pairLabels.has(pk))   pairLabels.set(pk, []);
+            if (!pairSrcCols.has(pk))  pairSrcCols.set(pk, new Set());
+            if (!pairTgtCols.has(pk))  pairTgtCols.set(pk, new Set());
             if (edge.step_natural_key) {
               if (!pairSteps.has(pk)) pairSteps.set(pk, new Set());
               pairSteps.get(pk)!.add(edge.step_natural_key);
             }
-            if (!pairSrcCols.has(pk)) pairSrcCols.set(pk, new Set());
-            pairSrcCols.get(pk)!.add(col.column_name);
-            if (!pairTgtCols.has(pk)) pairTgtCols.set(pk, new Set());
+            // One label row per unique source column — multi-target cols
+            // (e.g. LOG_DT→LOG_DT and LOG_DT→LOG_TS) count as one entry so
+            // the popup row count always matches the edge label and bottom panel.
+            const srcSet = pairSrcCols.get(pk)!;
+            if (!srcSet.has(col.column_name)) {
+              pairLabels.get(pk)!.push(
+                `${col.column_name} → ${edge.column_name}${edge.transformation_type ? `  ·  ${edge.transformation_type}` : ""}`,
+              );
+            }
+            srcSet.add(col.column_name);
             pairTgtCols.get(pk)!.add(edge.column_name);
           }
         }
@@ -708,12 +714,11 @@ function LineagePage() {
       for (const [pk, labels] of pairLabels) {
         const [srcId, tgtId] = pk.split("||");
         const steps = [...(pairSteps.get(pk) ?? [])];
-        const srcCount = pairSrcCols.get(pk)?.size ?? labels.length;
         colEdges.push({
           id: `col-${ci++}`,
           source: srcId,
           target: tgtId,
-          label: `${srcCount} col${srcCount !== 1 ? "s" : ""}`,
+          label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
           data: {
             labels, steps,
             srcObjKey: nodeKeyById.get(srcId) ?? srcId,
