@@ -1133,7 +1133,7 @@ function LineagePage() {
                   nodeTypes={nodeTypes}
                   onNodeClick={onNodeClick}
                   onEdgeClick={onEdgeClick}
-                  onPaneClick={() => { setClickedEdge(null); setActiveEdgeFilter(null); }}
+                  onPaneClick={() => { setClickedEdge(null); }}
                   fitView
                   minZoom={0.3}
                   maxZoom={2}
