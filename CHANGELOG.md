@@ -8,6 +8,14 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.34 (2026-06-24) — debug(col-lineage): add diagnostic overlay to trace srcObjKey/tgtObjKey on edge click
+
+Yellow debug panel inside the edge popup showing `src:`, `tgt:`, `sel:`, and
+`filter: ✓/✗` to diagnose why the "8 cols" edge does not filter correctly.
+To be removed once root cause is confirmed.
+
+---
+
 ### v1.21.33 (2026-06-24) — fix(col-lineage): merge filter into clickedEdge to eliminate race condition
 
 **Definitively fixes "8 cols → unfiltered panel" bug**
