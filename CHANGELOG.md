@@ -8,6 +8,24 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.33 (2026-06-24) — fix(col-lineage): merge filter into clickedEdge to eliminate race condition
+
+**Definitively fixes "8 cols → unfiltered panel" bug**
+The real cause: ReactFlow uses position-based hit testing internally, so
+`event.stopPropagation()` does NOT prevent `onNodeClick` from also firing when
+clicking an edge near a node. This means `selectedObject` changed, the useEffect
+ran, and any separate `activeEdgeFilter` state was cleared.
+
+Fix: remove `activeEdgeFilter` as an independent state. Instead, extend
+`clickedEdge` (the popup state) with `srcObjKey` and `tgtObjKey`. Now:
+- "popup is open" ↔ "filter is active" — same state, same lifecycle
+- Nothing can clear the filter without also closing the popup
+- No useEffect race window possible
+- `filteredColLineage` reads from `clickedEdge` directly
+- "× Clear filter" button closes the popup (setClickedEdge(null))
+
+---
+
 ### v1.21.32 (2026-06-24) — fix(col-lineage): survive edge→node click race + bidirectional filter
 
 **Root cause identified and fixed for the "8 cols → unfiltered panel" bug**

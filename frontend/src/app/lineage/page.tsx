@@ -328,13 +328,6 @@ function LineagePage() {
   const [columnLineage, setColumnLineage] = useState<ColumnLineageResponse | null>(null);
   const [colLineageLoading, setColLineageLoading] = useState(false);
 
-  // Active edge filter: when user clicks a col-edge ("8 cols"), the bottom
-  // panel narrows to only the columns involved in that specific connection.
-  const [activeEdgeFilter, setActiveEdgeFilter] = useState<{
-    srcObjKey: string; tgtObjKey: string;
-    srcColNames: string[]; tgtColNames: string[];
-  } | null>(null);
-
   // Which column card has its "Indirect impacts" section expanded.
   // null = all collapsed; string = column_name of the expanded card.
   const [expandedIndirect, setExpandedIndirect] = useState<string | null>(null);
@@ -347,11 +340,16 @@ function LineagePage() {
   // Feature 3: floating popup for the last clicked column-to-column edge.
   // x/y are coordinates relative to the graph container so the popup
   // appears at the click point, inside the canvas.
+  // srcObjKey / tgtObjKey drive the bottom-panel filter — they live HERE
+  // (not in a separate activeEdgeFilter state) so that "popup open" and
+  // "filter active" are always the same condition with no race window.
   const [clickedEdge, setClickedEdge] = useState<{
     labels: string[];
     steps: string[];
     x: number;
     y: number;
+    srcObjKey: string;
+    tgtObjKey: string;
   } | null>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
 
@@ -464,15 +462,7 @@ function LineagePage() {
   }, [snapshotId, selectedObject, hops, direction]);
 
   // Fetch column-level lineage whenever the selected object changes (bottom panel).
-  // Clear the active edge filter only when the user navigates to an object that is
-  // unrelated to the filter — if they click the OTHER end of the filtered edge,
-  // we keep the filter active (it applies from that node's perspective too).
   useEffect(() => {
-    setActiveEdgeFilter((prev) => {
-      if (!prev) return prev;
-      const upper = selectedObject.toUpperCase();
-      return (upper === prev.srcObjKey || upper === prev.tgtObjKey) ? prev : null;
-    });
     if (!snapshotId || !selectedObject) {
       setColumnLineage(null);
       return;
@@ -825,46 +815,42 @@ function LineagePage() {
       steps: edata.steps,
       x: Math.max(4, Math.min(rawX, rect.width - POPUP_W - 4)),
       y: Math.max(4, Math.min(rawY, rect.height - POPUP_H - 4)),
-    });
-    setActiveEdgeFilter({
       srcObjKey: edata.srcObjKey,
       tgtObjKey: edata.tgtObjKey,
-      srcColNames: edata.srcColNames,
-      tgtColNames: edata.tgtColNames,
     });
   }, []);
 
-  // When an edge is clicked, narrow the bottom panel to just the columns
-  // involved in that specific connection. Works from both ends: if the user
-  // is looking at the source object, filter by downstream; if looking at the
-  // target, filter by upstream. If selectedObject is unrelated, no filter.
+  // When an edge is clicked (popup open), narrow the bottom panel to the
+  // columns involved in that specific connection.  clickedEdge is the single
+  // source of truth: popup-open ↔ filter-active, no separate state that
+  // effects can clear independently.
   const filteredColLineage = useMemo(() => {
-    if (!columnLineage || !activeEdgeFilter) return columnLineage;
+    if (!columnLineage || !clickedEdge) return columnLineage;
     const selectedUpper = selectedObject.toUpperCase();
-    const isSrc = activeEdgeFilter.srcObjKey === selectedUpper;
-    const isTgt = activeEdgeFilter.tgtObjKey === selectedUpper;
+    const isSrc = clickedEdge.srcObjKey === selectedUpper;
+    const isTgt = clickedEdge.tgtObjKey === selectedUpper;
     if (!isSrc && !isTgt) return columnLineage;
-    const neighborKey = isSrc ? activeEdgeFilter.tgtObjKey : activeEdgeFilter.srcObjKey;
+    const neighborKey = isSrc ? clickedEdge.tgtObjKey : clickedEdge.srcObjKey;
     const filtered = columnLineage.columns.filter((c) => {
       const edges = isSrc ? c.downstream : c.upstream;
       return edges.some((e) => e.table_key.toUpperCase() === neighborKey);
     });
     return { ...columnLineage, columns: filtered };
-  }, [columnLineage, activeEdgeFilter, selectedObject]);
+  }, [columnLineage, clickedEdge, selectedObject]);
 
-  const filterIsActive = !!activeEdgeFilter && (
-    activeEdgeFilter.srcObjKey === selectedObject.toUpperCase() ||
-    activeEdgeFilter.tgtObjKey === selectedObject.toUpperCase()
+  const filterIsActive = !!clickedEdge && (
+    clickedEdge.srcObjKey === selectedObject.toUpperCase() ||
+    clickedEdge.tgtObjKey === selectedObject.toUpperCase()
   );
 
   const neighborLabel = useMemo(() => {
-    if (!activeEdgeFilter) return null;
+    if (!clickedEdge) return null;
     const selectedUpper = selectedObject.toUpperCase();
-    const other = activeEdgeFilter.srcObjKey === selectedUpper
-      ? activeEdgeFilter.tgtObjKey
-      : activeEdgeFilter.srcObjKey;
+    const other = clickedEdge.srcObjKey === selectedUpper
+      ? clickedEdge.tgtObjKey
+      : clickedEdge.srcObjKey;
     return other.split(".").pop() ?? other;
-  }, [activeEdgeFilter, selectedObject]);
+  }, [clickedEdge, selectedObject]);
 
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
@@ -1364,7 +1350,7 @@ function LineagePage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setActiveEdgeFilter(null)}
+                    onClick={() => setClickedEdge(null)}
                     className="ml-auto text-[10px] text-purple-500 hover:text-purple-800 font-semibold"
                   >
                     × Clear filter
