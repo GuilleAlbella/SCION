@@ -464,9 +464,15 @@ function LineagePage() {
   }, [snapshotId, selectedObject, hops, direction]);
 
   // Fetch column-level lineage whenever the selected object changes (bottom panel).
-  // Also clear any active edge filter — it belongs to the previous object.
+  // Clear the active edge filter only when the user navigates to an object that is
+  // unrelated to the filter — if they click the OTHER end of the filtered edge,
+  // we keep the filter active (it applies from that node's perspective too).
   useEffect(() => {
-    setActiveEdgeFilter(null);
+    setActiveEdgeFilter((prev) => {
+      if (!prev) return prev;
+      const upper = selectedObject.toUpperCase();
+      return (upper === prev.srcObjKey || upper === prev.tgtObjKey) ? prev : null;
+    });
     if (!snapshotId || !selectedObject) {
       setColumnLineage(null);
       return;
@@ -801,6 +807,7 @@ function LineagePage() {
   // floating popup inside the graph at the click coordinates.
   // Table-level edges (solid colour, no `data`) are intentionally ignored.
   const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.stopPropagation();
     if (!edge.data || !Array.isArray((edge.data as { labels?: unknown }).labels)) return;
     const rect = graphContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -828,25 +835,27 @@ function LineagePage() {
   }, []);
 
   // When an edge is clicked, narrow the bottom panel to just the columns
-  // involved in that specific connection. The srcObjKey/tgtObjKey are
-  // uppercase (matching nodeIdByKey format); compare case-insensitively.
+  // involved in that specific connection. Works from both ends: if the user
+  // is looking at the source object, filter by downstream; if looking at the
+  // target, filter by upstream. If selectedObject is unrelated, no filter.
   const filteredColLineage = useMemo(() => {
     if (!columnLineage || !activeEdgeFilter) return columnLineage;
     const selectedUpper = selectedObject.toUpperCase();
-    const isSelectedSrc = activeEdgeFilter.srcObjKey === selectedUpper;
-    // Determine the "other" object in this edge.
-    const neighborKey = isSelectedSrc
-      ? activeEdgeFilter.tgtObjKey
-      : activeEdgeFilter.srcObjKey;
-    // Filter columns by whether they have a direct edge to/from the neighbor.
-    // This uses columnLineage's own upstream/downstream data (always loaded)
-    // rather than the col-overlay edge data (which may be stale or empty).
+    const isSrc = activeEdgeFilter.srcObjKey === selectedUpper;
+    const isTgt = activeEdgeFilter.tgtObjKey === selectedUpper;
+    if (!isSrc && !isTgt) return columnLineage;
+    const neighborKey = isSrc ? activeEdgeFilter.tgtObjKey : activeEdgeFilter.srcObjKey;
     const filtered = columnLineage.columns.filter((c) => {
-      const edges = isSelectedSrc ? c.downstream : c.upstream;
+      const edges = isSrc ? c.downstream : c.upstream;
       return edges.some((e) => e.table_key.toUpperCase() === neighborKey);
     });
     return { ...columnLineage, columns: filtered };
   }, [columnLineage, activeEdgeFilter, selectedObject]);
+
+  const filterIsActive = !!activeEdgeFilter && (
+    activeEdgeFilter.srcObjKey === selectedObject.toUpperCase() ||
+    activeEdgeFilter.tgtObjKey === selectedObject.toUpperCase()
+  );
 
   const neighborLabel = useMemo(() => {
     if (!activeEdgeFilter) return null;
@@ -1326,7 +1335,7 @@ function LineagePage() {
                         {columnLineage.total_edges} edges · Tier 1/2
                       </span>
                       <span className="ml-auto text-[10px] text-td-gray-dark">
-                        {activeEdgeFilter
+                        {filterIsActive
                           ? <>{filteredColLineage?.columns.length ?? 0} <span className="text-purple-600 font-medium">filtered</span> / {columnLineage.columns.length} columns</>
                           : <>{columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped</>
                         }
@@ -1340,14 +1349,14 @@ function LineagePage() {
                   <strong>green cards</strong> show which downstream columns it populates (consumers). The transformation
                   type — <em>Direct Copy</em>, <em>Aggregate</em>, <em>Type Cast</em>, etc. — describes how the value
                   changes in transit.
-                  {!activeEdgeFilter && showColumnLineage && (
+                  {!filterIsActive && showColumnLineage && (
                     <> <span className="text-purple-600">Click a dashed purple edge in the graph above to filter this panel to a specific connection.</span></>
                   )}
                 </p>
               </div>
 
               {/* Active edge filter badge */}
-              {activeEdgeFilter && neighborLabel && (
+              {filterIsActive && neighborLabel && (
                 <div className="px-4 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2">
                   <GitBranch size={10} className="text-purple-500 shrink-0" />
                   <span className="text-[10px] text-purple-700">

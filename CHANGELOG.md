@@ -8,6 +8,31 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.32 (2026-06-24) — fix(col-lineage): survive edge→node click race + bidirectional filter
+
+**Root cause identified and fixed for the "8 cols → unfiltered panel" bug**
+When the user clicked a purple col-lineage edge near a node, ReactFlow
+could fire both `onEdgeClick` (setting `activeEdgeFilter`) AND `onNodeClick`
+(changing `selectedObject`). The `useEffect` watching `selectedObject` then
+immediately cleared `activeEdgeFilter`, leaving the popup visible but the
+filter null.
+
+Changes:
+- `onEdgeClick`: adds `event.stopPropagation()` to prevent the click from
+  bubbling to adjacent node handlers.
+- `useEffect` on `[snapshotId, selectedObject]`: instead of unconditionally
+  clearing `activeEdgeFilter`, it now keeps the filter when `selectedObject`
+  navigates to EITHER end of the active edge (src or tgt). Only clears when
+  the user moves to an unrelated object.
+- `filteredColLineage` / badge: uses `filterIsActive` (true only when
+  `selectedObject` is one of the two filter endpoints), so the badge and
+  filtered count are never shown for unrelated objects.
+- Bonus: filter now works bidirectionally — clicking COMPUTE_V and then
+  navigating to COMPUTE_SUM_V keeps the filter active (panel shows upstream
+  from COMPUTE_V).
+
+---
+
 ### v1.21.30 (2026-06-24) — fix(col-lineage): filter by upstream/downstream table_key (Bug 1 real fix)
 
 **Real fix for the "8 cols → 19 columns" panel mismatch**
