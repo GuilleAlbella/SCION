@@ -21,7 +21,7 @@
 // when BFS ran out of room, so the UI can suggest widening the
 // search.
 
-import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense, createContext, useContext } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ReactFlow,
@@ -29,9 +29,14 @@ import {
   Controls,
   Handle,
   Position,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
   type Node,
   type Edge,
+  type EdgeProps,
   type NodeTypes,
+  type EdgeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "@dagrejs/dagre";
@@ -237,6 +242,74 @@ const nodeTypes: NodeTypes = {
   upstream: UpstreamNode,
   center: CenterNode,
   downstream: DownstreamNode,
+};
+
+// ── Col-lineage custom edge ──────────────────────────────────────────────────
+// Using EdgeLabelRenderer renders labels as HTML elements (above the SVG layer),
+// giving each label its own precise click target. This prevents React Flow's
+// SVG hit-testing from firing the wrong edge when multiple col-lineage paths
+// overlap near the source node.
+type ColEdgeData = {
+  labels: string[];
+  steps: string[];
+  srcObjKey: string;
+  tgtObjKey: string;
+  srcColNames: string[];
+  tgtColNames: string[];
+};
+
+const ColEdgeClickCtx = createContext<
+  ((data: ColEdgeData, e: React.MouseEvent) => void) | null
+>(null);
+
+function ColLineageEdge({
+  sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition, data, markerEnd, style,
+}: EdgeProps) {
+  const onLabelClick = useContext(ColEdgeClickCtx);
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
+  });
+  const edata = data as ColEdgeData | undefined;
+  const count = edata?.labels.length ?? 0;
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      {edata && onLabelClick && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            className="nodrag nopan"
+          >
+            <span
+              style={{
+                fontSize: 9,
+                color: "#6D28D9",
+                fontWeight: 700,
+                background: "#F5F3FF",
+                padding: "2px 6px",
+                borderRadius: 8,
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+              onClick={(e) => { e.stopPropagation(); onLabelClick(edata, e); }}
+            >
+              {count} col{count !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+const edgeTypes: EdgeTypes = {
+  colLineage: ColLineageEdge,
 };
 
 function layoutNodes(nodes: Node[], edges: Edge[], nodeHeightMap?: Map<string, number>): Node[] {
@@ -718,7 +791,6 @@ function LineagePage() {
           id: `col-${ci++}`,
           source: srcId,
           target: tgtId,
-          label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
           data: {
             labels, steps,
             srcObjKey: nodeKeyById.get(srcId) ?? srcId,
@@ -726,11 +798,8 @@ function LineagePage() {
             srcColNames: [...(pairSrcCols.get(pk) ?? [])],
             tgtColNames: [...(pairTgtCols.get(pk) ?? [])],
           },
-          type: "smoothstep",
+          type: "colLineage",
           style: { stroke: "#7C3AED", strokeWidth: 1.5, strokeDasharray: "5 3" },
-          labelStyle: { fontSize: 9, fill: "#6D28D9", fontWeight: 700 },
-          labelBgStyle: { fill: "#F5F3FF", fillOpacity: 0.95, rx: 8, ry: 8 },
-          labelBgPadding: [4, 6] as [number, number],
           animated: false,
         });
       }
@@ -829,6 +898,31 @@ function LineagePage() {
       tgtColNames: edata.tgtColNames,
     });
   }, []);
+
+  // Click handler for the HTML label pills rendered by ColLineageEdge.
+  // This bypasses React Flow's SVG hit-testing entirely, so overlapping
+  // edge paths can't steal the click from the correct edge.
+  const handleColEdgeLabelClick = useCallback(
+    (edata: ColEdgeData, event: React.MouseEvent) => {
+      const rect = graphContainerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const POPUP_W = 288;
+      const POPUP_H = 200;
+      const rawX = event.clientX - rect.left + 12;
+      const rawY = event.clientY - rect.top + 12;
+      setClickedEdge({
+        labels: edata.labels,
+        steps: edata.steps,
+        x: Math.max(4, Math.min(rawX, rect.width - POPUP_W - 4)),
+        y: Math.max(4, Math.min(rawY, rect.height - POPUP_H - 4)),
+        srcObjKey: edata.srcObjKey,
+        tgtObjKey: edata.tgtObjKey,
+        srcColNames: edata.srcColNames,
+        tgtColNames: edata.tgtColNames,
+      });
+    },
+    [],
+  );
 
   // When an edge is clicked (popup open), narrow the bottom panel to the
   // columns involved in that specific connection.  clickedEdge is the single
@@ -1138,21 +1232,24 @@ function LineagePage() {
               style={{ height: 450 }}
             >
               <div className="absolute inset-0 overflow-hidden rounded-lg">
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  nodeTypes={nodeTypes}
-                  onNodeClick={onNodeClick}
-                  onEdgeClick={onEdgeClick}
-                  onPaneClick={() => { setClickedEdge(null); }}
-                  fitView
-                  minZoom={0.3}
-                  maxZoom={2}
-                  attributionPosition="bottom-left"
-                >
-                  <Background gap={16} size={1} />
-                  <Controls />
-                </ReactFlow>
+                <ColEdgeClickCtx.Provider value={handleColEdgeLabelClick}>
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
+                    onNodeClick={onNodeClick}
+                    onEdgeClick={onEdgeClick}
+                    onPaneClick={() => { setClickedEdge(null); }}
+                    fitView
+                    minZoom={0.3}
+                    maxZoom={2}
+                    attributionPosition="bottom-left"
+                  >
+                    <Background gap={16} size={1} />
+                    <Controls />
+                  </ReactFlow>
+                </ColEdgeClickCtx.Provider>
               </div>
 
               {/* Feature 3 — floating popup at the click position */}
