@@ -8,6 +8,20 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.37 (2026-06-24) — fix(col-lineage): edge label now counts unique source columns, not total mappings
+
+Root cause (confirmed via server simulation): one source column can map to
+multiple target columns (e.g. LOG_DT → LOG_DT and LOG_DT → LOG_TS). The
+overlay counted total mappings (labels.length = 19 for the UAT edge) while
+the bottom panel counted unique source columns (pairSrcCols.size = 16). This
+caused the mismatch the user saw.
+
+Fix: change the edge label from `labels.length` to `pairSrcCols.get(pk).size`
+so the number on the edge exactly matches the count shown in the bottom panel.
+Also expands debug panel to show srcColNames/tgtColNames list for verification.
+
+---
+
 ### v1.21.36 (2026-06-24) — fix(col-lineage): filter bottom panel by srcColNames/tgtColNames instead of table_key
 
 Root cause: the overlay's columnLineageMap (built once when overlay toggled on)

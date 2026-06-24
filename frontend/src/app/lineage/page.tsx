@@ -708,11 +708,12 @@ function LineagePage() {
       for (const [pk, labels] of pairLabels) {
         const [srcId, tgtId] = pk.split("||");
         const steps = [...(pairSteps.get(pk) ?? [])];
+        const srcCount = pairSrcCols.get(pk)?.size ?? labels.length;
         colEdges.push({
           id: `col-${ci++}`,
           source: srcId,
           target: tgtId,
-          label: `${labels.length} col${labels.length !== 1 ? "s" : ""}`,
+          label: `${srcCount} col${srcCount !== 1 ? "s" : ""}`,
           data: {
             labels, steps,
             srcObjKey: nodeKeyById.get(srcId) ?? srcId,
@@ -1172,7 +1173,9 @@ function LineagePage() {
                     tgt: {clickedEdge.tgtObjKey}<br/>
                     sel: {selectedObject.toUpperCase()}<br/>
                     filter: {filterIsActive ? "✓ ACTIVE" : "✗ NOT ACTIVE"}<br/>
-                    snap: {snapshotId} | total: {columnLineage?.columns.length ?? "null"} | filtered: {filteredColLineage?.columns.length ?? "null"}
+                    snap: {snapshotId} | total: {columnLineage?.columns.length ?? "null"} | filtered: {filteredColLineage?.columns.length ?? "null"}<br/>
+                    srcCols({clickedEdge.srcColNames.length}): {clickedEdge.srcColNames.join(", ")}<br/>
+                    tgtCols({clickedEdge.tgtColNames.length}): {clickedEdge.tgtColNames.join(", ")}
                   </div>
                   {/* Column mappings */}
                   <div className="px-3 py-2 space-y-0.5 max-h-28 overflow-y-auto border-b border-purple-100">
