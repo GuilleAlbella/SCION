@@ -8,6 +8,21 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.30 (2026-06-24) — fix(col-lineage): filter by upstream/downstream table_key (Bug 1 real fix)
+
+**Real fix for the "8 cols → 19 columns" panel mismatch**
+The previous approach (v1.21.29) stored source/target column name lists in the
+edge data and matched against them. This silently failed when `columnLineageMap`
+hadn't loaded yet or when parser-generated `_COL` generic names didn't match
+the actual column names in the bottom panel.
+
+New approach: filter `columnLineage.columns` by checking whether each column
+has a `downstream` (if selected = source) or `upstream` (if selected = target)
+edge whose `table_key` matches the neighbor object of the clicked edge. Uses
+data already present in `columnLineage` — no dependency on overlay edge data.
+
+---
+
 ### v1.21.29 (2026-06-23) — fix(col-lineage): filter bottom panel to clicked edge pair (Bug 1)
 
 **Column detail panel now filters to the clicked edge**
