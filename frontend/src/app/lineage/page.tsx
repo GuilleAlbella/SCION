@@ -1333,88 +1333,131 @@ function LineagePage() {
           >
           <div className="grid grid-cols-3 gap-4">
             {/* Upstream */}
-            <div className="bg-white rounded-lg shadow-sm border-2 border-td-upstream p-4">
+            <div className="bg-white rounded-lg shadow-sm border-2 border-td-upstream p-4 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
                 <ArrowUp size={16} className="text-td-upstream" />
-                <h3 className="text-sm font-semibold text-td-upstream">Where data comes from ({upstreamList.length + (isSelfReferencing ? 1 : 0)})</h3>
+                <h3 className="text-sm font-semibold text-td-upstream">
+                  Where data comes from
+                  <span className="ml-1.5 text-xs font-normal bg-red-100 text-red-700 rounded-full px-1.5 py-0.5">
+                    {upstreamList.length + (isSelfReferencing ? 1 : 0)}
+                  </span>
+                </h3>
               </div>
               {direction === "down" ? (
-                <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Downstream. Switch to Both or Upstream to see producers.</p>
+                <p className="text-xs text-td-gray-dark">Hidden — direction filter set to Downstream.</p>
               ) : upstreamList.length === 0 && !isSelfReferencing ? (
-                <p className="text-xs text-td-gray-dark">This is a source table — data originates here.</p>
+                <p className="text-xs text-td-gray-dark">Source table — data originates here.</p>
               ) : (
-                <ul className="space-y-1">
-                  {isSelfReferencing && (
-                    <li className="text-xs font-mono bg-amber-50 rounded px-2 py-1 text-amber-800 border border-amber-200">
-                      {selectedNodeData.object_name.split(".").pop()} <span className="text-amber-500 font-normal">(self-referencing)</span>
-                    </li>
-                  )}
-                  {upstreamList.map((name) => (
-                    <li key={name} className="text-xs font-mono bg-red-50 rounded px-2 py-1 text-red-800 cursor-pointer hover:bg-red-100"
-                      onClick={() => focusOn(name)}>
-                      {name}
-                    </li>
-                  ))}
+                <ul className="space-y-1 overflow-y-auto max-h-64 pr-0.5">
+                  {isSelfReferencing && (() => {
+                    const n = selectedNodeData.object_name.split(".");
+                    return (
+                      <li className="bg-amber-50 rounded px-2 py-1.5 border border-amber-200">
+                        <div className="text-xs font-mono font-semibold text-amber-800 truncate">{n[n.length - 1]}</div>
+                        <div className="text-[9px] font-mono text-amber-500">self-referencing</div>
+                      </li>
+                    );
+                  })()}
+                  {upstreamList.map((name) => {
+                    const parts = name.split(".");
+                    const table = parts[parts.length - 1];
+                    const schema = parts.length > 1 ? parts.slice(0, -1).join(".") : null;
+                    return (
+                      <li key={name} title={name}
+                        className="bg-red-50 rounded px-2 py-1.5 cursor-pointer hover:bg-red-100 transition-colors"
+                        onClick={() => focusOn(name)}>
+                        <div className="text-xs font-mono font-semibold text-red-800 truncate">{table}</div>
+                        {schema && <div className="text-[9px] font-mono text-red-400 truncate">{schema}</div>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
 
             {/* Object info */}
-            <div className="bg-white rounded-lg shadow-sm border-2 border-td-object p-4">
+            <div className="bg-white rounded-lg shadow-sm border-2 border-td-object p-4 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
                 <Info size={16} className="text-td-object" />
                 <h3 className="text-sm font-semibold text-td-object">Object Details</h3>
               </div>
-              <div className="space-y-2 text-xs">
-                <div><span className="text-td-gray-dark">Name:</span> <span className="font-mono font-medium">{selectedNodeData.object_name.split(".").pop()}</span></div>
-                <div><span className="text-td-gray-dark">Database:</span> <span className="font-mono">{selectedNodeData.schema_name}</span></div>
-                <div><span className="text-td-gray-dark">Type:</span> <span className="font-medium">{selectedNodeData.object_type}</span></div>
+              <div className="space-y-3 text-xs flex-1">
+                <div>
+                  <div className="text-[9px] uppercase tracking-wide text-td-gray-dark mb-0.5">Table</div>
+                  <div className="font-mono font-semibold text-sm text-gray-800 break-all leading-tight">
+                    {selectedNodeData.object_name.split(".").pop()}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide text-td-gray-dark mb-0.5">Database</div>
+                    <div className="font-mono text-gray-700 truncate">{selectedNodeData.schema_name}</div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide text-td-gray-dark mb-0.5">Type</div>
+                    <div className="font-medium text-gray-700">{selectedNodeData.object_type}</div>
+                  </div>
+                </div>
                 {selectedNodeData.metrics && (
-                  <>
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                      <div className="bg-gray-50 rounded p-1.5 text-center">
-                        <div className="text-sm font-bold">{selectedNodeData.metrics.in_degree}</div>
-                        <div className="text-[9px] text-td-gray-dark">Incoming</div>
-                      </div>
-                      <div className="bg-gray-50 rounded p-1.5 text-center">
-                        <div className="text-sm font-bold">{selectedNodeData.metrics.out_degree}</div>
-                        <div className="text-[9px] text-td-gray-dark">Outgoing</div>
-                      </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+                    <div className="bg-red-50 rounded p-2 text-center">
+                      <div className="text-base font-bold text-td-upstream">{selectedNodeData.metrics.in_degree}</div>
+                      <div className="text-[9px] text-td-gray-dark">Producers</div>
                     </div>
-                  </>
+                    <div className="bg-green-50 rounded p-2 text-center">
+                      <div className="text-base font-bold text-td-downstream">{selectedNodeData.metrics.out_degree}</div>
+                      <div className="text-[9px] text-td-gray-dark">Consumers</div>
+                    </div>
+                  </div>
                 )}
                 {changeInfo && (
-                  <div className="bg-orange-50 rounded p-2 border border-orange-200 mt-2">
+                  <div className="bg-orange-50 rounded p-2 border border-orange-200">
                     <div className="text-xs font-semibold text-td-orange">Changed in this diff</div>
-                    <div className="text-[10px] text-td-gray-dark" title={changeInfo.changeType}>{changeTypeLabel(changeInfo.changeType)} · {changeInfo.severity}</div>
+                    <div className="text-[10px] text-td-gray-dark">{changeTypeLabel(changeInfo.changeType)} · {changeInfo.severity}</div>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Downstream */}
-            <div className="bg-white rounded-lg shadow-sm border-2 border-td-downstream p-4">
+            <div className="bg-white rounded-lg shadow-sm border-2 border-td-downstream p-4 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
                 <ArrowDown size={16} className="text-td-downstream" />
-                <h3 className="text-sm font-semibold text-td-downstream">Where data goes ({downstreamList.length + (isSelfReferencing ? 1 : 0)})</h3>
+                <h3 className="text-sm font-semibold text-td-downstream">
+                  Where data goes
+                  <span className="ml-1.5 text-xs font-normal bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">
+                    {downstreamList.length + (isSelfReferencing ? 1 : 0)}
+                  </span>
+                </h3>
               </div>
               {direction === "up" ? (
-                <p className="text-xs text-td-gray-dark">Hidden — Direction filter is set to Upstream. Switch to Both or Downstream to see consumers.</p>
+                <p className="text-xs text-td-gray-dark">Hidden — direction filter set to Upstream.</p>
               ) : downstreamList.length === 0 && !isSelfReferencing ? (
-                <p className="text-xs text-td-gray-dark">This is an endpoint — no other objects consume this data directly.</p>
+                <p className="text-xs text-td-gray-dark">Endpoint — no objects consume this data directly.</p>
               ) : (
-                <ul className="space-y-1">
-                  {isSelfReferencing && (
-                    <li className="text-xs font-mono bg-amber-50 rounded px-2 py-1 text-amber-800 border border-amber-200">
-                      {selectedNodeData.object_name.split(".").pop()} <span className="text-amber-500 font-normal">(self-referencing)</span>
-                    </li>
-                  )}
-                  {downstreamList.map((name) => (
-                    <li key={name} className="text-xs font-mono bg-green-50 rounded px-2 py-1 text-green-800 cursor-pointer hover:bg-green-100"
-                      onClick={() => focusOn(name)}>
-                      {name}
-                    </li>
-                  ))}
+                <ul className="space-y-1 overflow-y-auto max-h-64 pr-0.5">
+                  {isSelfReferencing && (() => {
+                    const n = selectedNodeData.object_name.split(".");
+                    return (
+                      <li className="bg-amber-50 rounded px-2 py-1.5 border border-amber-200">
+                        <div className="text-xs font-mono font-semibold text-amber-800 truncate">{n[n.length - 1]}</div>
+                        <div className="text-[9px] font-mono text-amber-500">self-referencing</div>
+                      </li>
+                    );
+                  })()}
+                  {downstreamList.map((name) => {
+                    const parts = name.split(".");
+                    const table = parts[parts.length - 1];
+                    const schema = parts.length > 1 ? parts.slice(0, -1).join(".") : null;
+                    return (
+                      <li key={name} title={name}
+                        className="bg-green-50 rounded px-2 py-1.5 cursor-pointer hover:bg-green-100 transition-colors"
+                        onClick={() => focusOn(name)}>
+                        <div className="text-xs font-mono font-semibold text-green-800 truncate">{table}</div>
+                        {schema && <div className="text-[9px] font-mono text-green-500 truncate">{schema}</div>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
