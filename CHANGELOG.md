@@ -8,6 +8,10 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.35 (2026-06-24) — debug(col-lineage): add snap/total/filtered counts to diagnostic overlay
+
+---
+
 ### v1.21.34 (2026-06-24) — debug(col-lineage): add diagnostic overlay to trace srcObjKey/tgtObjKey on edge click
 
 Yellow debug panel inside the edge popup showing `src:`, `tgt:`, `sel:`, and

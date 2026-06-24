@@ -1161,7 +1161,8 @@ function LineagePage() {
                     src: {clickedEdge.srcObjKey}<br/>
                     tgt: {clickedEdge.tgtObjKey}<br/>
                     sel: {selectedObject.toUpperCase()}<br/>
-                    filter: {filterIsActive ? "✓ ACTIVE" : "✗ NOT ACTIVE"}
+                    filter: {filterIsActive ? "✓ ACTIVE" : "✗ NOT ACTIVE"}<br/>
+                    snap: {snapshotId} | total: {columnLineage?.columns.length ?? "null"} | filtered: {filteredColLineage?.columns.length ?? "null"}
                   </div>
                   {/* Column mappings */}
                   <div className="px-3 py-2 space-y-0.5 max-h-28 overflow-y-auto border-b border-purple-100">
