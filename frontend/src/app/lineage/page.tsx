@@ -132,6 +132,23 @@ function IndirectSection({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  // Tier 2 parser output has no expression field — deduplicate rows that share
+  // the same (transformation_type, expression) and track the occurrence count.
+  // 23 identical "Join Condition / null" rows from 23 query executions collapse
+  // into one row showing "· 23 queries" instead of repeating 23 times.
+  const groups = useMemo(() => {
+    const map = new Map<string, { edge: IndirectEdge; count: number }>();
+    for (const e of indirect) {
+      const key = `${e.transformation_type ?? ""}||${e.expression ?? ""}`;
+      if (map.has(key)) {
+        map.get(key)!.count += 1;
+      } else {
+        map.set(key, { edge: e, count: 1 });
+      }
+    }
+    return [...map.values()];
+  }, [indirect]);
+
   return (
     <div className="bg-amber-50 border-t border-amber-100">
       <button
@@ -149,7 +166,7 @@ function IndirectSection({
           <p className="text-[8px] text-amber-600 leading-snug mb-1">
             Used in filter / join — affects which rows flow, not which value is copied.
           </p>
-          {indirect.map((e, i) => (
+          {groups.map(({ edge: e, count }, i) => (
             <div key={i} className="flex items-start gap-1.5">
               <TransformBadge
                 type={e.transformation_type}
@@ -164,9 +181,9 @@ function IndirectSection({
                     ? e.expression.slice(0, 70) + "…"
                     : e.expression}
                 </span>
-              ) : (
-                <span className="text-[9px] text-amber-500 italic">no expression</span>
-              )}
+              ) : count > 1 ? (
+                <span className="text-[9px] text-amber-500">· {count} queries</span>
+              ) : null}
             </div>
           ))}
         </div>
