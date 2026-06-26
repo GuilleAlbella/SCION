@@ -98,3 +98,20 @@ tests/results/
 
 # Internal email files
 *.msg
+
+# Old Parser extract archives — large data files, not code.
+Parser/old/
+
+# Local analysis / scratch folders — not part of the source tree.
+Revision BCRA/
+bugs/
+Screenshot_1.png
+
+# Docker distribution package — belongs in the scion-deploy repo, not here.
+docker/
+
+# Non-.md files in docs/ are no longer tracked; prevent re-adding binaries.
+docs/*.pdf
+docs/*.docx
+docs/*.txt
+docs/**/*.sql
