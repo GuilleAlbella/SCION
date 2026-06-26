@@ -7,7 +7,7 @@ the first time, or picking up after a context switch.
 `docs/internal_roadmap.md` (the *what's next*) and `docs/SPEC.md`
 (the *what and why*). This doc is the *how to actually do it day one*.
 
-**Current version:** v1.21.26 (2026-06-18)
+**Current version:** v1.21.43 (2026-06-26)
 
 ---
 
@@ -63,7 +63,7 @@ If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
 | **Pipeline 2** — Data Dictionary ingest | ✅ Stable | `/dict-import`. 6-file .dat batch; idempotent on `extract_run_id`. |
 | **Pipeline 3** — PDCR usage ingest | ✅ Stable | Bundled with dict-import. Real criticality scoring (60% usage + 40% graph). |
 | **Share import** | ✅ Stable | Auto-scan, one-click Import All, manual picker, already-imported detection. |
-| **Column-level lineage** | ✅ Live since v1.21.23 | `/lineage/columns` endpoint + full panel + Column view toggle in graph. |
+| **Column-level lineage** | ✅ Live since v1.21.23 | `/lineage/columns` endpoint + full panel + Column view toggle in graph. Edge labels via `EdgeLabelRenderer` (HTML, precise clicks). Indirect impacts deduplicated. Dedup key = `(src_col, tgt_col)` pair. |
 | **Graph / impact / diff / TAISA** | ✅ Stable | All engines pre-aggregating at ingest time. |
 | **Containerised deploy** | ✅ Stable | GHCR private images, one-liner installer, `update.sh`. |
 
