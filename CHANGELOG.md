@@ -8,6 +8,70 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.43 (2026-06-26) — fix(col-lineage): dedup by (src,tgt) pair so same src col mapping to multiple targets all appear
+
+Root cause (confirmed by Ashish Suryawanshi): the SQL uses
+`CASE WHEN log_min IS NOT NULL THEN 1 ELSE 0 END AS cog_actv_min` in a
+subquery, so `cog_actv_min` is legitimately derived from `log_min`. The
+parser correctly emits two entries for `log_min`: one as Direct Copy
+(`_COL6`) and one as Column Expression (`_COL7`). SCION's deduplication
+keyed on `source_column_key` only, collapsing both into a single entry,
+causing the edge to show 7 cols instead of 8.
+
+Fix: change dedup key from `source_column_key` to
+`${source_column_key}||${target_column_key}` so the same source column
+mapping to different target columns is preserved as separate rows.
+
+---
+
+### v1.21.42 (2026-06-25) — fix(col-lineage): deduplicate indirect impacts, replace "no expression" with query count
+
+Tier 2 parser never populates the `expression` field (only
+`transformation_type`). SCION was showing "no expression" as a literal
+string on every indirect impact row, and repeating 23 identical rows.
+
+Fix: deduplicate indirect impacts by `(transformation_type, expression)`
+key. When multiple SQL steps share the same type+expression, collapse
+into one row with a `· N queries` count badge. Remove "no expression"
+entirely — show only the `transformation_type` badge.
+
+---
+
+### v1.21.41 (2026-06-25) — feat(lineage): redesign producers/consumers panel — split schema.table, add scroll
+
+Long fully-qualified table names were overflowing the producers/consumers
+panel. Fix: split each name into schema (muted) / table (bold) on separate
+lines, add max-height + overflow-y-auto scroll on each list, move the
+count badge inline with the section header.
+
+---
+
+### v1.21.40 (2026-06-25) — chore(col-lineage): remove debug panel now that hit-test bug is fixed
+
+Removed the 9-line yellow `bg-yellow-50` debug overlay from the
+col-lineage edge popup. Bug confirmed fixed by Guillermo in production
+(ps-ubuntu-0043) after v1.21.39 deploy.
+
+---
+
+### v1.21.39 (2026-06-25) — fix(col-lineage): use EdgeLabelRenderer to prevent SVG hit-test stealing clicks
+
+Root cause: ReactFlow renders edges as SVG `<path>` elements with an
+invisible 20px-wide hit zone. On a dense graph (e.g. the UAT cluster),
+overlapping hit zones caused clicking the "7 cols" label to fire the
+adjacent "16 cols" edge handler instead.
+
+Fix: migrate edge labels from the SVG `label` prop to `EdgeLabelRenderer`
+(React Flow HTML layer above the SVG). HTML elements have exact bounding
+boxes, eliminating the overlap. Introduced `ColLineageEdge` custom edge
+component, `ColEdgeClickCtx` React context, and `edgeTypes` map.
+
+---
+
+### v1.21.38 (2026-06-24) — fix(col-lineage): dedup popup rows by src col — count always matches edge label
+
+---
+
 ### v1.21.37 (2026-06-24) — fix(col-lineage): edge label now counts unique source columns, not total mappings
 
 Root cause (confirmed via server simulation): one source column can map to
