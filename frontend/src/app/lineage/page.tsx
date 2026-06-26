@@ -769,6 +769,7 @@ function LineagePage() {
     if (showColumnLineage) {
       const pairLabels = new Map<string, string[]>();
       const pairSteps = new Map<string, Set<string>>();
+      const pairSeenPairs = new Map<string, Set<string>>();  // dedup by (srcCol||tgtCol)
       const pairSrcCols = new Map<string, Set<string>>();
       const pairTgtCols = new Map<string, Set<string>>();
       for (const [objKey, lineage] of columnLineageMap) {
@@ -779,23 +780,26 @@ function LineagePage() {
             const tgtId = nodeIdByKey.get(edge.table_key.toUpperCase());
             if (!tgtId || !added.has(tgtId) || tgtId === srcId) continue;
             const pk = `${srcId}||${tgtId}`;
-            if (!pairLabels.has(pk))   pairLabels.set(pk, []);
-            if (!pairSrcCols.has(pk))  pairSrcCols.set(pk, new Set());
-            if (!pairTgtCols.has(pk))  pairTgtCols.set(pk, new Set());
+            if (!pairLabels.has(pk))     pairLabels.set(pk, []);
+            if (!pairSeenPairs.has(pk))  pairSeenPairs.set(pk, new Set());
+            if (!pairSrcCols.has(pk))    pairSrcCols.set(pk, new Set());
+            if (!pairTgtCols.has(pk))    pairTgtCols.set(pk, new Set());
             if (edge.step_natural_key) {
               if (!pairSteps.has(pk)) pairSteps.set(pk, new Set());
               pairSteps.get(pk)!.add(edge.step_natural_key);
             }
-            // One label row per unique source column — multi-target cols
-            // (e.g. LOG_DT→LOG_DT and LOG_DT→LOG_TS) count as one entry so
-            // the popup row count always matches the edge label and bottom panel.
-            const srcSet = pairSrcCols.get(pk)!;
-            if (!srcSet.has(col.column_name)) {
+            // One label row per unique (source, target) pair — the same source
+            // column can map to multiple target columns via different expressions
+            // (e.g. LOG_MIN→_COL6 Direct Copy AND LOG_MIN→_COL7 Column Expression).
+            const colPairKey = `${col.column_name}||${edge.column_name}`;
+            const seenPairs = pairSeenPairs.get(pk)!;
+            if (!seenPairs.has(colPairKey)) {
               pairLabels.get(pk)!.push(
                 `${col.column_name} → ${edge.column_name}${edge.transformation_type ? `  ·  ${edge.transformation_type}` : ""}`,
               );
             }
-            srcSet.add(col.column_name);
+            seenPairs.add(colPairKey);
+            pairSrcCols.get(pk)!.add(col.column_name);
             pairTgtCols.get(pk)!.add(edge.column_name);
           }
         }
