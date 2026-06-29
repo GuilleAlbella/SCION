@@ -217,6 +217,7 @@ def compute_batch_impact(
     *,
     limit: int = 100,
     offset: int = 0,
+    q: Optional[str] = None,
 ) -> BatchImpactResult:
     """Compute impact for ALL changes between two snapshots, paginated.
 
@@ -549,12 +550,21 @@ def compute_batch_impact(
     else:
         result.overall_risk = "LOW"
 
-    # ──── Step 10: Pagination ────
-    # Slice the full list down to the requested page. ``has_more`` is
-    # True when more rows exist past ``offset + limit``; the UI uses it
-    # to decide whether to show a "Load more" button.
-    total = len(all_summaries)
-    page = all_summaries[offset : offset + limit]
+    # ──── Step 10: Optional per-change filter, then pagination ────
+    # ``q`` filters the table rows by object name (case-insensitive).
+    # Aggregates/donuts/KPIs above are intentionally NOT filtered — they
+    # always reflect the full diff so the risk summary stays accurate.
+    display_summaries = all_summaries
+    if q:
+        q_lower = q.strip().lower()
+        display_summaries = [
+            s for s in all_summaries
+            if q_lower in s.object_identifier.lower()
+        ]
+    result.changes_analyzed = len(display_summaries)
+
+    total = len(display_summaries)
+    page = display_summaries[offset : offset + limit]
     result.changes = page
     result.has_more = (offset + len(page)) < total
 

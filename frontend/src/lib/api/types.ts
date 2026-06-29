@@ -250,6 +250,9 @@ export interface BatchImpactRequestParams {
   limit?: number;
   /** Page offset (0-based row index). */
   offset?: number;
+  /** Case-insensitive substring filter on object_identifier. Aggregates/KPIs
+   *  are NOT affected — they always reflect the full diff. */
+  q?: string;
 }
 
 export interface BatchImpactResponse {

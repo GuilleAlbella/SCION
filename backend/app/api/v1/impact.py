@@ -46,12 +46,17 @@ class BatchImpactRequest(BaseModel):
     requested — that's what lets the page render KPIs / donuts without
     iterating the whole list client-side. Defaults match v1.18 behaviour
     for the demo (small diffs return everything in one page).
+
+    ``q`` filters the per-change table by object name (case-insensitive
+    substring match). Aggregates/donuts/KPIs are NOT affected — they
+    always reflect the full diff so the risk summary stays accurate.
     """
 
     snapshot_from: int
     snapshot_to: int
     limit: int = 100
     offset: int = 0
+    q: Optional[str] = None
 
 
 class BatchChangeImpact(BaseModel):
@@ -172,6 +177,7 @@ def execute_batch_impact(request: BatchImpactRequest) -> Dict[str, Any]:
         request.snapshot_to,
         limit=request.limit,
         offset=request.offset,
+        q=request.q,
     )
     return result.to_dict()
 

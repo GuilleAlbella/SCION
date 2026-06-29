@@ -221,7 +221,7 @@ function UpstreamNode({ data }: { data: NodeData }) {
     <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#DC2626" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#DC2626" }} />
-      <div style={{ fontSize: 9, color: "#DC2626", fontWeight: 600, letterSpacing: "0.03em" }}>SOURCE · {data.type}</div>
+      <div style={{ fontSize: 9, color: "#DC2626", fontWeight: 600, letterSpacing: "0.03em" }}>SOURCE{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
       <div title={data.label} style={{ fontSize: 13, fontWeight: 600, color: "#991B1B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#B91C1C", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections</div>}
       {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#DC2626" />}
@@ -234,7 +234,7 @@ function CenterNode({ data }: { data: NodeData }) {
     <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)", cursor: "default" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#2563EB" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#2563EB" }} />
-      <div style={{ fontSize: 9, color: "#2563EB", fontWeight: 600 }}>SELECTED · {data.type}</div>
+      <div style={{ fontSize: 9, color: "#2563EB", fontWeight: 600 }}>SELECTED{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
       <div title={data.label} style={{ fontSize: 14, fontWeight: 700, color: "#1E40AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#3B82F6", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections · {((data.metrics.fragility ?? 0) * 100).toFixed(0)}% risk exposure</div>}
       {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#2563EB" />}
@@ -247,7 +247,7 @@ function DownstreamNode({ data }: { data: NodeData }) {
     <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#16A34A" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#16A34A" }} />
-      <div style={{ fontSize: 9, color: "#16A34A", fontWeight: 600, letterSpacing: "0.03em" }}>CONSUMER · {data.type}</div>
+      <div style={{ fontSize: 9, color: "#16A34A", fontWeight: 600, letterSpacing: "0.03em" }}>CONSUMER{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
       <div title={data.label} style={{ fontSize: 13, fontWeight: 600, color: "#166534", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.label}</div>
       {data.metrics && <div style={{ fontSize: 9, color: "#15803D", marginTop: 2 }}>{data.metrics.in_degree + data.metrics.out_degree} connections</div>}
       {data.columns && data.columns.length > 0 && <ColumnStrip columns={data.columns} accent="#16A34A" />}

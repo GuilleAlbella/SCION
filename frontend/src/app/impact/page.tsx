@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import PageShell from "@/components/layout/PageShell";
 import DonutChart from "@/components/shared/DonutChart";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
@@ -139,6 +139,7 @@ export default function ImpactPage() {
       const data = await runBatchImpact(from, to, {
         limit: IMPACT_PAGE_SIZE,
         offset: nextOffset,
+        q: tableSearch.trim() || undefined,
       });
       // Replace `result` (so summary/blast_radius/has_more reflect the
       // latest fetch — they should be identical to page 0 modulo
@@ -152,6 +153,33 @@ export default function ImpactPage() {
       setLoadingMore(false);
     }
   }
+
+  // ──── Server-side search: re-fetch when tableSearch changes ────
+  // Debounced 350 ms so we don't fire on every keystroke.
+  // Only runs when an impact analysis has already been executed (result != null).
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (from == null || to == null || result === null) return;
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(async () => {
+      setLoadingMore(true);
+      try {
+        const data = await runBatchImpact(from, to, {
+          limit: IMPACT_PAGE_SIZE,
+          offset: 0,
+          q: tableSearch.trim() || undefined,
+        });
+        setResult(data);
+        setItems(data.changes);
+      } catch {
+        // silent — the existing error state from the main run is still shown
+      } finally {
+        setLoadingMore(false);
+      }
+    }, 350);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableSearch]);
 
   // ──── Donut aggregations ────
   // The 4 useMemo blocks that used to iterate `result.changes` here
@@ -235,19 +263,35 @@ export default function ImpactPage() {
       .sort((a, b) => b.tables.length - a.tables.length);
   }, [result]);
 
-  const filteredItems = useMemo(() => {
-    const q = tableSearch.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((r) => r.object_identifier.toLowerCase().includes(q));
-  }, [items, tableSearch]);
+  // Server handles the tableSearch filter — items already contains only
+  // matching rows. Keep the local alias so JSX references don't change.
+  const filteredItems = items;
 
   const filteredAffectedDatabases = useMemo(() => {
     const q = dbSearch.trim().toLowerCase();
     if (!q) return allAffectedDatabases;
     return allAffectedDatabases.filter((d) =>
-      d.schema_name.toLowerCase().includes(q),
+      d.schema_name.toLowerCase().includes(q) ||
+      d.tables.some((t) => t.toLowerCase().includes(q)),
     );
   }, [allAffectedDatabases, dbSearch]);
+
+  // Auto-expand databases that matched via a table name (not schema name)
+  // so the user can see which table triggered the match.
+  useEffect(() => {
+    const q = dbSearch.trim().toLowerCase();
+    if (!q) return;
+    setExpandedSchemas((prev) => {
+      const next = new Set(prev);
+      filteredAffectedDatabases.forEach((d) => {
+        if (!d.schema_name.toLowerCase().includes(q) &&
+            d.tables.some((t) => t.toLowerCase().includes(q))) {
+          next.add(d.schema_name);
+        }
+      });
+      return next;
+    });
+  }, [filteredAffectedDatabases, dbSearch]);
 
   const visibleAffectedDatabases = useMemo(
     () => filteredAffectedDatabases.slice(0, DB_VISIBLE_DEFAULT),
@@ -601,7 +645,7 @@ export default function ImpactPage() {
               />
               {tableSearch && (
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-td-gray-dark">
-                  {filteredItems.length.toLocaleString()} / {items.length.toLocaleString()}
+                  {(result?.changes_analyzed ?? 0).toLocaleString()} matches
                 </span>
               )}
             </div>
