@@ -1019,7 +1019,7 @@ function LineagePage() {
               <option value="">Select</option>
               {snapshots.map((s) => (
                 <option key={s.snapshot_id} value={s.snapshot_id}>
-                  #{s.snapshot_id} — {s.source_system}
+                  #{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}
                 </option>
               ))}
             </select>
@@ -1539,8 +1539,15 @@ function LineagePage() {
               {colLineageLoading ? (
                 <div className="px-4 py-6 text-xs text-td-gray-dark">Loading column mappings…</div>
               ) : filteredColLineage && filteredColLineage.columns.length > 0 ? (
-                <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {filteredColLineage.columns.map((col) => (
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[...filteredColLineage.columns].sort((a, b) => {
+                    // Sort by trailing numeric suffix (e.g. _COL1, _COL12, _column03)
+                    // so columns are shown in natural order, not string order.
+                    const numA = parseInt(a.column_name.match(/(\d+)$/)?.[1] ?? "");
+                    const numB = parseInt(b.column_name.match(/(\d+)$/)?.[1] ?? "");
+                    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+                    return a.column_name.localeCompare(b.column_name);
+                  }).map((col) => (
                     <div key={col.column_name} className="rounded-lg border border-gray-200 overflow-hidden text-xs shadow-sm">
                       {/* Column name pill */}
                       <div className="bg-gray-800 px-3 py-2">

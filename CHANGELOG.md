@@ -8,6 +8,30 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.45 (2026-06-30) — feat(ux): snapshot timestamps in all selectors, infinite scroll in Impact, column lineage sort
+
+- **Snapshot timestamps**: all snapshot dropdowns now show `#N — source — DD/MM/YYYY` across
+  Changes, Impact Analysis, Lineage, Graph, and Simulation pages.
+- **Infinite scroll in Impact Analysis**: "Load next 100" button replaced with an
+  IntersectionObserver sentinel — the next page loads automatically when the user scrolls
+  to the bottom of the per-change table.
+- **Column lineage sort**: column cards now sorted by trailing numeric suffix
+  (`_COL1` before `_COL2`, `_COL12` before `_COL20`). Grid changed from 4 columns
+  to 3 so each card has more room and column names are less truncated.
+
+---
+
+### v1.21.44 (2026-06-30) — fix(impact): server-side search in sections 4 & 5, hide UNKNOWN type in lineage
+
+- Impact Analysis section 4 "Per-change drill-down": search now runs server-side via a `q`
+  parameter on `BatchImpactRequest`, filtering across all rows (not just the loaded page).
+- Impact Analysis section 5 "Affected objects, by database": search now matches both
+  database names and table names; databases matched via a table auto-expand.
+- Lineage graph: nodes with UNKNOWN object type now show only SOURCE / SELECTED /
+  CONSUMER without the " · UNKNOWN" suffix.
+
+---
+
 ### v1.21.43 (2026-06-26) — fix(col-lineage): dedup by (src,tgt) pair so same src col mapping to multiple targets all appear
 
 Root cause (confirmed by Ashish Suryawanshi): the SQL uses

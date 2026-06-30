@@ -695,7 +695,7 @@ export default function ChangesPage() {
               <option value="">Select snapshot</option>
               {snapshots.map((s) => (
                 <option key={s.snapshot_id} value={s.snapshot_id}>
-                  #{s.snapshot_id} — {s.source_system}
+                  #{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}
                 </option>
               ))}
             </select>
@@ -710,7 +710,7 @@ export default function ChangesPage() {
               <option value="">Select snapshot</option>
               {snapshots.map((s) => (
                 <option key={s.snapshot_id} value={s.snapshot_id}>
-                  #{s.snapshot_id} — {s.source_system}
+                  #{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}
                 </option>
               ))}
             </select>

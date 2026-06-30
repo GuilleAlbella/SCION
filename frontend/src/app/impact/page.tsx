@@ -158,6 +158,22 @@ export default function ImpactPage() {
   // Debounced 350 ms so we don't fire on every keystroke.
   // Only runs when an impact analysis has already been executed (result != null).
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Infinite scroll: auto-load next page when sentinel enters viewport
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) handleLoadMore(); },
+      { rootMargin: "400px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  // Re-register whenever has_more or loadingMore changes so the guard
+  // inside handleLoadMore sees the latest state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length, result?.has_more, loadingMore]);
   useEffect(() => {
     if (from == null || to == null || result === null) return;
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -367,7 +383,9 @@ export default function ImpactPage() {
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm">
                 <option value="">Select</option>
                 {snapshots.map((s) => (
-                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id}</option>
+                  <option key={s.snapshot_id} value={s.snapshot_id}>
+                    #{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}
+                  </option>
                 ))}
               </select>
             </div>
@@ -377,7 +395,9 @@ export default function ImpactPage() {
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm">
                 <option value="">Select</option>
                 {snapshots.map((s) => (
-                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id}</option>
+                  <option key={s.snapshot_id} value={s.snapshot_id}>
+                    #{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}
+                  </option>
                 ))}
               </select>
             </div>
@@ -737,24 +757,19 @@ export default function ImpactPage() {
                 ))}
               </tbody>
             </table>
-            {/* Load more — visible whenever the server reports another
-                page exists. Same affordance pattern as /changes and
-                /timeline. We never auto-fetch on scroll: 250k rows
-                shouldn't slip into the DOM by accident. */}
+            {/* Infinite scroll sentinel — when this div enters the viewport
+                the IntersectionObserver above auto-fetches the next page.
+                Shows a spinner while loading so the user knows it's working. */}
             {result.has_more && (
-              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-3">
+              <div
+                ref={loadMoreSentinelRef}
+                className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-2"
+              >
                 <span className="text-[11px] text-td-gray-dark">
                   Showing {items.length.toLocaleString()} of{" "}
                   {result.changes_analyzed.toLocaleString()}
                 </span>
-                <button
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="flex items-center gap-1.5 bg-td-navy text-white px-3 py-1 rounded text-xs font-medium hover:bg-td-navy-light disabled:opacity-50 transition-colors"
-                >
-                  {loadingMore ? <Loader2 size={12} className="animate-spin" /> : null}
-                  {loadingMore ? "Loading..." : `Load next ${IMPACT_PAGE_SIZE}`}
-                </button>
+                {loadingMore && <Loader2 size={12} className="animate-spin text-td-navy" />}
               </div>
             )}
             {!result.has_more && items.length > 0 && result.changes_analyzed > IMPACT_PAGE_SIZE && (
