@@ -89,16 +89,44 @@ def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> 
 
 
 def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
-    """Scan <mount_path>/archive for importable sub-folders.
+    """Scan <mount_path>/archive for importable entries.
 
-    Each direct sub-directory of the archive folder is treated as a
-    separate past snapshot.  Sub-folders are returned sorted by name
-    (descending — most recent first, assuming date-prefixed names).
+    Two layouts are supported:
+
+    Flat  — archive contains the data sub-dirs directly
+            (e.g. archive/Data Dictionary/…).  Treated as one entry
+            named "archive".
+
+    Nested — archive contains date/run sub-folders, each of which
+             holds the data sub-dirs (e.g. archive/20260628/Data Dictionary/…).
+             Each sub-folder becomes a separate entry, sorted descending
+             (most recent first).
     """
     archive_root = Path(mount_path) / "archive"
     if not archive_root.is_dir():
         return []
 
+    # Flat layout: Data Dictionary (or any known subdir) lives directly
+    # inside archive_root.
+    if (archive_root / _DICT_DIR).is_dir() or (archive_root / _LINEAGE_DIR).is_dir():
+        dict_files = _iter_share_files(_DICT_DIR, str(archive_root))
+        pdcr_files = _iter_share_files(_PDCR_DIR, str(archive_root))
+        lineage_files = _iter_share_files(_LINEAGE_DIR, str(archive_root))
+        if not dict_files and not pdcr_files and not lineage_files:
+            return []
+        already, snap_id, run_id = _check_already_imported(dict_files)
+        return [ArchiveEntry(
+            name="archive",
+            path=str(archive_root),
+            dict_files=[f.name for f in dict_files],
+            pdcr_files=[f.name for f in pdcr_files],
+            lineage_files=[f.name for f in lineage_files],
+            already_imported=already,
+            existing_snapshot_id=snap_id,
+            extract_run_id=run_id,
+        )]
+
+    # Nested layout: each sub-directory is a separate snapshot.
     entries: List[ArchiveEntry] = []
     for sub in sorted(archive_root.iterdir(), reverse=True):
         if not sub.is_dir():
@@ -106,7 +134,6 @@ def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
         dict_files = _iter_share_files(_DICT_DIR, str(sub))
         pdcr_files = _iter_share_files(_PDCR_DIR, str(sub))
         lineage_files = _iter_share_files(_LINEAGE_DIR, str(sub))
-        # Skip folders that contain no recognisable files at all.
         if not dict_files and not pdcr_files and not lineage_files:
             continue
         already, snap_id, run_id = _check_already_imported(dict_files)
