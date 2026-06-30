@@ -63,7 +63,7 @@ function fragilityColor(f: number): string {
 }
 
 /* ---- Custom Node Component ---- */
-function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean } }) {
+function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean; isSelected?: boolean } }) {
   const n = data.raw;
   const s = TYPE_STYLES[n.object_type] ?? DEFAULT_STYLE;
   const frag = n.metrics?.fragility ?? 0;
@@ -73,6 +73,7 @@ function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean } 
   const schemaLabel = n.schema_name || "";
   const isUnclassified = n.object_type === "UNKNOWN";
   const isExpanded = data.isExpanded === true;
+  const isSelected = data.isSelected === true;
 
   return (
     <div
@@ -81,14 +82,22 @@ function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean } 
         background: s.bg,
         // Expanded nodes get a thicker border + matching shadow so the
         // user remembers which nodes they've already pulled neighbours
-        // for. Unclassified gets the dashed treatment regardless.
+        // for. Unclassified gets the dashed treatment regardless. The
+        // selected node (last clicked, shown in the side panel) gets a
+        // bright focus ring on top of either state so it's findable at
+        // a glance in a dense graph.
         border: `${isExpanded ? 3 : 2}px ${isUnclassified ? "dashed" : "solid"} ${s.accent}`,
-        boxShadow: isExpanded ? `0 0 0 2px ${s.accent}33` : undefined,
+        boxShadow: isSelected
+          ? "0 0 0 3px #F59E0B, 0 0 12px 2px rgba(245,158,11,0.5)"
+          : isExpanded
+          ? `0 0 0 2px ${s.accent}33`
+          : undefined,
         borderRadius: 10,
         padding: "8px 12px",
         width: NODE_WIDTH,
         minHeight: NODE_HEIGHT,
         position: "relative",
+        zIndex: isSelected ? 10 : undefined,
       }}
     >
       <Handle type="target" position={Position.Top} style={{ background: s.accent }} />
@@ -326,7 +335,13 @@ export default function GraphPage() {
       // ``isExpanded`` toggles the node's "✓ EXPANDED" badge + thicker
       // border so the user can tell at a glance which nodes have
       // already been pulled (avoids re-fetching the same neighbours).
-      data: { raw: n, isExpanded: expandedRoots.has(n.node_id) },
+      // ``isSelected`` drives the amber focus ring for whichever node
+      // is currently shown in the side panel.
+      data: {
+        raw: n,
+        isExpanded: expandedRoots.has(n.node_id),
+        isSelected: selectedNode?.node_id === n.node_id,
+      },
       position: { x: 0, y: 0 },
     }));
 
@@ -368,7 +383,7 @@ export default function GraphPage() {
       dependsEdges: filteredEdges.filter((e) => e.type === "DEPENDS_ON").length,
     };
     return { nodes: laidOut, edges: rfEdges, stats };
-  }, [renderSource, showSchemas, edgeFilter, expandedRoots]);
+  }, [renderSource, showSchemas, edgeFilter, expandedRoots, selectedNode]);
 
   const snapshots = snapData?.snapshots ?? [];
   const isTruncated = graphData?.truncated === true;

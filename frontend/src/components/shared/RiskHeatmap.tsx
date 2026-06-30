@@ -12,6 +12,10 @@ interface HeatmapItem {
 interface Props {
   items: HeatmapItem[];
   title?: string;
+  // Optional one-liner shown under the title clarifying what one cell
+  // represents (e.g. "one cell = one object" vs. a time bucket). Added
+  // because users assumed this was a time-series heatmap by default.
+  description?: string;
 }
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -25,7 +29,7 @@ const LEVEL_COLORS: Record<string, string> = {
  * opacity encodes criticality score. Used on the Intelligence page to show
  * the riskiest objects at a glance.
  */
-export default function RiskHeatmap({ items, title = "Risk Heatmap" }: Props) {
+export default function RiskHeatmap({ items, title = "Risk Heatmap", description }: Props) {
   // Track the hovered tile to show full details below the grid —
   // deliberately single-item (no persistent selection) to keep the UI calm.
   const [hovered, setHovered] = useState<HeatmapItem | null>(null);
@@ -34,7 +38,11 @@ export default function RiskHeatmap({ items, title = "Risk Heatmap" }: Props) {
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
-      <h3 className="text-sm font-semibold text-td-navy mb-4">{title}</h3>
+      <h3 className="text-sm font-semibold text-td-navy mb-1">{title}</h3>
+      {description && (
+        <p className="text-[11px] text-td-gray-dark mb-3">{description}</p>
+      )}
+      {!description && <div className="mb-4" />}
 
       {/* Heatmap grid — fewer, larger cells so labels are readable */}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(Math.ceil(Math.sqrt(items.length)), 6)}, 1fr)` }}>

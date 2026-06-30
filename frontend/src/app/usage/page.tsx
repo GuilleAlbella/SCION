@@ -432,6 +432,7 @@ function UsagePage() {
           {criticality.items.length > 0 && (
             <RiskHeatmap
               title="Object criticality heatmap"
+              description="One cell = one object (not a time bucket). Hover a cell for its usage and graph-centrality breakdown."
               items={criticality.items.map((item) => ({
                 name: item.object_name,
                 score: item.combined_score,
