@@ -80,12 +80,18 @@ class ShareScanResponse(BaseModel):
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+_IMPORTABLE_SUFFIXES = {".dat", ".json"}
+
 def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> List[Path]:
-    """Return all regular files in <mount_path>/<subdir>."""
+    """Return importable files (.dat, .json) in <mount_path>/<subdir>.
+
+    Companion files such as .manifest.csv are intentionally excluded —
+    they are metadata sidecars, not data files the importer can process.
+    """
     base = Path(mount_path) / subdir
     if not base.is_dir():
         return []
-    return [f for f in base.iterdir() if f.is_file()]
+    return [f for f in base.iterdir() if f.is_file() and f.suffix.lower() in _IMPORTABLE_SUFFIXES]
 
 
 def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
