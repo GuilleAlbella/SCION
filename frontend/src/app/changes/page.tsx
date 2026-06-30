@@ -322,23 +322,8 @@ export default function ChangesPage() {
   // settles.
   const [debouncedFilterObject, setDebouncedFilterObject] = useState<string>("");
   const objectDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
-
-  // Infinite scroll: auto-load next page when sentinel enters viewport.
-  // Re-registers whenever has_more or loadingMore changes so the guard
-  // inside handleLoadMore sees the latest state.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const sentinel = loadMoreSentinelRef.current;
-    if (!sentinel) return;
-    const io = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) handleLoadMore(); },
-      { rootMargin: "400px" },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageItems.length, pageHasMore, loadingMore]);
+  const currentPage = pageTotal > 0 ? Math.floor(pageOffset / PAGE_SIZE) + 1 : 1;
+  const totalPages = pageTotal > 0 ? Math.ceil(pageTotal / PAGE_SIZE) : 1;
 
   // DDL generation is a separate backend call, triggered by the "Generate DDL"
   // button. We keep the response here rather than in context because it's
@@ -544,17 +529,11 @@ export default function ChangesPage() {
     await loadInitial(Number(diffFrom), Number(diffTo));
   }
 
-  async function handleLoadMore() {
-    if (!activePair || loadingMore || !pageHasMore) return;
+  async function handleGoToPage(newOffset: number) {
+    if (!activePair || loadingMore) return;
     setLoadingMore(true);
     try {
-      await fetchPage(
-        activePair.from,
-        activePair.to,
-        pageOffset + PAGE_SIZE,
-        "append",
-        buildFilterParams(),
-      );
+      await fetchPage(activePair.from, activePair.to, newOffset, "replace", buildFilterParams());
     } finally {
       setLoadingMore(false);
     }
@@ -1021,23 +1000,27 @@ export default function ChangesPage() {
                 ))}
               </tbody>
             </table>
-            {/* Infinite scroll sentinel — when this div enters the viewport
-                the IntersectionObserver above auto-fetches the next page. */}
-            {pageHasMore && (
-              <div
-                ref={loadMoreSentinelRef}
-                className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-2"
-              >
-                <span className="text-[11px] text-td-gray-dark">
-                  Showing {pageItems.length.toLocaleString()} of{" "}
-                  {pageTotal.toLocaleString()}
+            {/* Pagination controls */}
+            {pageTotal > 0 && (
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 flex items-center justify-between">
+                <button
+                  onClick={() => handleGoToPage(pageOffset - PAGE_SIZE)}
+                  disabled={pageOffset === 0 || loadingMore}
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Previous
+                </button>
+                <span className="text-[11px] text-td-gray-dark flex items-center gap-2">
+                  {loadingMore && <Loader2 size={11} className="animate-spin text-td-navy" />}
+                  Page {currentPage} of {totalPages} &nbsp;·&nbsp; {pageTotal.toLocaleString()} change(s)
                 </span>
-                {loadingMore && <Loader2 size={12} className="animate-spin text-td-navy" />}
-              </div>
-            )}
-            {!pageHasMore && pageItems.length > 0 && pageTotal > PAGE_SIZE && (
-              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 text-center text-[11px] text-td-gray-dark">
-                End of results — {pageTotal.toLocaleString()} change(s) loaded.
+                <button
+                  onClick={() => handleGoToPage(pageOffset + PAGE_SIZE)}
+                  disabled={!pageHasMore || loadingMore}
+                  className="flex items-center gap-1 px-3 py-1 text-xs rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
               </div>
             )}
             {pageItems.length === 0 && !loading && (

@@ -335,7 +335,7 @@ export default function MetricsPage() {
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm">
                 <option value="">Select</option>
                 {snapshots.map((s) => (
-                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} — {s.source_system}</option>
+                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}</option>
                 ))}
               </select>
             </div>
@@ -346,7 +346,7 @@ export default function MetricsPage() {
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm">
                 <option value="">Select</option>
                 {snapshots.map((s) => (
-                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} — {s.source_system}</option>
+                  <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} — {s.source_system} — {new Date(s.created_at).toLocaleDateString()}</option>
                 ))}
               </select>
             </div>
