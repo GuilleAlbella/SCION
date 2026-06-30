@@ -33,7 +33,7 @@ import { getDDL } from "@/lib/api/ddl";
 import type { DDLResponse, DDLItem } from "@/lib/api/types";
 import { useToast } from "@/components/shared/ToastProvider";
 import SchemaVisualDiff from "@/components/shared/SchemaVisualDiff";
-import { LayoutList, GitCompare, TrendingUp, Clock, Target, Flame, ExternalLink, BarChart3, ArrowRight, Loader2 } from "lucide-react";
+import { LayoutList, GitCompare, TrendingUp, Clock, Target, Flame, ExternalLink, BarChart3, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { changeTypeLabel, BREAKING_MEANING, BREAKING_TESTER_ACTION, breakingReason } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
