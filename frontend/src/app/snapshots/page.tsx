@@ -355,11 +355,56 @@ export default function SnapshotsPage() {
   }
 
   async function handleArchiveImport(entry: ArchiveEntry) {
+    const importId = makeImportId();
+    const pollAbort = new AbortController();
+    const startedAt = Date.now();
+
+    pollImportProgress(
+      importId,
+      (state) => {
+        setDictServerProgress(state);
+        if (
+          state.status === "done" ||
+          state.status === "error" ||
+          state.status === "cancelled"
+        ) {
+          sessionStorage.removeItem(_STORAGE_KEY);
+          setDictPhase(state.status === "done" ? "done" : "error");
+          setDictUploading(false);
+          setDictActiveImportId(null);
+          pollAbort.abort();
+        }
+      },
+      pollAbort.signal,
+    );
+
     setArchiveImporting(entry.path);
     setArchiveErrors((prev) => { const n = { ...prev }; delete n[entry.path]; return n; });
+    setDictPanelOpen(true);
+    setDictFiles([]);
+    setDictPreflight(new Map());
+    setDictResult(null);
+    setDictError(null);
+    setDictServerProgress(null);
+    setDictPhase("processing");
+    setDictUploadedBytes(0);
+    setDictTotalBytes(undefined);
+    setDictPhaseStartedAt(startedAt);
+    setDictUploading(true);
+    setDictActiveImportId(importId);
+    setDictCancelling(false);
+
+    sessionStorage.setItem(
+      _STORAGE_KEY,
+      JSON.stringify({ importId, startedAt }),
+    );
+
     try {
-      const result = await importFromShare(false, entry.path);
+      const result = await importFromShare(false, entry.path, importId);
       setArchiveResults((prev) => ({ ...prev, [entry.path]: result }));
+      setDictResult(result.dict_result);
+      setDictPhase("done");
+      sessionStorage.removeItem(_STORAGE_KEY);
       await mutate("snapshots");
       setActiveSnapshotId(result.snapshot_id);
       const lineagePart = result.lineage_attached
@@ -375,8 +420,15 @@ export default function SnapshotsPage() {
         ? (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Import failed"
         : e instanceof Error ? e.message : "Import failed";
       setArchiveErrors((prev) => ({ ...prev, [entry.path]: msg }));
+      setDictError(msg);
+      setDictPhase("error");
+      sessionStorage.removeItem(_STORAGE_KEY);
     } finally {
+      pollAbort.abort();
       setArchiveImporting(null);
+      setDictUploading(false);
+      setDictActiveImportId(null);
+      setDictCancelling(false);
     }
   }
 
