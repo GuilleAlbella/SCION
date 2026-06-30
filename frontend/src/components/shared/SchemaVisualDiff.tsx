@@ -78,7 +78,10 @@ function changeTypeToStatus(changeType: string): DiffStatus {
  */
 export default function SchemaVisualDiff({ snapshotFrom, snapshotTo, changes }: Props) {
   const [treeTo, setTreeTo] = useState<SchemaTree | null>(null);
-  const [loading, setLoading] = useState(true);
+  // fullTreeLoading: true only while an explicit "load full tree" request is
+  // in progress. We no longer auto-fetch the tree on mount — for large
+  // snapshots (240k+ tables) that blocked the view for minutes.
+  const [fullTreeLoading, setFullTreeLoading] = useState(false);
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<DiffStatus | "all">("all");
@@ -126,112 +129,89 @@ export default function SchemaVisualDiff({ snapshotFrom, snapshotTo, changes }: 
     return { bySchema, byTable, byColumn };
   }, [changes]);
 
-  // Load schema tree for the "to" snapshot (to show current structure).
-  // NOTE: `changeLookup` is in the dep array so we can auto-expand schemas
-  // that have changes as soon as both the tree and the changes are known.
+  // Auto-expand changed schemas as soon as changes are known — no tree needed.
   useEffect(() => {
-    setLoading(true);
-    client.get<SchemaTree>(`/schema-tree/${snapshotTo}`)
-      .then((res) => {
-        setTreeTo(res.data);
-        // Auto-expand schemas that have changes
-        const changed = new Set<string>();
-        for (const key of changeLookup.byTable.keys()) {
-          changed.add(key.split(".")[0]);
-        }
-        for (const key of changeLookup.bySchema.keys()) {
-          changed.add(key);
-        }
-        // If few schemas, expand all; otherwise only changed ones
-        if (res.data.schemas.length <= 6) {
-          setExpandedSchemas(new Set(res.data.schemas.map(s => s.schema_name)));
-        } else {
-          setExpandedSchemas(changed);
-        }
-        // Tables start collapsed — user clicks to expand
-        setExpandedTables(new Set());
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [snapshotTo, changeLookup]);
+    const changed = new Set<string>();
+    for (const key of changeLookup.byTable.keys()) changed.add(key.split(".")[0]);
+    for (const key of changeLookup.bySchema.keys()) changed.add(key);
+    setExpandedSchemas(changed);
+    setExpandedTables(new Set());
+  }, [changeLookup]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <RefreshCw size={20} className="animate-spin text-td-orange" />
-        <span className="ml-2 text-sm text-td-gray-dark">Loading database tree...</span>
-      </div>
-    );
+  // Optional: load the full schema tree so unchanged objects also appear.
+  // Not triggered automatically — for large snapshots (240k+ tables) this
+  // blocked the view for several minutes. The user opts in via the button below.
+  function handleLoadFullTree() {
+    setFullTreeLoading(true);
+    client.get<SchemaTree>(`/schema-tree/${snapshotTo}`)
+      .then((res) => { setTreeTo(res.data); })
+      .catch(() => {})
+      .finally(() => setFullTreeLoading(false));
   }
 
-  if (!treeTo) return null;
-
-  // Build the display: current tree + overlay removed objects from changes
+  // Build the display tree. When `treeTo` is available we use the full tree
+  // (unchanged objects + changed overlaid). When it's null we build from
+  // `changeLookup` alone (changed objects only — instant, no network call).
   function getSchemaStatus(schemaName: string): DiffStatus {
     return changeLookup.bySchema.get(schemaName) ?? "unchanged";
   }
-
-  function getTableStatus(schemaName: string, tableName: string): DiffStatus {
-    const key = `${schemaName}.${tableName}`;
-    return changeLookup.byTable.get(key)?.status ?? "unchanged";
-  }
-
   function getTableChange(schemaName: string, tableName: string) {
     return changeLookup.byTable.get(`${schemaName}.${tableName}`);
   }
-
-  function getColumnStatus(schemaName: string, tableName: string, colName: string): DiffStatus {
-    const key = `${schemaName}.${tableName}.${colName}`;
-    return changeLookup.byColumn.get(key)?.status ?? "unchanged";
-  }
-
   function getColumnChange(schemaName: string, tableName: string, colName: string) {
     return changeLookup.byColumn.get(`${schemaName}.${tableName}.${colName}`);
   }
-
-  // Count changes by status
-  const counts = { added: 0, removed: 0, modified: 0, unchanged: 0 };
-
-  // ──── Enrichment: overlay removed objects on top of the "to" tree ────
-  // The "to" tree only contains objects that still exist. To render removed
-  // objects (which the user still wants to see in the diff), we iterate the
-  // change lookup and append any removed entity that isn't in the live tree.
-  // Build enriched schema list (current tree + removed tables/schemas from changes)
-  const enrichedSchemas: { name: string; status: DiffStatus; tables: { name: string; type: string; status: DiffStatus; columns: Column[] }[] }[] = [];
-
-  // Start with existing schemas
-  const existingSchemaNames = new Set(treeTo.schemas.map(s => s.schema_name));
-
-  for (const schema of treeTo.schemas) {
-    const sStatus = getSchemaStatus(schema.schema_name);
-    const tables: typeof enrichedSchemas[0]["tables"] = [];
-
-    const existingTableNames = new Set(schema.tables.map(t => t.table_name));
-
-    for (const table of schema.tables) {
-      const tStatus = getTableStatus(schema.schema_name, table.table_name);
-      if (tStatus !== "unchanged") counts[tStatus]++;
-      else counts.unchanged++;
-      tables.push({ name: table.table_name, type: table.object_type, status: tStatus, columns: table.columns });
-    }
-
-    // Add removed tables that no longer exist in the "to" tree
-    for (const [key, val] of changeLookup.byTable) {
-      const [s, t] = key.split(".");
-      if (s === schema.schema_name && !existingTableNames.has(t) && val.status === "removed") {
-        counts.removed++;
-        tables.push({ name: t, type: "TABLE", status: "removed", columns: [] });
-      }
-    }
-
-    enrichedSchemas.push({ name: schema.schema_name, status: sStatus, tables });
+  function getColumnStatus(schemaName: string, tableName: string, colName: string): DiffStatus {
+    return changeLookup.byColumn.get(`${schemaName}.${tableName}.${colName}`)?.status ?? "unchanged";
   }
 
-  // Add removed schemas that don't exist in "to"
-  for (const [schemaName, status] of changeLookup.bySchema) {
-    if (!existingSchemaNames.has(schemaName) && status === "removed") {
-      enrichedSchemas.push({ name: schemaName, status: "removed", tables: [] });
+  const counts = { added: 0, removed: 0, modified: 0, unchanged: 0 };
+  const enrichedSchemas: { name: string; status: DiffStatus; tables: { name: string; type: string; status: DiffStatus; columns: Column[] }[] }[] = [];
+
+  if (treeTo) {
+    // ── Full-tree mode (user loaded the tree): show unchanged objects too ──
+    const existingSchemaNames = new Set(treeTo.schemas.map(s => s.schema_name));
+    for (const schema of treeTo.schemas) {
+      const sStatus = getSchemaStatus(schema.schema_name);
+      const tables: typeof enrichedSchemas[0]["tables"] = [];
+      const existingTableNames = new Set(schema.tables.map(t => t.table_name));
+      for (const table of schema.tables) {
+        const tStatus = changeLookup.byTable.get(`${schema.schema_name}.${table.table_name}`)?.status ?? "unchanged";
+        if (tStatus !== "unchanged") counts[tStatus]++; else counts.unchanged++;
+        tables.push({ name: table.table_name, type: table.object_type, status: tStatus, columns: table.columns });
+      }
+      for (const [key, val] of changeLookup.byTable) {
+        const [s, t] = key.split(".");
+        if (s === schema.schema_name && !existingTableNames.has(t) && val.status === "removed") {
+          counts.removed++;
+          tables.push({ name: t, type: "TABLE", status: "removed", columns: [] });
+        }
+      }
+      enrichedSchemas.push({ name: schema.schema_name, status: sStatus, tables });
     }
+    for (const [schemaName, status] of changeLookup.bySchema) {
+      if (!existingSchemaNames.has(schemaName) && status === "removed") {
+        enrichedSchemas.push({ name: schemaName, status: "removed", tables: [] });
+      }
+    }
+  } else {
+    // ── Changes-only mode (default): build purely from changeLookup ──
+    // Groups changes by schema so we can render them without the full tree.
+    const schemaMap = new Map<string, typeof enrichedSchemas[0]["tables"]>();
+    for (const [tableKey, val] of changeLookup.byTable) {
+      const [schemaName, tableName] = tableKey.split(".");
+      if (!schemaMap.has(schemaName)) schemaMap.set(schemaName, []);
+      schemaMap.get(schemaName)!.push({ name: tableName, type: "TABLE", status: val.status, columns: [] });
+      counts[val.status]++;
+    }
+    for (const [schemaName, status] of changeLookup.bySchema) {
+      if (!schemaMap.has(schemaName)) schemaMap.set(schemaName, []);
+      // schema-level changes that may have no table entries
+    }
+    for (const [name, tables] of schemaMap) {
+      enrichedSchemas.push({ name, status: getSchemaStatus(name), tables });
+    }
+    enrichedSchemas.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   const totalAll = counts.added + counts.removed + counts.modified + counts.unchanged;
@@ -248,14 +228,14 @@ export default function SchemaVisualDiff({ snapshotFrom, snapshotTo, changes }: 
       {/* Summary bar */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <span className="text-xs font-semibold" style={{ color: "#334155" }}>
-          #{snapshotFrom} → #{snapshotTo} ({changes.length} changes):
+          #{snapshotFrom} → #{snapshotTo} ({changes.length} changes shown):
         </span>
         {[
           { key: "all" as const, label: "All", count: totalAll, color: "#64748b" },
           { key: "added" as const, label: "New", count: counts.added, color: "#16a34a" },
           { key: "removed" as const, label: "Removed", count: counts.removed, color: "#dc2626" },
           { key: "modified" as const, label: "Changed", count: counts.modified, color: "#d97706" },
-          { key: "unchanged" as const, label: "Unchanged", count: counts.unchanged, color: "#94a3b8" },
+          ...(treeTo ? [{ key: "unchanged" as const, label: "Unchanged", count: counts.unchanged, color: "#94a3b8" }] : []),
         ].map((f) => (
           <button
             key={f.key}
@@ -271,6 +251,19 @@ export default function SchemaVisualDiff({ snapshotFrom, snapshotTo, changes }: 
             {f.label} ({f.count})
           </button>
         ))}
+        {/* "Load full tree" opt-in — skipped by default to avoid the
+            multi-minute wait on large snapshots (240k+ tables). */}
+        {!treeTo && (
+          <button
+            onClick={handleLoadFullTree}
+            disabled={fullTreeLoading}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-gray-300 text-td-gray-dark hover:bg-gray-50 disabled:opacity-50 transition-all"
+          >
+            {fullTreeLoading
+              ? <><RefreshCw size={11} className="animate-spin" /> Loading full tree…</>
+              : <><RefreshCw size={11} /> Load full tree (includes unchanged)</>}
+          </button>
+        )}
       </div>
 
       {/* Schema tree */}

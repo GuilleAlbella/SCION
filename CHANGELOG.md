@@ -8,6 +8,24 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v1.21.46 (2026-06-30) — fix(perf): Visual Diff instant render; Changes infinite scroll + loading overlay; Simulation UNKNOWN search; Snapshots extract time
+
+- **Visual Diff**: removed the blocking `/schema-tree/{snapshotTo}` fetch on open.
+  Changed objects now render instantly from the already-loaded change events.
+  "Load full tree (includes unchanged)" button available for opt-in load of the
+  complete snapshot structure.
+- **Changes page**: "Load next 100" replaced by infinite scroll (IntersectionObserver),
+  matching Impact Analysis behaviour. Added semi-transparent loading overlay on
+  the table while filter-change refetches are in flight (fixes "only top frames
+  show loading" complaint).
+- **Simulation search**: object autocomplete now includes UNKNOWN-type objects so
+  parser snapshots (e.g. snapshot #7 which only has UNKNOWN nodes) are searchable.
+- **Snapshots page**: description column now shows extract timestamp parsed from
+  `extract_run_id` (`Extract: DD/MM/YYYY HH:MM UTC`) and a compact content
+  summary (databases / tables count) instead of the raw verbose string.
+
+---
+
 ### v1.21.45 (2026-06-30) — feat(ux): snapshot timestamps in all selectors, infinite scroll in Impact, column lineage sort
 
 - **Snapshot timestamps**: all snapshot dropdowns now show `#N — source — DD/MM/YYYY` across

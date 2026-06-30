@@ -31,6 +31,34 @@ import {
   type PreflightEstimate,
 } from "@/lib/dict_preflight";
 
+/** Parse the verbose description field that dict-import writes.
+ *  Example: "Data dictionary import | source=X | extract_run_id=20260512T121033Z_abc | databases=10724 | tables=239622 | ..."
+ *  Returns a condensed human-readable string with the extract timestamp. */
+function parseSnapshotDescription(description: string): { extractTime: string | null; summary: string } {
+  if (!description) return { extractTime: null, summary: "—" };
+
+  // Extract timestamp from extract_run_id=YYYYMMDDTHHMMSSz
+  let extractTime: string | null = null;
+  const tsMatch = description.match(/extract_run_id=(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/);
+  if (tsMatch) {
+    const [, y, mo, d, h, mi] = tsMatch;
+    extractTime = `${d}/${mo}/${y} ${h}:${mi} UTC`;
+  }
+
+  // Count fields: databases=N, tables=N
+  const dbMatch = description.match(/databases=(\d+)/);
+  const tbMatch = description.match(/tables=(\d+)/);
+  if (dbMatch || tbMatch) {
+    const parts: string[] = [];
+    if (dbMatch) parts.push(`${Number(dbMatch[1]).toLocaleString()} db`);
+    if (tbMatch) parts.push(`${Number(tbMatch[1]).toLocaleString()} tables`);
+    return { extractTime, summary: parts.join(" · ") };
+  }
+
+  // Parser snapshot or other — show as-is but truncated
+  return { extractTime, summary: description.slice(0, 80) };
+}
+
 export default function SnapshotsPage() {
   const { data, error, isLoading } = useSnapshots();
   const { activeSnapshotId, setActiveSnapshotId } = useSelection();
@@ -1494,7 +1522,7 @@ export default function SnapshotsPage() {
                 <th className="px-4 py-3 font-medium">ID</th>
                 <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium">Source</th>
-                <th className="px-4 py-3 font-medium">Description</th>
+                <th className="px-4 py-3 font-medium">Contents / Extract time</th>
                 <th className="px-4 py-3 font-medium">Active</th>
                 <th className="px-4 py-3 font-medium w-16">Actions</th>
               </tr>
@@ -1524,7 +1552,19 @@ export default function SnapshotsPage() {
                       </td>
                       <td className="px-4 py-3">{s.source_system}</td>
                       <td className="px-4 py-3 text-td-gray-dark">
-                        {s.description || "—"}
+                        {(() => {
+                          const { extractTime, summary } = parseSnapshotDescription(s.description);
+                          return (
+                            <div title={s.description || undefined}>
+                              {extractTime && (
+                                <div className="text-[10px] font-medium text-td-navy mb-0.5">
+                                  Extract: {extractTime}
+                                </div>
+                              )}
+                              <div className="text-xs">{summary}</div>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         {isActive && (

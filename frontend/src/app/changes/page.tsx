@@ -33,7 +33,7 @@ import { getDDL } from "@/lib/api/ddl";
 import type { DDLResponse, DDLItem } from "@/lib/api/types";
 import { useToast } from "@/components/shared/ToastProvider";
 import SchemaVisualDiff from "@/components/shared/SchemaVisualDiff";
-import { LayoutList, GitCompare, TrendingUp, Clock, Target, Flame, ExternalLink, BarChart3, ArrowRight } from "lucide-react";
+import { LayoutList, GitCompare, TrendingUp, Clock, Target, Flame, ExternalLink, BarChart3, ArrowRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { changeTypeLabel, BREAKING_MEANING, BREAKING_TESTER_ACTION, breakingReason } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -322,6 +322,23 @@ export default function ChangesPage() {
   // settles.
   const [debouncedFilterObject, setDebouncedFilterObject] = useState<string>("");
   const objectDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+
+  // Infinite scroll: auto-load next page when sentinel enters viewport.
+  // Re-registers whenever has_more or loadingMore changes so the guard
+  // inside handleLoadMore sees the latest state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) handleLoadMore(); },
+      { rootMargin: "400px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageItems.length, pageHasMore, loadingMore]);
 
   // DDL generation is a separate backend call, triggered by the "Generate DDL"
   // button. We keep the response here rather than in context because it's
@@ -948,7 +965,16 @@ export default function ChangesPage() {
           {/* ──── Changes table + DDL panel ──── Each row is expandable.
               Selection checkboxes drive which changes are sent to Generate DDL. */}
           {viewMode === "table" && (<>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="relative bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {/* Loading overlay — covers the table while a filter-change refetch
+                is in flight. The KPI cards above already show a spinner; this
+                ensures the rows below also signal "stale data" instead of
+                leaving the old page frozen and silent. */}
+            {loading && pageItems.length > 0 && (
+              <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-td-navy" />
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-td-navy text-white text-left">
@@ -995,27 +1021,18 @@ export default function ChangesPage() {
                 ))}
               </tbody>
             </table>
-            {/* Load-more affordance. Visible whenever the server reported
-                additional pages exist for the current filter set. We never
-                auto-fetch on scroll: the user explicitly opts into pulling
-                more rows so they don't accidentally tank their browser by
-                holding Page Down on a 250k diff. */}
+            {/* Infinite scroll sentinel — when this div enters the viewport
+                the IntersectionObserver above auto-fetches the next page. */}
             {pageHasMore && (
-              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-3">
+              <div
+                ref={loadMoreSentinelRef}
+                className="border-t border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-center gap-2"
+              >
                 <span className="text-[11px] text-td-gray-dark">
                   Showing {pageItems.length.toLocaleString()} of{" "}
                   {pageTotal.toLocaleString()}
                 </span>
-                <button
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="flex items-center gap-1.5 bg-td-navy text-white px-3 py-1 rounded text-xs font-medium hover:bg-td-navy-light disabled:opacity-50 transition-colors"
-                >
-                  {loadingMore ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : null}
-                  {loadingMore ? "Loading..." : `Load next ${PAGE_SIZE}`}
-                </button>
+                {loadingMore && <Loader2 size={12} className="animate-spin text-td-navy" />}
               </div>
             )}
             {!pageHasMore && pageItems.length > 0 && pageTotal > PAGE_SIZE && (

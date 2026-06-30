@@ -156,7 +156,7 @@ export default function SimulationPage() {
               onChange={setSelectedObject}
               snapshotId={snapshotId ?? undefined}
               source="graph"
-              objectTypes="TABLE,VIEW"
+              objectTypes="TABLE,VIEW,UNKNOWN"
               placeholder={snapshotId ? "Type a table or view name..." : "Pick a snapshot first"}
               disabled={!snapshotId}
             />
