@@ -55,6 +55,39 @@ class DiffEngine:
         if snapshot_from == snapshot_to:
             raise ValueError("snapshot_from and snapshot_to must be different")
 
+        # ──── Idempotency fast-path ────
+        # Check for existing change_events BEFORE loading any schema/table/column
+        # data. On large snapshots (10M+ columns) the data load takes minutes;
+        # returning early here makes repeated calls to compute_diff instant.
+        with Session(engine) as _early_session:
+            existing_events = (
+                _early_session.query(ChangeEvent)
+                .filter(
+                    ChangeEvent.snapshot_from == snapshot_from,
+                    ChangeEvent.snapshot_to == snapshot_to,
+                )
+                .order_by(
+                    ChangeEvent.object_type,
+                    ChangeEvent.object_identifier,
+                    ChangeEvent.change_type,
+                    ChangeEvent.change_id,
+                )
+                .all()
+            )
+        if existing_events:
+            return [
+                Change(
+                    object_type=e.object_type,
+                    object_identifier=e.object_identifier,
+                    change_type=e.change_type,
+                    before_state=e.before_state,
+                    after_state=e.after_state,
+                    severity=e.severity or get_severity(e.change_type),
+                    is_breaking=e.is_breaking if e.is_breaking is not None else is_breaking(e.change_type),
+                )
+                for e in existing_events
+            ]
+
         # ──── Step 1: Load raw state from both snapshots ────
         # All reads happen inside a single Session so we get a consistent
         # view of the metadata tables. We intentionally load each level
