@@ -119,11 +119,15 @@ export default function IntelligencePage() {
   const healthColor = scorecard ? HEALTH_COLORS[scorecard.overall_health] ?? "#7C8185" : "#7C8185";
   const HealthIcon = scorecard ? HEALTH_ICONS[scorecard.overall_health] ?? Info : Info;
 
-  const domainChartData = (domainRisks?.domains ?? []).map((d: any) => ({
-    name: d.schema_name,
-    score: Math.round(d.risk_score * 100),
-    color: RISK_COLORS[d.risk_level] ?? "#7C8185",
-  }));
+  const domainChartDataAll = (domainRisks?.domains ?? [])
+    .map((d: any) => ({
+      name: d.schema_name,
+      score: Math.round(d.risk_score * 100),
+      color: RISK_COLORS[d.risk_level] ?? "#7C8185",
+    }))
+    .sort((a: any, b: any) => b.score - a.score);
+  const DOMAIN_CHART_TOP = 20;
+  const domainChartData = domainChartDataAll.slice(0, DOMAIN_CHART_TOP);
 
   const riskDistribution = (domainRisks?.domains ?? []).reduce(
     (acc: Record<string, number>, d: any) => {
@@ -322,23 +326,33 @@ export default function IntelligencePage() {
           <div className="grid grid-cols-2 gap-6 mb-6">
             {/* Risk bar chart */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <h3 className="text-sm font-medium text-td-navy mb-3">Risk Score by Database</h3>
-              {domainChartData.length > 0 ? (
-                <div style={{ height: 250 }}>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={domainChartData} layout="vertical">
-                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
-                      <Tooltip formatter={(value) => [`${value}%`, "Risk Score"]} />
-                      <Bar dataKey="score" radius={[0, 4, 4, 0]}>
-                        {domainChartData.map((entry: any, i: number) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-td-navy">Risk Score by Database</h3>
+                {domainChartDataAll.length > DOMAIN_CHART_TOP && (
+                  <span className="text-[11px] text-td-gray-dark">
+                    Top {DOMAIN_CHART_TOP} of {domainChartDataAll.length.toLocaleString()}
+                  </span>
+                )}
+              </div>
+              {domainChartData.length > 0 ? (() => {
+                const chartHeight = Math.min(500, Math.max(200, domainChartData.length * 24));
+                return (
+                  <div style={{ height: chartHeight }}>
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                      <BarChart data={domainChartData} layout="vertical">
+                        <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
+                        <Tooltip formatter={(value) => [`${value}%`, "Risk Score"]} />
+                        <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                          {domainChartData.map((entry: any, i: number) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })() : (
                 <p className="text-xs text-td-gray-dark">No domain data</p>
               )}
             </div>

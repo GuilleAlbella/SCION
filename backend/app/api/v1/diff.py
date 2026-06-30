@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.engine_registry import get_diff_engine
@@ -331,8 +331,12 @@ def get_diff_details(
             select(ChangeEvent)
             .where(where_clause)
             .order_by(
-                ChangeEvent.snapshot_from,
-                ChangeEvent.snapshot_to,
+                ChangeEvent.is_breaking.desc(),
+                case(
+                    (ChangeEvent.severity == "HIGH", 1),
+                    (ChangeEvent.severity == "MEDIUM", 2),
+                    else_=3,
+                ),
                 ChangeEvent.change_id,
             )
             .offset(offset)
