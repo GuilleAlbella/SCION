@@ -48,6 +48,18 @@ class ShareImportResponse(BaseModel):
     lineage_warnings: List[str]
 
 
+class ArchiveEntry(BaseModel):
+    """One importable entry found inside the archive sub-directory."""
+    name: str                          # sub-folder name (used as label in UI)
+    path: str                          # absolute path — pass as `path` to /share-import
+    dict_files: List[str]
+    pdcr_files: List[str]
+    lineage_files: List[str]
+    already_imported: bool = False
+    existing_snapshot_id: Optional[int] = None
+    extract_run_id: Optional[str] = None
+
+
 class ShareScanResponse(BaseModel):
     """Non-destructive preview of what the share contains."""
     share_available: bool
@@ -58,6 +70,10 @@ class ShareScanResponse(BaseModel):
     already_imported: bool = False
     existing_snapshot_id: Optional[int] = None
     extract_run_id: Optional[str] = None
+    # Archive sub-directory (sibling folder named "archive")
+    archive_available: bool = False
+    archive_path: str = ""
+    archive_entries: List[ArchiveEntry] = []
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,6 +86,41 @@ def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> 
     if not base.is_dir():
         return []
     return [f for f in base.iterdir() if f.is_file()]
+
+
+def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
+    """Scan <mount_path>/archive for importable sub-folders.
+
+    Each direct sub-directory of the archive folder is treated as a
+    separate past snapshot.  Sub-folders are returned sorted by name
+    (descending — most recent first, assuming date-prefixed names).
+    """
+    archive_root = Path(mount_path) / "archive"
+    if not archive_root.is_dir():
+        return []
+
+    entries: List[ArchiveEntry] = []
+    for sub in sorted(archive_root.iterdir(), reverse=True):
+        if not sub.is_dir():
+            continue
+        dict_files = _iter_share_files(_DICT_DIR, str(sub))
+        pdcr_files = _iter_share_files(_PDCR_DIR, str(sub))
+        lineage_files = _iter_share_files(_LINEAGE_DIR, str(sub))
+        # Skip folders that contain no recognisable files at all.
+        if not dict_files and not pdcr_files and not lineage_files:
+            continue
+        already, snap_id, run_id = _check_already_imported(dict_files)
+        entries.append(ArchiveEntry(
+            name=sub.name,
+            path=str(sub),
+            dict_files=[f.name for f in dict_files],
+            pdcr_files=[f.name for f in pdcr_files],
+            lineage_files=[f.name for f in lineage_files],
+            already_imported=already,
+            existing_snapshot_id=snap_id,
+            extract_run_id=run_id,
+        ))
+    return entries
 
 
 def _path_to_upload(path: Path) -> UploadFile:
@@ -156,6 +207,9 @@ def scan_share(
     dict_paths = _iter_share_files(_DICT_DIR, mount)
     already_imported, existing_snapshot_id, run_id = _check_already_imported(dict_paths)
 
+    archive_root = Path(mount) / "archive"
+    archive_entries = _scan_archive_entries(mount)
+
     return ShareScanResponse(
         share_available=True,
         share_path=mount,
@@ -165,6 +219,9 @@ def scan_share(
         already_imported=already_imported,
         existing_snapshot_id=existing_snapshot_id,
         extract_run_id=run_id,
+        archive_available=archive_root.is_dir(),
+        archive_path=str(archive_root),
+        archive_entries=archive_entries,
     )
 
 

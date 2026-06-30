@@ -1,6 +1,17 @@
 import apiClient from "@/lib/api/client";
 import type { DictImportResponse } from "@/lib/api/dict_import";
 
+export interface ArchiveEntry {
+  name: string;
+  path: string;
+  dict_files: string[];
+  pdcr_files: string[];
+  lineage_files: string[];
+  already_imported: boolean;
+  existing_snapshot_id: number | null;
+  extract_run_id: string | null;
+}
+
 export interface ShareScanResponse {
   share_available: boolean;
   share_path: string;
@@ -10,6 +21,9 @@ export interface ShareScanResponse {
   already_imported: boolean;
   existing_snapshot_id: number | null;
   extract_run_id: string | null;
+  archive_available: boolean;
+  archive_path: string;
+  archive_entries: ArchiveEntry[];
 }
 
 export interface ShareImportResponse {

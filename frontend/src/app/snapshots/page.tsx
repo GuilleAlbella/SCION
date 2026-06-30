@@ -20,7 +20,7 @@ import {
 } from "@/lib/api/dict_import";
 import type { ParserImportResponse } from "@/lib/api/types";
 import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle, FolderSync, Database, GitBranch, Activity } from "lucide-react";
-import { scanShare, importFromShare, type ShareScanResponse, type ShareImportResponse } from "@/lib/api/share_import";
+import { scanShare, importFromShare, type ShareScanResponse, type ShareImportResponse, type ArchiveEntry } from "@/lib/api/share_import";
 import { useToast } from "@/components/shared/ToastProvider";
 import { DictImportProgress, type ImportPhase } from "@/components/shared/DictImportProgress";
 import {
@@ -156,6 +156,10 @@ export default function SnapshotsPage() {
   const [shareManualImporting, setShareManualImporting] = useState(false);
   const [shareManualResult, setShareManualResult] = useState<ShareImportResponse | null>(null);
   const [shareManualError, setShareManualError] = useState<string | null>(null);
+  // Archive import state: keyed by entry.path
+  const [archiveImporting, setArchiveImporting] = useState<string | null>(null);
+  const [archiveResults, setArchiveResults] = useState<Record<string, ShareImportResponse>>({});
+  const [archiveErrors, setArchiveErrors] = useState<Record<string, string>>({});
 
   // ── Resume in-flight import after page navigation ─────────────────
   // The user can navigate away from Snapshots while a dict-import is
@@ -344,7 +348,36 @@ export default function SnapshotsPage() {
     setShareManualFiles([]);
     setShareManualResult(null);
     setShareManualError(null);
+    setArchiveImporting(null);
+    setArchiveResults({});
+    setArchiveErrors({});
     if (shareFileInputRef.current) shareFileInputRef.current.value = "";
+  }
+
+  async function handleArchiveImport(entry: ArchiveEntry) {
+    setArchiveImporting(entry.path);
+    setArchiveErrors((prev) => { const n = { ...prev }; delete n[entry.path]; return n; });
+    try {
+      const result = await importFromShare(false, entry.path);
+      setArchiveResults((prev) => ({ ...prev, [entry.path]: result }));
+      await mutate("snapshots");
+      setActiveSnapshotId(result.snapshot_id);
+      const lineagePart = result.lineage_attached
+        ? ` + ${result.lineage_tables} lineage tables, ${result.lineage_edges} edges`
+        : "";
+      toast(
+        `Snapshot #${result.snapshot_id} created from archive "${entry.name}". ` +
+        `${result.dict_result.tables_created} tables, ${result.dict_result.columns_created} columns${lineagePart}.`,
+        "success"
+      );
+    } catch (e: unknown) {
+      const msg = e && typeof e === "object" && "response" in e
+        ? (e as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? "Import failed"
+        : e instanceof Error ? e.message : "Import failed";
+      setArchiveErrors((prev) => ({ ...prev, [entry.path]: msg }));
+    } finally {
+      setArchiveImporting(null);
+    }
   }
 
   async function handleShareManualImport() {
@@ -963,6 +996,71 @@ export default function SnapshotsPage() {
             {shareResult && <ShareSuccessCard result={shareResult} onDone={clearShareImport} />}
             {shareError && <ShareErrorCard message={shareError} />}
           </div>
+
+          {/* ── Archive section ── */}
+          {shareScan?.archive_available && shareScan.archive_entries.length > 0 && (
+            <>
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 border-t border-gray-200" />
+                <span className="text-[10px] text-td-gray-dark uppercase tracking-wider">archive</span>
+                <div className="flex-1 border-t border-gray-200" />
+              </div>
+
+              <div className="mb-1">
+                <div className="text-[11px] font-semibold text-td-navy mb-1">From archive</div>
+                <p className="text-[11px] text-td-gray-dark mb-3">
+                  Past snapshots stored in <code className="font-mono">{shareScan.archive_path}</code>.
+                  Each folder is imported as a separate snapshot.
+                </p>
+                <div className="space-y-2">
+                  {shareScan.archive_entries.map((entry) => {
+                    const result = archiveResults[entry.path];
+                    const error = archiveErrors[entry.path];
+                    const importing = archiveImporting === entry.path;
+                    const anyImporting = archiveImporting !== null || shareImporting;
+                    return (
+                      <div key={entry.path} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded uppercase tracking-wide">archive</span>
+                            <span className="text-xs font-mono font-semibold text-td-navy">{entry.name}</span>
+                          </div>
+                          {result ? (
+                            <span className="flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                              <CheckCircle2 size={12} /> Snapshot #{result.snapshot_id}
+                            </span>
+                          ) : entry.already_imported ? (
+                            <span className="text-[10px] text-amber-700">⚠ Already imported as #{entry.existing_snapshot_id}</span>
+                          ) : (
+                            <button
+                              onClick={() => handleArchiveImport(entry)}
+                              disabled={anyImporting || entry.dict_files.length === 0}
+                              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded text-[11px] font-medium disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <Upload size={11} />
+                              {importing ? "Importing…" : "Import"}
+                            </button>
+                          )}
+                        </div>
+                        <div className="px-3 py-2 space-y-1">
+                          <ShareFileRow icon={<Database size={11} />} label="Data Dictionary" files={entry.dict_files} />
+                          <ShareFileRow icon={<GitBranch size={11} />} label="Data Lineage" files={entry.lineage_files} />
+                          <ShareFileRow icon={<Activity size={11} />} label="Object Usage (PDCR)" files={entry.pdcr_files} />
+                        </div>
+                        {error && <div className="px-3 py-2 bg-red-50 text-[11px] text-red-700 border-t border-red-100">{error}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {shareScan && !shareScan.archive_available && (
+            <div className="mt-3 text-[11px] text-gray-400 italic">
+              No archive folder found at <code className="font-mono">{shareScan.share_path}/archive</code>.
+            </div>
+          )}
 
           {/* ── Divider ── */}
           <div className="flex items-center gap-3 my-4">
