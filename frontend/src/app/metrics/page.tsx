@@ -356,20 +356,34 @@ export default function MetricsPage() {
             </button>
           </div>
 
-          {/* Side-by-side comparison bars */}
+          {/* Side-by-side comparison bars — one small chart per category
+              instead of a single shared axis. At Transcend scale, Databases
+              (~10k) and Columns (~10M) differ by 3 orders of magnitude; a
+              shared Y axis flattens the smaller categories to invisible
+              slivers. Each category gets its own scale instead. */}
           {comparisonData.length > 0 && (
-            <div style={{ width: "100%", height: 260 }}>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={comparisonData} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="from" fill="#94A3B8" name={`Snapshot #${compareFrom}`} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="to" fill="#2563EB" name={`Snapshot #${compareTo}`} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {comparisonData.map((row) => (
+                <div key={row.name} className="border border-gray-100 rounded-lg p-2">
+                  <p className="text-[11px] font-medium text-td-gray-dark text-center mb-1">{row.name}</p>
+                  <div style={{ width: "100%", height: 140 }}>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <BarChart data={[row]} barGap={2}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="name" tick={false} />
+                        <YAxis tick={{ fontSize: 9 }} width={40} />
+                        <Tooltip />
+                        <Bar dataKey="from" fill="#94A3B8" name={`#${compareFrom}`} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="to" fill="#2563EB" name={`#${compareTo}`} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ))}
+              <div className="col-span-full flex items-center justify-center gap-4 text-[11px] text-td-gray-dark">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#94A3B8" }} />Snapshot #{compareFrom}</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#2563EB" }} />Snapshot #{compareTo}</span>
+              </div>
             </div>
           )}
 
