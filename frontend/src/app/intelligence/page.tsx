@@ -22,6 +22,7 @@ import {
   Link2, Activity, ArrowUp, ArrowDown, ArrowRight, BarChart3,
 } from "lucide-react";
 import { GuidedSection } from "@/components/shared/GuidedSection";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 
 const HEALTH_COLORS: Record<string, string> = {
   HEALTHY: "#16A34A",
@@ -293,9 +294,20 @@ export default function IntelligencePage() {
                 <div className="text-sm font-medium" style={{ color: vol.color }}>{vol.text}</div>
               </div>
               <div className="text-right">
-                <div className="text-xs text-td-gray-dark">Volatility Index</div>
+                <div className="text-xs text-td-gray-dark flex items-center justify-end gap-1">
+                  Volatility Index
+                  <InfoTooltip
+                    text="Ratio of changed objects to total objects between the two most recent snapshots. Capped at 100% for readability — a raw ratio above 1.0 (more changes than objects, e.g. many column-level changes per table) shows as 100% with the exact ratio in this tooltip."
+                    detail={
+                      scorecard.volatility_index > 1
+                        ? `Raw ratio: ${(scorecard.volatility_index * 100).toFixed(0)}% (uncapped)`
+                        : undefined
+                    }
+                    size={11}
+                  />
+                </div>
                 <AnimatedCounter
-                  value={scorecard.volatility_index * 100}
+                  value={Math.min(scorecard.volatility_index * 100, 100)}
                   className="text-xl font-bold"
                   style={{ color: vol.color }}
                   suffix="%"
