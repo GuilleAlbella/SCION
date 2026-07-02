@@ -20,6 +20,12 @@ class UsageEvent(Base):
     __tablename__ = "usage_event"
 
     usage_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Nullable: rows persisted before v1.21.54 predate this column and have
+    # no snapshot to backfill against automatically (see migration for the
+    # one-time backfill of rows that CAN be inferred from ingest batching).
+    # New imports always populate this via persist_object_usage's
+    # `snapshot_id` parameter, so the null case shrinks to zero over time.
+    snapshot_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     object_name: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     schema_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)

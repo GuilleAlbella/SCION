@@ -276,6 +276,21 @@ def persist_object_usage(
     if not rec_list:
         return result
 
+    # Idempotency: re-running the same Object Usage file against a
+    # snapshot that already has usage rows (e.g. re-clicking "Import"
+    # on the share-scan modal, which also re-triggers this path) used to
+    # silently double the counts — there was no dedup here at all. Skip
+    # the whole batch if this snapshot already has usage persisted;
+    # unlike the dict importer we don't have a per-row natural key to
+    # de-duplicate against, so batch-level skip is the safe option.
+    if snapshot_id is not None:
+        existing = session.query(UsageEvent.usage_id).filter(
+            UsageEvent.snapshot_id == snapshot_id
+        ).first()
+        if existing is not None:
+            result.skipped_duplicate = len(rec_list)
+            return result
+
     # Build the CI lookup map once for the whole batch — re-querying
     # per-row would be O(N×|graph_node|) on Transcend = unworkable.
     node_index: dict[tuple[str, str], int] = (
@@ -320,6 +335,7 @@ def persist_object_usage(
 
         session.add(
             UsageEvent(
+                snapshot_id=snapshot_id,
                 object_name=object_name,
                 object_type=scion_type,
                 schema_name=r.database_name,

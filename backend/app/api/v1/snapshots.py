@@ -162,8 +162,8 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
     from app.db.models.table_snapshot import TableSnapshot
     from app.diff.diff_models import ChangeEvent
     from app.graph.graph_models import GraphEdge, GraphNode
-    from app.graph.impact_models import ImpactEvent
-    from app.usage.usage_models import ObjectCriticality
+    from app.graph.impact_models import ChangeImpactSummary, ImpactEvent
+    from app.usage.usage_models import ObjectCriticality, UsageEvent
 
     # Optional dependents — present in some checkouts only. We import
     # defensively so an older branch that hasn't migrated the parser
@@ -267,10 +267,12 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
                 .where(DDLTextSnapshot.table_id.in_(table_id_subq))
             ) or 0,
             "changes": 0,
+            "impact_summaries": 0,
             "graph_nodes": 0,
             "graph_edges": 0,
             "impacts": 0,
             "criticality": 0,
+            "usage_events": 0,
         }
 
         # ──── 5. Cascade DELETE in reverse-dependency order ────
@@ -300,6 +302,23 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             delete(SchemaSnapshot).where(SchemaSnapshot.snapshot_id == snapshot_id)
         )
 
+        # ChangeImpactSummary has a change_id FK to ChangeEvent but no
+        # DB-level ON DELETE CASCADE (see the model docstring) — it was
+        # never actually wired into this cascade, so deleting a snapshot
+        # left its impact summaries orphaned (still readable by change_id,
+        # pointing at nothing). Must run BEFORE the ChangeEvent delete
+        # below since it needs those rows to resolve which change_ids
+        # belong to this snapshot.
+        affected_change_id_subq = select(ChangeEvent.change_id).where(
+            (ChangeEvent.snapshot_from == snapshot_id)
+            | (ChangeEvent.snapshot_to == snapshot_id)
+        )
+        counts["impact_summaries"] = session.execute(
+            delete(ChangeImpactSummary).where(
+                ChangeImpactSummary.change_id.in_(affected_change_id_subq)
+            )
+        ).rowcount or 0
+
         # Diffs that reference this snapshot as from/to.
         counts["changes"] = session.execute(
             delete(ChangeEvent).where(
@@ -325,6 +344,16 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             delete(ObjectCriticality).where(
                 ObjectCriticality.snapshot_id == snapshot_id
             )
+        ).rowcount or 0
+
+        # Usage events keyed by snapshot_id (added v1.21.54 — previously
+        # this table had no snapshot linkage at all, so deleting a
+        # snapshot silently left its usage rows behind, and a later
+        # re-import of the same PDCR file would double-count them). Rows
+        # persisted before v1.21.54 have snapshot_id=NULL and are left
+        # alone here; there's no way to attribute them retroactively.
+        counts["usage_events"] = session.execute(
+            delete(UsageEvent).where(UsageEvent.snapshot_id == snapshot_id)
         ).rowcount or 0
 
         # Parser-pipeline tables (v1.13+). Process is parent of Step,
