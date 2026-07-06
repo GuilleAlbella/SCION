@@ -224,23 +224,32 @@ export default function MetricsPage() {
             </>
           }
         >
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <div style={{ width: "100%", height: 280 }}>
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="total" stroke="#00233C" strokeWidth={2.5} name="Total" dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="columns" stroke="#7C8185" strokeWidth={1.5} name="Columns" dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="tables" stroke="#16A34A" strokeWidth={1.5} name="Tables" dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="views" stroke="#F37440" strokeWidth={1.5} name="Views" dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="schemas" stroke="#2563EB" strokeWidth={1.5} name="Databases" dot={{ r: 3 }} />
-                  <Tooltip />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+          {/* Per-category trend charts — each category gets its own Y-axis
+              scale so Columns (~10M) doesn't flatten Databases (~10k) into
+              an invisible line. Same approach as the comparison chart. */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {([
+              { key: "total",   label: "Total",     color: "#00233C" },
+              { key: "columns", label: "Columns",   color: "#7C8185" },
+              { key: "tables",  label: "Tables",    color: "#16A34A" },
+              { key: "views",   label: "Views",     color: "#F37440" },
+              { key: "schemas", label: "Databases", color: "#2563EB" },
+            ] as const).map((cat) => (
+              <div key={cat.key} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+                <p className="text-[11px] font-medium text-td-gray-dark text-center mb-1">{cat.label}</p>
+                <div style={{ width: "100%", height: 160 }}>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+                      <YAxis tick={{ fontSize: 9 }} width={45} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey={cat.key} stroke={cat.color} strokeWidth={2} name={cat.label} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ))}
           </div>
         </GuidedSection>
       )}

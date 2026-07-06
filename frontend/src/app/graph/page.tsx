@@ -129,7 +129,13 @@ function GraphNodeComponent({ data }: { data: { raw: GN; isExpanded?: boolean; i
         </div>
       )}
 
-      <div style={{ color: s.text, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
+      <div
+        style={{
+          color: s.text, fontSize: 13, fontWeight: 600, marginTop: 4,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}
+        title={n.object_name}
+      >
         {displayName}
       </div>
 

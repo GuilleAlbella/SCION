@@ -166,8 +166,12 @@ export function breakingReason(
 
 /**
  * For a change event, returns a short human-readable description.
+ *
+ * When `objectType` is supplied the label is refined — e.g. a
+ * `TABLE_ADDED` change on a VIEW object shows "View added" instead
+ * of the misleading "Table added".
  */
-export function changeTypeLabel(changeType: string): string {
+export function changeTypeLabel(changeType: string, objectType?: string): string {
   const map: Record<string, string> = {
     SCHEMA_ADDED: "Database added",
     SCHEMA_REMOVED: "Database removed",
@@ -195,5 +199,14 @@ export function changeTypeLabel(changeType: string): string {
     INDEX_ADDED: "Index added",
     INDEX_REMOVED: "Index removed",
   };
-  return map[changeType] ?? changeType.replace(/_/g, " ").toLowerCase();
+  let label = map[changeType] ?? changeType.replace(/_/g, " ").toLowerCase();
+
+  if (objectType && objectType !== "TABLE") {
+    const friendly = objectTypeLabel(objectType);
+    label = label
+      .replace(/^Table /i, `${friendly} `)
+      .replace(/^table /i, `${friendly.toLowerCase()} `);
+  }
+
+  return label;
 }

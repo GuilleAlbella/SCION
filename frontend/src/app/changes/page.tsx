@@ -151,7 +151,7 @@ function ExpandableRow({
             className="bg-td-orange/10 text-td-orange px-2 py-0.5 rounded text-xs font-medium"
             title={item.change_type}
           >
-            {changeTypeLabel(item.change_type)}
+            {changeTypeLabel(item.change_type, item.object_type)}
           </span>
         </td>
         <td className="px-4 py-3">
@@ -337,11 +337,12 @@ export default function ChangesPage() {
   // diff with thousands of rows doesn't instantiate one useState per row.
   const [expandedChangeIds, setExpandedChangeIds] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "visual">("table");
-  // TAISA "scope to single change" — typeahead operates on items already
-  // loaded into `pageItems`. With pagination, that means the user may need
-  // to load more pages first to find the change they want; we surface a
-  // hint making this explicit.
+  // TAISA "scope to single change" — server-side search across ALL changes,
+  // not just the loaded page. Debounced to avoid firing on every keystroke.
   const [taisaSearch, setTaisaSearch] = useState("");
+  const [taisaResults, setTaisaResults] = useState<DiffDetailItem[]>([]);
+  const [taisaLoading, setTaisaLoading] = useState(false);
+  const taisaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { toast } = useToast();
   const snapshots = snapData?.snapshots ?? [];
@@ -589,6 +590,35 @@ export default function ChangesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePair, filterSeverity, filterBreaking, debouncedFilterObject]);
 
+  // TAISA server-side search — debounced. Fires a lightweight API call
+  // with `object_q` to search ALL changes, not just the loaded page.
+  useEffect(() => {
+    if (taisaDebounceRef.current) clearTimeout(taisaDebounceRef.current);
+    const q = taisaSearch.trim();
+    if (q.length < 2 || !activePair) {
+      setTaisaResults([]);
+      return;
+    }
+    taisaDebounceRef.current = setTimeout(async () => {
+      setTaisaLoading(true);
+      try {
+        const data = await getDiffDetails(activePair.from, activePair.to, {
+          limit: 50,
+          offset: 0,
+          object_q: q,
+        });
+        setTaisaResults(data.changes);
+      } catch {
+        setTaisaResults([]);
+      } finally {
+        setTaisaLoading(false);
+      }
+    }, OBJECT_FILTER_DEBOUNCE_MS);
+    return () => {
+      if (taisaDebounceRef.current) clearTimeout(taisaDebounceRef.current);
+    };
+  }, [taisaSearch, activePair]);
+
   async function handleGenerateDDL() {
     const f = activePair?.from;
     const t = activePair?.to;
@@ -633,23 +663,8 @@ export default function ChangesPage() {
   // toolbar.
   const visibleChanges = pageItems;
 
-  // TAISA scope selector — typeahead candidates pulled from the items
-  // currently loaded in `pageItems`. With pagination, that means the user
-  // may need to widen the search (clear filters / Load More) to find the
-  // change they want; we surface that as a hint in the UI rather than
-  // pretending to search the whole 250k set.
-  const TAISA_SCOPE_MAX_OPTIONS = 50;
   const taisaQ = taisaSearch.trim().toLowerCase();
-  const taisaCandidates =
-    taisaQ.length >= 2
-      ? pageItems
-          .filter(
-            (c) =>
-              c.object_identifier.toLowerCase().includes(taisaQ) ||
-              String(c.change_id).includes(taisaQ),
-          )
-          .slice(0, TAISA_SCOPE_MAX_OPTIONS)
-      : [];
+  const taisaCandidates = taisaResults;
 
   // Convenience: the page renders pieces gated on "did the user load a
   // diff yet?". With pagination, `pageItems` may be empty (filters yielded
@@ -1166,8 +1181,7 @@ export default function ChangesPage() {
                   </div>
                   {taisaQ.length === 0 && (
                     <p className="mt-1 text-[11px] text-td-gray-dark">
-                      Searches across the <strong>{pageItems.length.toLocaleString()}</strong> change(s) currently
-                      loaded in the table. Use Load More (or relax filters) to widen the search.
+                      Searches across <strong>all</strong> changes in the diff (server-side).
                     </p>
                   )}
                   {taisaQ.length > 0 && taisaQ.length < 2 && (
@@ -1175,7 +1189,12 @@ export default function ChangesPage() {
                       Type at least 2 characters...
                     </p>
                   )}
-                  {taisaQ.length >= 2 && taisaCandidates.length === 0 && (
+                  {taisaLoading && (
+                    <p className="mt-1 text-[11px] text-td-gray-dark flex items-center gap-1">
+                      <Loader2 size={10} className="animate-spin" /> Searching...
+                    </p>
+                  )}
+                  {taisaQ.length >= 2 && !taisaLoading && taisaCandidates.length === 0 && (
                     <p className="mt-1 text-[11px] text-td-gray-dark">
                       No changes match &ldquo;{taisaSearch}&rdquo;.
                     </p>
@@ -1193,7 +1212,7 @@ export default function ChangesPage() {
                           >
                             <span className="font-mono text-td-gray-dark">#{c.change_id}</span>
                             <span className="bg-td-orange/10 text-td-orange px-1.5 py-0.5 rounded text-[10px] font-medium">
-                              {changeTypeLabel(c.change_type)}
+                              {changeTypeLabel(c.change_type, c.object_type)}
                             </span>
                             <span className="font-mono text-td-navy truncate">{c.object_identifier}</span>
                             <span className="ml-auto text-[10px] text-td-gray-dark">[{c.severity}]</span>
