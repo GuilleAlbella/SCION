@@ -8,7 +8,8 @@ import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useSelection } from "@/lib/SelectionContext";
-import { createSnapshot, deleteSnapshot } from "@/lib/api/snapshots";
+import { createSnapshot, deleteSnapshot, getSnapshotDetail } from "@/lib/api/snapshots";
+import type { SnapshotDetail } from "@/lib/api/types";
 import { previewParserImport, confirmParserImport } from "@/lib/api/parser_import";
 import {
   cancelImport,
@@ -19,7 +20,7 @@ import {
   type ImportProgressState,
 } from "@/lib/api/dict_import";
 import type { ParserImportResponse } from "@/lib/api/types";
-import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle, FolderSync, Database, GitBranch, Activity } from "lucide-react";
+import { Plus, Check, Upload, FileJson, FileText, Inbox, CheckCircle2, X, Trash2, AlertTriangle, ShieldCheck, AlertCircle, FolderSync, Database, GitBranch, Activity, ChevronDown, ChevronRight, Table2, Columns3, Network, GitMerge, Zap, BarChart2 } from "lucide-react";
 import { scanShare, importFromShare, type ShareScanResponse, type ShareImportResponse, type ArchiveEntry } from "@/lib/api/share_import";
 import { useToast } from "@/components/shared/ToastProvider";
 import { DictImportProgress, type ImportPhase } from "@/components/shared/DictImportProgress";
@@ -72,6 +73,33 @@ export default function SnapshotsPage() {
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  // ──── Snapshot expand / detail state ────
+  const [expandedSnapshotId, setExpandedSnapshotId] = useState<number | null>(null);
+  const [detailCache, setDetailCache] = useState<Map<number, SnapshotDetail>>(new Map());
+  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+
+  async function loadDetail(id: number) {
+    if (detailCache.has(id)) return;
+    setDetailLoadingId(id);
+    try {
+      const detail = await getSnapshotDetail(id);
+      setDetailCache((prev) => new Map(prev).set(id, detail));
+    } catch {
+      // silently fail — the expand row just stays empty
+    } finally {
+      setDetailLoadingId(null);
+    }
+  }
+
+  function toggleExpand(id: number) {
+    if (expandedSnapshotId === id) {
+      setExpandedSnapshotId(null);
+    } else {
+      setExpandedSnapshotId(id);
+      void loadDetail(id);
+    }
+  }
 
   // ──── Parser JSON import state ────
   // Hidden file input triggered by a button, then a preview panel before
@@ -1669,6 +1697,7 @@ export default function SnapshotsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-td-navy text-white text-left">
+                <th className="px-4 py-3 font-medium w-8"></th>
                 <th className="px-4 py-3 font-medium">ID</th>
                 <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium">Source</th>
@@ -1688,14 +1717,23 @@ export default function SnapshotsPage() {
                   const id = Number(s.snapshot_id);
                   const isActive = activeSnapshotId === id;
                   const isLatest = id === latestId;
-                  return (
+                  const isExpanded = expandedSnapshotId === id;
+                  return [
                     <tr
                       key={s.snapshot_id}
-                      onClick={() => setActiveSnapshotId(id)}
+                      onClick={() => {
+                        setActiveSnapshotId(id);
+                        toggleExpand(id);
+                      }}
                       className={`border-t border-gray-100 cursor-pointer transition-colors ${
                         isActive ? "bg-blue-50" : "hover:bg-gray-50"
                       }`}
                     >
+                      <td className="px-4 py-3 text-td-gray-dark/50">
+                        {isExpanded
+                          ? <ChevronDown size={13} className="text-td-navy" />
+                          : <ChevronRight size={13} />}
+                      </td>
                       <td className="px-4 py-3 font-mono">{s.snapshot_id}</td>
                       <td className="px-4 py-3 text-td-gray-dark">
                         {new Date(s.created_at).toLocaleString()}
@@ -1737,8 +1775,25 @@ export default function SnapshotsPage() {
                           </span>
                         )}
                       </td>
-                    </tr>
-                  );
+                    </tr>,
+                    isExpanded && (
+                      <tr key={`${s.snapshot_id}-detail`} className={isActive ? "bg-blue-50/60" : "bg-gray-50/60"}>
+                        <td colSpan={7} className="px-6 pb-4 pt-0 border-b border-gray-100">
+                          {detailLoadingId === id ? (
+                            <div className="flex items-center gap-2 py-2 text-xs text-td-gray-dark">
+                              <svg className="animate-spin h-3 w-3 text-td-navy" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                              </svg>
+                              Loading snapshot contents…
+                            </div>
+                          ) : detailCache.has(id) ? (
+                            <SnapshotDetailPanel detail={detailCache.get(id)!} />
+                          ) : null}
+                        </td>
+                      </tr>
+                    ),
+                  ];
                 });
               })()}
             </tbody>
@@ -1943,6 +1998,41 @@ function ShareFileRow({
           <div className="text-[10px] text-gray-400 mt-0.5">No files found</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// SnapshotDetailPanel — shown in the expand row when the user clicks a snapshot.
+function SnapshotDetailPanel({ detail }: { detail: SnapshotDetail }) {
+  const items: { icon: React.ReactNode; label: string; value: number; always?: boolean }[] = [
+    { icon: <Database size={13} />, label: "Databases", value: detail.databases, always: true },
+    { icon: <Table2 size={13} />, label: "Tables / Views", value: detail.tables, always: true },
+    { icon: <Columns3 size={13} />, label: "Columns", value: detail.columns, always: true },
+    { icon: <Network size={13} />, label: "Graph nodes", value: detail.graph_nodes },
+    { icon: <GitMerge size={13} />, label: "Graph edges", value: detail.graph_edges },
+    { icon: <BarChart2 size={13} />, label: "Changes (→ this)", value: detail.changes },
+    { icon: <Zap size={13} />, label: "Usage events", value: detail.usage_events },
+    { icon: <GitBranch size={13} />, label: "Indices", value: detail.indices },
+  ];
+
+  const visible = items.filter((i) => i.always || i.value > 0);
+
+  return (
+    <div className="flex flex-wrap gap-3 pt-2">
+      {visible.map((item) => (
+        <div
+          key={item.label}
+          className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 min-w-[130px]"
+        >
+          <span className="text-td-gray-dark/60 shrink-0">{item.icon}</span>
+          <div>
+            <div className="text-[10px] text-td-gray-dark uppercase tracking-wide">{item.label}</div>
+            <div className="text-sm font-bold text-td-navy font-mono">
+              {item.value.toLocaleString()}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

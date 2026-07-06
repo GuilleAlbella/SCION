@@ -18,6 +18,19 @@ export interface SnapshotsResponse {
   snapshots: Snapshot[];
 }
 
+export interface SnapshotDetail {
+  snapshot_id: number;
+  databases: number;
+  tables: number;
+  columns: number;
+  indices: number;
+  partitioning: number;
+  graph_nodes: number;
+  graph_edges: number;
+  changes: number;
+  usage_events: number;
+}
+
 export interface ChangeItem {
   change_id: number;
   object_type: string;

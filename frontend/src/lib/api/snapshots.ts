@@ -1,5 +1,5 @@
 import client from "./client";
-import type { SnapshotsResponse } from "./types";
+import type { SnapshotsResponse, SnapshotDetail } from "./types";
 
 export async function getSnapshots(): Promise<SnapshotsResponse> {
   const { data } = await client.get<SnapshotsResponse>("/snapshots");
@@ -29,6 +29,11 @@ export interface DeleteSnapshotResponse {
   cascade: Record<string, number>;
   vacuum: SnapshotVacuumInfo;
   message: string;
+}
+
+export async function getSnapshotDetail(snapshotId: number): Promise<SnapshotDetail> {
+  const { data } = await client.get<SnapshotDetail>(`/snapshots/${snapshotId}/detail`);
+  return data;
 }
 
 export async function deleteSnapshot(snapshotId: number): Promise<DeleteSnapshotResponse> {

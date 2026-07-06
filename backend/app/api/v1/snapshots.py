@@ -102,6 +102,100 @@ def list_snapshots() -> dict[str, list[dict[str, str]]]:
     return {"snapshots": snapshots}
 
 
+@router.get("/{snapshot_id}/detail", summary="Snapshot object counts")
+def get_snapshot_detail(snapshot_id: int) -> dict[str, Any]:
+    """Return object counts for a single snapshot.
+
+    Provides a quick breakdown of what's inside a snapshot without
+    materialising the rows themselves — useful for the expand panel
+    in the Snapshots UI. All counts are returned as integers (0 when
+    the category was not imported or doesn't apply to this snapshot).
+    """
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session
+
+    from app.db.engine import engine
+    from app.db.models.column_snapshot import ColumnSnapshot
+    from app.db.models.index_snapshot import IndexSnapshot
+    from app.db.models.partitioning_snapshot import PartitioningSnapshot
+    from app.db.models.schema_snapshot import SchemaSnapshot
+    from app.db.models.snapshot import Snapshot
+    from app.db.models.table_snapshot import TableSnapshot
+    from app.diff.diff_models import ChangeEvent
+    from app.graph.graph_models import GraphEdge, GraphNode
+    from app.usage.usage_models import UsageEvent
+
+    with Session(bind=engine) as session:
+        target = session.execute(
+            select(Snapshot).where(Snapshot.snapshot_id == snapshot_id)
+        ).scalar_one_or_none()
+        if target is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Snapshot #{snapshot_id} does not exist.",
+            )
+
+        schema_id_subq = select(SchemaSnapshot.schema_id).where(
+            SchemaSnapshot.snapshot_id == snapshot_id
+        )
+        table_id_subq = select(TableSnapshot.table_id).where(
+            TableSnapshot.schema_id.in_(schema_id_subq)
+        )
+
+        def _count(stmt) -> int:
+            return session.scalar(stmt) or 0
+
+        databases = _count(
+            select(func.count()).select_from(SchemaSnapshot)
+            .where(SchemaSnapshot.snapshot_id == snapshot_id)
+        )
+        tables = _count(
+            select(func.count()).select_from(TableSnapshot)
+            .where(TableSnapshot.schema_id.in_(schema_id_subq))
+        )
+        columns = _count(
+            select(func.count()).select_from(ColumnSnapshot)
+            .where(ColumnSnapshot.table_id.in_(table_id_subq))
+        )
+        indices = _count(
+            select(func.count()).select_from(IndexSnapshot)
+            .where(IndexSnapshot.table_id.in_(table_id_subq))
+        )
+        partitioning = _count(
+            select(func.count()).select_from(PartitioningSnapshot)
+            .where(PartitioningSnapshot.table_id.in_(table_id_subq))
+        )
+        graph_nodes = _count(
+            select(func.count()).select_from(GraphNode)
+            .where(GraphNode.snapshot_id == snapshot_id)
+        )
+        graph_edges = _count(
+            select(func.count()).select_from(GraphEdge)
+            .where(GraphEdge.snapshot_id == snapshot_id)
+        )
+        changes = _count(
+            select(func.count()).select_from(ChangeEvent)
+            .where(ChangeEvent.snapshot_to == snapshot_id)
+        )
+        usage_events = _count(
+            select(func.count()).select_from(UsageEvent)
+            .where(UsageEvent.snapshot_id == snapshot_id)
+        )
+
+    return {
+        "snapshot_id": snapshot_id,
+        "databases": databases,
+        "tables": tables,
+        "columns": columns,
+        "indices": indices,
+        "partitioning": partitioning,
+        "graph_nodes": graph_nodes,
+        "graph_edges": graph_edges,
+        "changes": changes,
+        "usage_events": usage_events,
+    }
+
+
 @router.delete(
     "/{snapshot_id}",
     status_code=status.HTTP_200_OK,
