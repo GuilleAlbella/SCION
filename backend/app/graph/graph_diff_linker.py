@@ -105,9 +105,17 @@ def _link_changes_to_graph_in_session(
                     node_id = nodes_by_name.get(parent_name)
 
         if node_id is None:
-            # Still unmapped after fallback — expected for REMOVED objects
-            # (they exist only in snapshot_from) or for identifiers that
-            # the parser couldn't resolve to a catalog entry.
+            # Final fallback: name-only lookup ignoring object_type.
+            # Needed when the lineage importer creates graph_node rows
+            # with object_type='UNKNOWN' while the diff has the proper
+            # type (e.g. 'TABLE'). The exact (type, name) key misses, but
+            # the node IS there under a different type label.
+            name_lower = (event.object_identifier or "").lower()
+            node_id = nodes_by_name.get(name_lower)
+
+        if node_id is None:
+            # Still unmapped — object doesn't exist in the graph at all
+            # (e.g. truly removed and not present in snapshot_to).
             continue
 
         mapping[event.change_id] = node_id
