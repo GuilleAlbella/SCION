@@ -54,7 +54,7 @@ const TYPE_STYLES: Record<string, { bg: string; accent: string; text: string; ic
   UNKNOWN:          { bg: "#FFFBEB", accent: "#F59E0B", text: "#92400E", icon: "?",  label: "Unclassified" },
 };
 const DEFAULT_STYLE = { bg: "#F9FAFB", accent: "#9CA3AF", text: "#374151", icon: "?", label: "Other" };
-const UNKNOWN_TOOLTIP = "Waiting for parser datasetType field. Object ingested but not classified as table/view/procedure.";
+const UNKNOWN_TOOLTIP = "Object type not determined by the parser. Could be a macro, NOS function, or other procedural object.";
 
 function fragilityColor(f: number): string {
   if (f >= 0.10) return "#DC2626";
@@ -523,19 +523,21 @@ export default function GraphPage() {
         <div>
           <label className="text-xs text-td-gray-dark block mb-1">Edges</label>
           <div className="flex gap-1">
-            {(["ALL", "DEPENDS_ON", "FEEDS"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setEdgeFilter(f)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  edgeFilter === f
-                    ? "bg-td-navy text-white"
-                    : "bg-gray-100 text-td-gray-dark hover:bg-gray-200"
-                }`}
-              >
-                {f === "ALL" ? "All" : f}
-              </button>
-            ))}
+            {(["ALL", "DEPENDS_ON", "FEEDS"] as const)
+              .filter((f) => f !== "DEPENDS_ON" || stats.dependsEdges > 0)
+              .map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setEdgeFilter(f)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    edgeFilter === f
+                      ? "bg-td-navy text-white"
+                      : "bg-gray-100 text-td-gray-dark hover:bg-gray-200"
+                  }`}
+                >
+                  {f === "ALL" ? "All" : f === "DEPENDS_ON" ? "Depends On" : f}
+                </button>
+              ))}
           </div>
         </div>
 
@@ -615,7 +617,9 @@ export default function GraphPage() {
               </span>
             )}
             <span className="text-blue-500">{stats.feedsEdges} FEEDS</span>
-            <span className="text-gray-400">{stats.dependsEdges} DEPENDS_ON</span>
+            {stats.dependsEdges > 0 && (
+              <span className="text-gray-400">{stats.dependsEdges} Depends On</span>
+            )}
           </div>
         )}
       </div>

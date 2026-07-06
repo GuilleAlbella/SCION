@@ -364,7 +364,17 @@ def _serialize_graph(
     nodes: List[Dict[str, Any]] = [
         {
             "node_id": row.node_uid or str(row.node_id),
-            "object_type": row.object_type,
+            # Lineage-imported nodes arrive with object_type='UNKNOWN' and a
+            # plain 'SCHEMA.NAME' node_uid (no type prefix, no snapshot suffix).
+            # Parser-imported UNKNOWN nodes use 'UNKNOWN:SCHEMA.NAME:snap_id'.
+            # Default lineage UNKNOWN nodes to TABLE since lineage tracks
+            # data-flow between table-like objects; keep parser UNKNOWN as-is.
+            "object_type": (
+                "TABLE"
+                if row.object_type == "UNKNOWN"
+                and ":" not in (row.node_uid or "")
+                else row.object_type
+            ),
             "object_name": row.object_name,
             "schema_name": row.schema_name,
             "metrics": row.node_metadata,
