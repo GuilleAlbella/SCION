@@ -72,6 +72,7 @@ export default function IntelligencePage() {
   const [volTrend, setVolTrend] = useState<VolatilityTrendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dbFilter, setDbFilter] = useState<string>("");
 
   // Auto-analyze the TO-side of the active diff, but only if we don't have a
   // scorecard yet — otherwise we'd clobber a manual selection every time
@@ -88,6 +89,7 @@ export default function IntelligencePage() {
     setLoading(true);
     setError(null);
     setSelectedSnap(snapId);
+    setDbFilter("");
     try {
       // v1.07: fetch the DS-pack endpoints alongside the classic scorecard.
       // `allSettled` so a failure in one (e.g. cochange with no pairs yet)
@@ -120,7 +122,9 @@ export default function IntelligencePage() {
   const healthColor = scorecard ? HEALTH_COLORS[scorecard.overall_health] ?? "#7C8185" : "#7C8185";
   const HealthIcon = scorecard ? HEALTH_ICONS[scorecard.overall_health] ?? Info : Info;
 
+  const dbFilterQ = dbFilter.trim().toLowerCase();
   const domainChartDataAll = (domainRisks?.domains ?? [])
+    .filter((d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ))
     .map((d: any) => ({
       name: d.schema_name,
       score: Math.round(d.risk_score * 100),
@@ -129,6 +133,9 @@ export default function IntelligencePage() {
     .sort((a: any, b: any) => b.score - a.score);
   const DOMAIN_CHART_TOP = 20;
   const domainChartData = domainChartDataAll.slice(0, DOMAIN_CHART_TOP);
+  const filteredDomains = (domainRisks?.domains ?? []).filter(
+    (d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ)
+  );
 
   const riskDistribution = (domainRisks?.domains ?? []).reduce(
     (acc: Record<string, number>, d: any) => {
@@ -205,7 +212,10 @@ export default function IntelligencePage() {
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-xs text-td-gray-dark mb-1" title="100% = perfectly stable (no breaking changes). 0% = highly unstable.">Stability Score</div>
+                <div className="text-xs text-td-gray-dark mb-0.5" title="100% = perfectly stable (no breaking changes). 0% = highly unstable.">
+                  Health Score
+                </div>
+                <div className="text-[10px] text-td-gray-dark mb-1 opacity-70">higher = more stable</div>
                 <div className="flex items-center gap-3">
                   <AnimatedCounter
                     value={Math.round(scorecard.health_score * 100)}
@@ -290,14 +300,14 @@ export default function IntelligencePage() {
                 <VolIcon size={20} style={{ color: vol.color }} />
               </div>
               <div className="flex-1">
-                <div className="text-xs text-td-gray-dark uppercase tracking-wider">System Stability</div>
+                <div className="text-xs text-td-gray-dark uppercase tracking-wider">Schema Churn Rate</div>
                 <div className="text-sm font-medium" style={{ color: vol.color }}>{vol.text}</div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-td-gray-dark flex items-center justify-end gap-1">
                   Volatility Index
                   <InfoTooltip
-                    text="Ratio of changed objects to total objects between the two most recent snapshots. Capped at 100% for readability — a raw ratio above 1.0 (more changes than objects, e.g. many column-level changes per table) shows as 100% with the exact ratio in this tooltip."
+                    text="Ratio of changed objects to total objects between the two most recent snapshots. Lower = less churn = more stable. Capped at 100% for readability — a raw ratio above 1.0 (more changes than objects, e.g. many column-level changes per table) shows as 100% with the exact ratio in this tooltip."
                     detail={
                       scorecard.volatility_index > 1
                         ? `Raw ratio: ${(scorecard.volatility_index * 100).toFixed(0)}% (uncapped)`
@@ -313,6 +323,7 @@ export default function IntelligencePage() {
                   suffix="%"
                   decimals={1}
                 />
+                <div className="text-[10px] text-td-gray-dark mt-0.5 opacity-70">lower = less churn</div>
               </div>
             </div>
           )}
@@ -335,6 +346,35 @@ export default function IntelligencePage() {
               </>
             }
           >
+          {/* Database filter */}
+          <div className="relative mb-4 max-w-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-td-gray-dark">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="text"
+              value={dbFilter}
+              onChange={(e) => setDbFilter(e.target.value)}
+              placeholder="Filter by database name…"
+              className="w-full border border-gray-300 rounded pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
+            />
+            {dbFilter && (
+              <button
+                onClick={() => setDbFilter("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-td-gray-dark hover:text-td-navy"
+                title="Clear filter"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            )}
+          </div>
+          {dbFilter && (
+            <p className="text-[11px] text-td-gray-dark mb-3">
+              <strong className="text-td-navy">{filteredDomains.length.toLocaleString()}</strong> of {(domainRisks?.domains ?? []).length.toLocaleString()} databases match
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-6 mb-6">
             {/* Risk bar chart */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -380,9 +420,9 @@ export default function IntelligencePage() {
           </div>
 
           {/* Domain detail cards instead of raw table */}
-          {domainRisks && domainRisks.domains.length > 0 && (
+          {domainRisks && filteredDomains.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {domainRisks.domains.map((d: any) => {
+              {filteredDomains.map((d: any) => {
                 const riskColor = RISK_COLORS[d.risk_level] ?? "#7C8185";
                 return (
                   <div key={d.schema_name} className="bg-white rounded-lg shadow-sm border-l-4 border-gray-200 p-4" style={{ borderLeftColor: riskColor }}>

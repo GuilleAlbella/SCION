@@ -541,7 +541,10 @@ export default function GraphPage() {
 
         <div>
           <label className="text-xs text-td-gray-dark block mb-1">Show</label>
-          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <label
+            className="flex items-center gap-1.5 text-xs cursor-pointer"
+            title="Database nodes represent schemas/databases that contain tables and views. Hiding them simplifies the graph for large snapshots — edges between tables are preserved."
+          >
             <input
               type="checkbox"
               checked={showSchemas}
