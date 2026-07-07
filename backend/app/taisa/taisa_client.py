@@ -586,37 +586,51 @@ class TaisaClient:
                 f"CHANGES SUMMARY: {total_changes} total, {breaking_total} breaking, {high_total} HIGH severity"
             )
 
-            # Detail rows are selected with an OR filter: always surface the
-            # highest-signal changes (breaking / HIGH severity) plus anything
-            # whose object_identifier matches a keyword from the user's
-            # question. This is what keeps tokens roughly constant.
-            detail_filters = [
-                (ChangeEvent.is_breaking == True),
-                (ChangeEvent.severity == "HIGH"),
-            ]
+            # ── Pass 1: keyword-targeted rows (ALWAYS included, no shared cap).
+            # Running a separate query per keyword guarantees that changes for
+            # the specific object the user asked about are present in the
+            # context even when there are thousands of high-signal (breaking /
+            # HIGH) changes with lower change_ids that would otherwise fill the
+            # LIMIT before reaching the relevant rows.
+            detail_changes: List[Any] = []
+            seen_ids: set[int] = set()
             for kw in keywords:
-                if len(kw) >= 3:
-                    detail_filters.append(ChangeEvent.object_identifier.ilike(f"%{kw}%"))
+                if len(kw) < 5:
+                    continue
+                rows = session.execute(
+                    select(ChangeEvent)
+                    .where(ChangeEvent.object_identifier.ilike(f"%{kw}%"))
+                    .order_by(ChangeEvent.change_id)
+                    .limit(10)
+                ).scalars().all()
+                for row in rows:
+                    if row.change_id not in seen_ids:
+                        detail_changes.append(row)
+                        seen_ids.add(row.change_id)
 
-            detail_changes = session.execute(
+            # ── Pass 2: high-signal changes fill the remaining slots.
+            signal_changes = session.execute(
                 select(ChangeEvent)
-                .where(or_(*detail_filters))
+                .where(or_(
+                    ChangeEvent.is_breaking == True,
+                    ChangeEvent.severity == "HIGH",
+                ))
                 .order_by(ChangeEvent.snapshot_from, ChangeEvent.change_id)
                 .limit(40)
             ).scalars().all()
+            for c in signal_changes:
+                if c.change_id not in seen_ids:
+                    detail_changes.append(c)
+                    seen_ids.add(c.change_id)
 
-            # Escape hatch: when the user clearly wants a panoramic view
-            # ("what changed?", "all changes"), widen the net to include
-            # non-breaking low-severity entries up to the 50-row cap.
-            broad_words = {"all", "every", "changes", "changed", "change", "diff", "what"}
+            # ── Pass 3: panoramic escape hatch for broad questions.
+            broad_words = {"all", "every", "changes", "changed", "change", "diff"}
             if broad_words & set(q_lower.split()):
                 all_changes = session.execute(
                     select(ChangeEvent)
                     .order_by(ChangeEvent.snapshot_from, ChangeEvent.change_id)
                     .limit(50)
                 ).scalars().all()
-                # Merge without duplicates
-                seen_ids = {c.change_id for c in detail_changes}
                 for c in all_changes:
                     if c.change_id not in seen_ids:
                         detail_changes.append(c)
