@@ -176,6 +176,7 @@ def get_snapshot_detail(snapshot_id: int) -> dict[str, Any]:
         changes = _count(
             select(func.count()).select_from(ChangeEvent)
             .where(ChangeEvent.snapshot_to == snapshot_id)
+            .where(ChangeEvent.snapshot_from < snapshot_id)
         )
         usage_events = _count(
             select(func.count()).select_from(UsageEvent)
