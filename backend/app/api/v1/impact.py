@@ -144,17 +144,70 @@ class BatchImpactResponse(BaseModel):
     has_more: bool = False
 
 
-def _get_node_name_map(snapshot_id: int) -> Dict[int, str]:
-    """Build node_id -> object_name map for human-readable output."""
+def _resolve_node_for_change(change, snapshot_to: int) -> Optional[int]:
+    """Find the GraphNode.node_id for a single change — 1-3 targeted SQL queries.
+
+    Replicates the three-stage matching logic of graph_diff_linker without
+    loading the entire snapshot's node set into Python memory.
+    """
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session
+    from app.db.engine import engine
+    from app.graph.graph_models import GraphNode
+
+    identifier_lower = (change.object_identifier or "").lower()
+
+    with Session(bind=engine) as session:
+        # Stage 1: exact (object_type, object_name) match
+        node_id = session.scalar(
+            select(GraphNode.node_id).where(
+                GraphNode.snapshot_id == snapshot_to,
+                GraphNode.object_type == change.object_type,
+                func.lower(GraphNode.object_name) == identifier_lower,
+            )
+        )
+        if node_id:
+            return node_id
+
+        # Stage 2: COLUMN fallback — strip column segment, match parent table
+        if change.object_type == "COLUMN":
+            parts = identifier_lower.rsplit(".", 1)
+            if len(parts) == 2:
+                parent_lower = parts[0]
+                node_id = session.scalar(
+                    select(GraphNode.node_id).where(
+                        GraphNode.snapshot_id == snapshot_to,
+                        func.lower(GraphNode.object_name) == parent_lower,
+                    )
+                )
+                if node_id:
+                    return node_id
+
+        # Stage 3: name-only fallback (type mismatch / UNKNOWN nodes)
+        node_id = session.scalar(
+            select(GraphNode.node_id).where(
+                GraphNode.snapshot_id == snapshot_to,
+                func.lower(GraphNode.object_name) == identifier_lower,
+            )
+        )
+        return node_id
+
+
+def _get_node_names_for_ids(node_ids: set) -> Dict[int, str]:
+    """Load object_name for only the node_ids actually referenced — avoids full scan."""
+    if not node_ids:
+        return {}
+    from sqlalchemy import select
     from sqlalchemy.orm import Session
     from app.db.engine import engine
     from app.graph.graph_models import GraphNode
 
     with Session(bind=engine) as session:
-        nodes = session.query(GraphNode).filter(
-            GraphNode.snapshot_id == snapshot_id
+        rows = session.execute(
+            select(GraphNode.node_id, GraphNode.object_name)
+            .where(GraphNode.node_id.in_(node_ids))
         ).all()
-        return {n.node_id: n.object_name for n in nodes}
+        return {r[0]: r[1] for r in rows}
 
 
 @router.post(
@@ -194,9 +247,12 @@ def execute_impact(change_id: int) -> ImpactResponse:
     from sqlalchemy.orm import Session
     from app.db.engine import engine
     from app.diff.diff_models import ChangeEvent
-    from app.graph.graph_diff_linker import link_changes_to_graph
     from app.graph.impact_analyzer import compute_downstream_impact, compute_upstream_impact
     from app.graph.impact_persister import persist_impact_events
+
+    # Practical depth cap: covers ~99% of real dependency chains while
+    # preventing runaway traversal on hub nodes with hundreds of edges.
+    _MAX_IMPACT_DEPTH = 8
 
     states = get_engine_states()
     if not states["graph_ready"]:
@@ -215,8 +271,10 @@ def execute_impact(change_id: int) -> ImpactResponse:
     # Map the change onto the graph snapshot taken AFTER the change: upstream
     # and downstream edges only exist in that post-change topology.
     snapshot_to = change.snapshot_to
-    mapping = link_changes_to_graph(snapshot_to)
-    node_id = mapping.get(change_id)
+
+    # Targeted node lookup — 1-3 indexed SQL queries instead of loading
+    # the full 337k-node snapshot into Python memory.
+    node_id = _resolve_node_for_change(change, snapshot_to)
 
     # Change targets an object that doesn't exist in the graph (e.g. a removed
     # table) — return empty impact rather than crashing.
@@ -227,9 +285,6 @@ def execute_impact(change_id: int) -> ImpactResponse:
             indirect_impact=[],
             summary=ImpactSummary(direct_count=0, indirect_count=0),
         )
-
-    # Get node names for human-readable output
-    node_names = _get_node_name_map(snapshot_to)
 
     # By convention, "direct impact" includes the changed object itself at
     # depth=0 — useful for UI callouts before listing dependents.
@@ -244,15 +299,20 @@ def execute_impact(change_id: int) -> ImpactResponse:
         )
     ]
 
-    # Compute downstream + upstream
-    downstream = compute_downstream_impact(start_node_id=node_id, snapshot_id=snapshot_to)
-    upstream = compute_upstream_impact(start_node_id=node_id, snapshot_id=snapshot_to)
+    # Compute downstream + upstream with depth cap to prevent runaway traversal.
+    downstream = compute_downstream_impact(start_node_id=node_id, snapshot_id=snapshot_to, max_depth=_MAX_IMPACT_DEPTH)
+    upstream = compute_upstream_impact(start_node_id=node_id, snapshot_id=snapshot_to, max_depth=_MAX_IMPACT_DEPTH)
 
     # Persist once per call — enables idempotent re-reads and powers the
     # alerts/intelligence views without recomputing the graph walk.
     all_impacts = downstream + upstream
     if all_impacts:
         persist_impact_events(change_id=change_id, snapshot_id=snapshot_to, impacts=all_impacts)
+
+    # Lazy-load names only for the node_ids actually returned by the CTE —
+    # avoids materialising the full 337k-node snapshot just to resolve names.
+    needed_ids = {item["node_id"] for item in all_impacts}
+    node_names = _get_node_names_for_ids(needed_ids)
 
     indirect_items: list[ImpactItem] = []
     for item in downstream:

@@ -31,6 +31,10 @@ class ImpactEvent(Base):
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
 
+    __table_args__ = (
+        Index("ix_impact_event_change_snapshot", "change_id", "snapshot_id"),
+    )
+
 
 class ChangeImpactSummary(Base):
     """Pre-aggregated per-change impact counts.
