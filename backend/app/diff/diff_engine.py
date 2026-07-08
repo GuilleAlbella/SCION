@@ -6,11 +6,42 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.diff.diff_models import Change, ChangeEvent
-from app.diff.diff_rules import diff_columns, diff_schemas, diff_tables, get_severity, is_breaking
+from app.diff.diff_rules import (
+    REVERSE_CHANGE_TYPE,
+    diff_columns,
+    diff_schemas,
+    diff_tables,
+    get_severity,
+    is_breaking,
+)
 from app.db.engine import engine
 from app.db.models.schema_snapshot import SchemaSnapshot
 from app.db.models.table_snapshot import TableSnapshot
 from app.db.models.column_snapshot import ColumnSnapshot
+
+
+def _maybe_reverse(changes: List[Change], is_reversed: bool) -> List[Change]:
+    """Return *changes* with ADDED↔REMOVED flipped when *is_reversed* is True.
+
+    Symmetric change types (TYPE_CHANGED, NULLABILITY_CHANGED, POSITION_CHANGED)
+    are unaffected; only directional ones (ADDED/REMOVED) are inverted.
+    before_state and after_state are swapped so callers see consistent data.
+    """
+    if not is_reversed:
+        return changes
+    result: List[Change] = []
+    for c in changes:
+        inv_type = REVERSE_CHANGE_TYPE.get(c.change_type, c.change_type)
+        result.append(Change(
+            object_type=c.object_type,
+            object_identifier=c.object_identifier,
+            change_type=inv_type,
+            before_state=c.after_state,
+            after_state=c.before_state,
+            severity=get_severity(inv_type),
+            is_breaking=is_breaking(inv_type),
+        ))
+    return result
 
 
 class DiffEngine:
@@ -55,6 +86,40 @@ class DiffEngine:
         if snapshot_from == snapshot_to:
             raise ValueError("snapshot_from and snapshot_to must be different")
 
+        # ──── Direction normalisation ────
+        # Always compute and cache the diff with the lower snapshot_id as
+        # "from". This guarantees that compute_diff(A, B) and compute_diff(B, A)
+        # return the same count — only the ADDED/REMOVED semantics flip.
+        # Without this, two independent cache entries could diverge if the
+        # underlying tables changed between the two calls.
+        is_reversed = snapshot_from > snapshot_to
+        if is_reversed:
+            snapshot_from, snapshot_to = snapshot_to, snapshot_from
+
+        # ──── Purge stale reversed-direction cache (migration) ────
+        # Earlier versions stored diffs without direction normalisation, so a
+        # call with (A>B) would have created a separate cache entry (A, B) that
+        # may disagree with the canonical (B, A) entry we use now. Delete any
+        # such stale entry so it is never served to callers.
+        if is_reversed:
+            # At this point snapshot_from/to are already swapped to canonical
+            # (lower, higher). The stale entry, if any, has them the other way.
+            with Session(engine) as _purge_session:
+                stale = (
+                    _purge_session.query(ChangeEvent)
+                    .filter(
+                        ChangeEvent.snapshot_from == snapshot_to,   # original "from"
+                        ChangeEvent.snapshot_to == snapshot_from,   # original "to"
+                    )
+                    .first()
+                )
+                if stale:
+                    _purge_session.query(ChangeEvent).filter(
+                        ChangeEvent.snapshot_from == snapshot_to,
+                        ChangeEvent.snapshot_to == snapshot_from,
+                    ).delete(synchronize_session=False)
+                    _purge_session.commit()
+
         # ──── Idempotency fast-path ────
         # Check for existing change_events BEFORE loading any schema/table/column
         # data. On large snapshots (10M+ columns) the data load takes minutes;
@@ -75,7 +140,7 @@ class DiffEngine:
                 .all()
             )
         if existing_events:
-            return [
+            forward = [
                 Change(
                     object_type=e.object_type,
                     object_identifier=e.object_identifier,
@@ -87,6 +152,7 @@ class DiffEngine:
                 )
                 for e in existing_events
             ]
+            return _maybe_reverse(forward, is_reversed)
 
         # ──── Step 1: Load raw state from both snapshots ────
         # All reads happen inside a single Session so we get a consistent
@@ -373,4 +439,4 @@ class DiffEngine:
                 session.rollback()
                 raise
 
-        return changes
+        return _maybe_reverse(changes, is_reversed)

@@ -53,6 +53,18 @@ BREAKING_CHANGES: Set[str] = {
     "TABLE_TYPE_CHANGED",
 }
 
+# Maps each directional change type to its inverse (ADDED↔REMOVED).
+# Symmetric types (TYPE_CHANGED, NULLABILITY_CHANGED, POSITION_CHANGED)
+# are not listed — they map to themselves and need no inversion.
+REVERSE_CHANGE_TYPE: Dict[str, str] = {
+    "TABLE_ADDED": "TABLE_REMOVED",
+    "TABLE_REMOVED": "TABLE_ADDED",
+    "SCHEMA_ADDED": "SCHEMA_REMOVED",
+    "SCHEMA_REMOVED": "SCHEMA_ADDED",
+    "COLUMN_ADDED": "COLUMN_REMOVED",
+    "COLUMN_REMOVED": "COLUMN_ADDED",
+}
+
 
 def get_severity(change_type: str) -> str:
     """Return severity level for a change type."""
