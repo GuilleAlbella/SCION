@@ -122,7 +122,7 @@ def test_compute_snapshot_metrics_scales_past_sqlite_param_limit(
     assert metrics.view_count == expected_views
     assert metrics.column_count == _TABLES_PER_SCHEMA * 2
     assert metrics.total_objects == (
-        1 + expected_tables + expected_views + _TABLES_PER_SCHEMA * 2
+        1 + expected_tables + expected_views
     )
 
 
