@@ -136,7 +136,6 @@ export default function MetricsPage() {
         { name: "Databases", value: selectedMetrics.schema_count },
         { name: "Tables", value: selectedMetrics.table_count },
         { name: "Views", value: selectedMetrics.view_count },
-        { name: "Columns", value: selectedMetrics.column_count },
       ]
     : [];
 
