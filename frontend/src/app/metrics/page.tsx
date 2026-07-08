@@ -116,7 +116,6 @@ export default function MetricsPage() {
       { name: "Databases", from: fromM.schema_count, to: toM.schema_count },
       { name: "Tables", from: fromM.table_count, to: toM.table_count },
       { name: "Views", from: fromM.view_count, to: toM.view_count },
-      { name: "Columns", from: fromM.column_count, to: toM.column_count },
       { name: "Total", from: fromM.total_objects, to: toM.total_objects },
     ];
   }, [allMetrics, compareFrom, compareTo]);
@@ -199,7 +198,6 @@ export default function MetricsPage() {
               <KpiCard label="Databases" value={selectedMetrics.schema_count} color="#2563EB" />
               <KpiCard label="Tables" value={selectedMetrics.table_count} color="#16A34A" />
               <KpiCard label="Views" value={selectedMetrics.view_count} color="#F37440" />
-              <KpiCard label="Columns" value={selectedMetrics.column_count} color="#00233C" />
               <KpiCard label="Total Objects" value={selectedMetrics.total_objects} />
             </div>
           )}
@@ -216,7 +214,7 @@ export default function MetricsPage() {
           icon={TrendingUp}
           intro={
             <>
-              One line per object class (databases / tables / views / columns / total).
+              One line per object class (databases / tables / views / total).
               Watch for sharp steps — they coincide with releases or ETL reorganisations.
               A steady upward slope usually indicates healthy organic growth; a sudden
               drop often flags a decommission or a failed ingest.
@@ -226,10 +224,9 @@ export default function MetricsPage() {
           {/* Per-category trend charts — each category gets its own Y-axis
               scale so Columns (~10M) doesn't flatten Databases (~10k) into
               an invisible line. Same approach as the comparison chart. */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
             {([
               { key: "total",   label: "Total",     color: "#00233C" },
-              { key: "columns", label: "Columns",   color: "#7C8185" },
               { key: "tables",  label: "Tables",    color: "#16A34A" },
               { key: "views",   label: "Views",     color: "#F37440" },
               { key: "schemas", label: "Databases", color: "#2563EB" },
