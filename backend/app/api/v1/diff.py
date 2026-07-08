@@ -243,6 +243,13 @@ def get_diff_details(
     - ``object_q``: ``ILIKE %q%`` against ``object_identifier``.
     """
 
+    # ──── Direction normalisation ────
+    # Always work with the lower snapshot_id as "from" so the pair filter
+    # matches the canonical rows stored by DiffEngine (which normalises the
+    # same way). The cumulative-pairs range query also requires from <= to.
+    if snapshot_from > snapshot_to:
+        snapshot_from, snapshot_to = snapshot_to, snapshot_from
+
     # ──── Step 1: resolve snapshots into consecutive pairs ────
     with Session(bind=db_engine) as session:
         all_snaps = session.execute(
