@@ -130,10 +130,19 @@ def compute_criticality(
         # normalize each object's usage to [0.0, 1.0] relative to the busiest
         # object in the system (min-max scaling). Starting max_queries at 1
         # avoids divide-by-zero in the fully-empty case.
+        #
+        # Also build a secondary lookup keyed by bare table name (uppercase)
+        # to handle the common case where usage events contain only the table
+        # name while graph node identifiers are schema.table qualified.
+        usage_map_bare: Dict[str, int] = {}
         for obj_name, total_q, _ in usage_agg:
             usage_map[obj_name] = total_q or 0
+            bare = obj_name.split(".")[-1].upper()
+            usage_map_bare[bare] = usage_map_bare.get(bare, 0) + (total_q or 0)
             if (total_q or 0) > max_queries:
                 max_queries = total_q
+    else:
+        usage_map_bare: Dict[str, int] = {}
 
     # Scope: only objects that exist in this snapshot
     all_objects = set(snapshot_objects.keys())
@@ -163,6 +172,11 @@ def compute_criticality(
     rows_to_insert: list[dict] = []
     for obj_name in sorted(all_objects):
         queries = usage_map.get(obj_name, 0)
+        if queries == 0 and usage_available:
+            # Fallback: match by bare table name (case-insensitive) for usage
+            # events that don't carry schema qualification.
+            bare = obj_name.split(".")[-1].upper()
+            queries = usage_map_bare.get(bare, 0)
         usage_score = round(queries / max_queries, 4) if max_queries > 0 else 0.0
         graph_score = round(snapshot_objects.get(obj_name, 0.0), 4)
         if usage_available:
