@@ -113,7 +113,7 @@ def compute_snapshot_metrics(snapshot_id: int) -> SnapshotMetrics:
             .where(SchemaSnapshot.snapshot_id == snapshot_id)
         ) or 0
 
-    total = schema_count + table_count + view_count + column_count
+    total = schema_count + table_count + view_count
 
     return SnapshotMetrics(
         snapshot_id=snapshot_id,
