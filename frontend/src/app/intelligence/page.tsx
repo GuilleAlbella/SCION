@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line,
@@ -112,42 +112,54 @@ export default function IntelligencePage() {
     }
   }
 
-  // Fast lookup: schema_name -> its volatility trend record, so each
-  // domain card can enrich with its own mini-sparkline without looping.
-  const volByDomain: Record<string, SchemaVolatilityTrend> = {};
-  for (const t of volTrend?.trends ?? []) {
-    volByDomain[t.schema_name] = t;
-  }
+  const DOMAIN_CHART_TOP = 20;
+  // Max domain cards to render — prevents mounting hundreds of SVG sparklines
+  // simultaneously on large catalogs (Transcend has 300+ schemas).
+  const DOMAIN_CARDS_MAX = 100;
+
+  const volByDomain = useMemo<Record<string, SchemaVolatilityTrend>>(() => {
+    const map: Record<string, SchemaVolatilityTrend> = {};
+    for (const t of volTrend?.trends ?? []) map[t.schema_name] = t;
+    return map;
+  }, [volTrend]);
 
   const healthColor = scorecard ? HEALTH_COLORS[scorecard.overall_health] ?? "#7C8185" : "#7C8185";
   const HealthIcon = scorecard ? HEALTH_ICONS[scorecard.overall_health] ?? Info : Info;
 
   const dbFilterQ = dbFilter.trim().toLowerCase();
-  const domainChartDataAll = (domainRisks?.domains ?? [])
-    .filter((d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ))
-    .map((d: any) => ({
-      name: d.schema_name,
-      score: Math.round(d.risk_score * 100),
-      color: RISK_COLORS[d.risk_level] ?? "#7C8185",
-    }))
-    .sort((a: any, b: any) => b.score - a.score);
-  const DOMAIN_CHART_TOP = 20;
-  const domainChartData = domainChartDataAll.slice(0, DOMAIN_CHART_TOP);
-  const filteredDomains = (domainRisks?.domains ?? []).filter(
-    (d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ)
-  );
 
-  const riskDistribution = (domainRisks?.domains ?? []).reduce(
-    (acc: Record<string, number>, d: any) => {
-      acc[d.risk_level] = (acc[d.risk_level] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
-  const riskDonutData = Object.entries(riskDistribution).map(([name, value]) => ({
-    name,
-    value: value as number,
-  }));
+  const domainChartDataAll = useMemo(() =>
+    (domainRisks?.domains ?? [])
+      .filter((d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ))
+      .map((d: any) => ({
+        name: d.schema_name,
+        score: Math.round(d.risk_score * 100),
+        color: RISK_COLORS[d.risk_level] ?? "#7C8185",
+      }))
+      .sort((a: any, b: any) => b.score - a.score),
+  [domainRisks, dbFilterQ]);
+
+  const domainChartData = useMemo(() => domainChartDataAll.slice(0, DOMAIN_CHART_TOP), [domainChartDataAll]);
+
+  const filteredDomains = useMemo(() =>
+    (domainRisks?.domains ?? []).filter(
+      (d: any) => !dbFilterQ || d.schema_name.toLowerCase().includes(dbFilterQ)
+    ),
+  [domainRisks, dbFilterQ]);
+
+  // Cap cards to avoid mounting hundreds of Recharts SVGs at once.
+  const visibleDomains = useMemo(() => filteredDomains.slice(0, DOMAIN_CARDS_MAX), [filteredDomains]);
+
+  const riskDonutData = useMemo(() => {
+    const dist = (domainRisks?.domains ?? []).reduce(
+      (acc: Record<string, number>, d: any) => {
+        acc[d.risk_level] = (acc[d.risk_level] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    return Object.entries(dist).map(([name, value]) => ({ name, value: value as number }));
+  }, [domainRisks]);
 
   const vol = scorecard ? volatilityLabel(scorecard.volatility_index) : null;
   const VolIcon = vol?.icon ?? Minus;
@@ -421,8 +433,14 @@ export default function IntelligencePage() {
 
           {/* Domain detail cards instead of raw table */}
           {domainRisks && filteredDomains.length > 0 && (
+            <>
+            {filteredDomains.length > DOMAIN_CARDS_MAX && (
+              <p className="text-[11px] text-td-gray-dark mb-3">
+                Showing first <strong className="text-td-navy">{DOMAIN_CARDS_MAX}</strong> of {filteredDomains.length.toLocaleString()} databases. Use the filter above to narrow results.
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {filteredDomains.map((d: any) => {
+              {visibleDomains.map((d: any) => {
                 const riskColor = RISK_COLORS[d.risk_level] ?? "#7C8185";
                 return (
                   <div key={d.schema_name} className="bg-white rounded-lg shadow-sm border-l-4 border-gray-200 p-4" style={{ borderLeftColor: riskColor }}>
@@ -523,6 +541,7 @@ export default function IntelligencePage() {
                 );
               })}
             </div>
+            </>
           )}
           </GuidedSection>
 
