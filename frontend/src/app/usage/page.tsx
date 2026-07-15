@@ -214,6 +214,15 @@ function UsagePage() {
     );
   }, [criticality, objectFilter]);
 
+  // Dynamic section numbers: Usage footprint is optional (only when telemetry
+  // is available). If hidden, Criticality becomes "1." and Drill-down "2."
+  const hasUsageSection = !!(usage && usage.length > 0);
+  const sectionNums = {
+    usage: 1,
+    criticality: hasUsageSection ? 2 : 1,
+    drilldown: hasUsageSection ? 3 : 2,
+  };
+
   return (
     <PageShell title="Usage & Criticality" subtitle="Object usage frequency and business criticality">
       {/* Per-object drill-down card. Shown when an object is focused via
@@ -357,7 +366,7 @@ function UsagePage() {
           ═══════════════════════════════════════════════════════════ */}
       {usage && usage.length > 0 && (
         <GuidedSection
-          title="1. Usage footprint"
+          title={`${sectionNums.usage}. Usage footprint`}
           subtitle={activeObject
             ? `Global top 12 by query count — see the Object drill-down card above for "${(resolvedObject ?? activeObject).split(".").pop() ?? ""}" specifically`
             : "How heavily each object is queried (top 12 by query count)"}
@@ -408,7 +417,7 @@ function UsagePage() {
           ═══════════════════════════════════════════════════════════ */}
       {criticality && (
         <GuidedSection
-          title="2. Criticality overview"
+          title={`${sectionNums.criticality}. Criticality overview`}
           subtitle="Which objects are business-critical for this snapshot"
           icon={Shield}
           intro={
@@ -488,7 +497,7 @@ function UsagePage() {
           ═══════════════════════════════════════════════════════════ */}
       {criticality && criticality.items.length > 0 && (
         <GuidedSection
-          title="3. Per-object drill-down"
+          title={`${sectionNums.drilldown}. Per-object drill-down`}
           subtitle={activeObject
             ? `Global criticality ranking — ${(resolvedObject ?? activeObject).split(".").pop()} is ${criticality.items.some(i => isFocused(i.object_name)) ? "highlighted below" : "in the Object drill-down card above"}`
             : "The raw numbers behind the score, row by row"}
