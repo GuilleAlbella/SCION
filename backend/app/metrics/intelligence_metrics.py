@@ -144,8 +144,7 @@ def domain_risk_index(snapshot_id: int) -> List[DomainRisk]:
             r[0]: (r[1], r[2]) for r in change_rows
         }
 
-        # Impact events for this snapshot — still loaded in full because the
-        # table is tiny (single-digit rows in typical deployments).
+        # Impact events for this snapshot — aggregate per change_id.
         impact_count_by_change: Dict[int, int] = {}
         for imp in session.query(ImpactEvent).filter(
             ImpactEvent.snapshot_id == snapshot_id
@@ -153,6 +152,23 @@ def domain_risk_index(snapshot_id: int) -> List[DomainRisk]:
             impact_count_by_change[imp.change_id] = (
                 impact_count_by_change.get(imp.change_id, 0) + 1
             )
+
+        # Reverse mapping: schema_name -> list of change_ids, so we can
+        # sum impact counts per domain.
+        change_ids_by_schema: Dict[str, List[int]] = {}
+        cid_rows = session.execute(
+            text("""
+                SELECT
+                    SUBSTR(object_identifier, 1, INSTR(object_identifier || '.', '.') - 1)
+                        AS schema_name,
+                    change_id
+                FROM change_event
+                WHERE snapshot_to = :sid
+            """),
+            {"sid": snapshot_id},
+        ).fetchall()
+        for row_schema, row_cid in cid_rows:
+            change_ids_by_schema.setdefault(row_schema, []).append(row_cid)
 
         # Criticality per schema — aggregate server-side for the same reason.
         crit_rows = session.execute(
@@ -175,7 +191,10 @@ def domain_risk_index(snapshot_id: int) -> List[DomainRisk]:
         change_count, breaking = change_by_schema.get(schema_name, (0, 0))
         # impact_count_by_change is keyed by change_id, not schema — with only
         # a handful of impact rows we do the lookup in Python; no measurable cost.
-        imp_count = 0  # impacts not yet linked to schemas in this version
+        imp_count = sum(
+            impact_count_by_change.get(cid, 0)
+            for cid in change_ids_by_schema.get(schema_name, [])
+        )
         high_crit = schema_crits.get(schema_name, 0)
 
         # Risk score: weighted combination of four factors, each normalized

@@ -276,6 +276,17 @@ def get_criticality(
                     .limit(capped_limit)
                 ).scalars().all()
 
+            # Use SnapshotMetrics total_objects (schema+table+view, no columns)
+            # as the canonical object count. ObjectCriticality can have duplicate
+            # GraphNode rows (bare-name vs qualified-name from two ingestion paths)
+            # which inflates cached_count by ~845 on Transcend-scale snapshots.
+            from app.snapshot.snapshot_metrics import compute_snapshot_metrics
+            try:
+                snap_metrics = compute_snapshot_metrics(snapshot_id)
+                total_objects = snap_metrics.total_objects if snap_metrics else cached_count
+            except Exception:
+                total_objects = cached_count
+
             counts = {lvl: int(n or 0) for lvl, n in level_rows}
             return {
                 "snapshot_id": snapshot_id,
@@ -289,7 +300,7 @@ def get_criticality(
                     }
                     for r in top_rows
                 ],
-                "total": cached_count,
+                "total": total_objects,
                 "high_count": counts.get("HIGH", 0),
                 "medium_count": counts.get("MEDIUM", 0),
                 "low_count": counts.get("LOW", 0),

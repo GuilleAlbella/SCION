@@ -57,6 +57,11 @@ def compute_node_metrics(snapshot_id: int) -> Dict[int, NodeMetrics]:
             in_degree[edge.target_node_id] += 1
 
     avg_in = sum(in_degree.values()) / max(len(in_degree), 1)
+    # Normalise fragility by the highest out_degree in this snapshot so the
+    # result is always in [0, 1] regardless of graph size. Dividing by
+    # total_edges caused every node to round to 0.0 at Transcend scale
+    # (250k+ edges, most nodes have out_degree=1 → 1/250k = 0.000004).
+    max_out = max(out_degree.values(), default=1)
 
     metrics: Dict[int, NodeMetrics] = {}
     for nid in node_ids:
@@ -65,7 +70,7 @@ def compute_node_metrics(snapshot_id: int) -> Dict[int, NodeMetrics]:
         metrics[nid] = NodeMetrics(
             in_degree=ind,
             out_degree=outd,
-            fragility=round(outd / total_edges, 4),
+            fragility=round(outd / max(max_out, 1), 4),
             is_hub=ind > 2 * avg_in,
         )
 
