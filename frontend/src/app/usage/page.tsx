@@ -439,11 +439,40 @@ function UsagePage() {
             </div>
           )}
 
-          {criticality.items.length > 0 && (
+          {/* Object name filter — placed here so it affects both the heatmap and the drill-down table below */}
+          <div className="relative mb-3 max-w-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-td-gray-dark">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="text"
+              value={objectFilter}
+              onChange={(e) => setObjectFilter(e.target.value)}
+              placeholder="Filter by object name…"
+              className="w-full border border-gray-300 rounded pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
+            />
+            {objectFilter && (
+              <button
+                onClick={() => setObjectFilter("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-td-gray-dark hover:text-td-navy"
+                title="Clear filter"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          {objectFilter && (
+            <p className="text-[11px] text-td-gray-dark mb-2">
+              <strong className="text-td-navy">{filteredCritItems.length.toLocaleString()}</strong> of {criticality.items.length.toLocaleString()} objects match
+            </p>
+          )}
+
+          {filteredCritItems.length > 0 && (
             <RiskHeatmap
               title="Object criticality heatmap"
               description="One cell = one object (not a time bucket). Hover a cell for its usage and graph-centrality breakdown."
-              items={criticality.items.map((item) => ({
+              items={filteredCritItems.map((item) => ({
                 name: item.object_name,
                 score: item.combined_score,
                 level: item.criticality_level,
@@ -476,34 +505,6 @@ function UsagePage() {
             </>
           }
         >
-          {/* Object name filter */}
-          <div className="relative mb-3 max-w-md">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-td-gray-dark">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              type="text"
-              value={objectFilter}
-              onChange={(e) => setObjectFilter(e.target.value)}
-              placeholder="Filter by object name…"
-              className="w-full border border-gray-300 rounded pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/30 focus:border-td-navy"
-            />
-            {objectFilter && (
-              <button
-                onClick={() => setObjectFilter("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-td-gray-dark hover:text-td-navy"
-                title="Clear filter"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          {objectFilter && (
-            <p className="text-[11px] text-td-gray-dark mb-2">
-              <strong className="text-td-navy">{filteredCritItems.length.toLocaleString()}</strong> of {criticality.items.length.toLocaleString()} objects match
-            </p>
-          )}
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <table className="w-full text-sm">

@@ -143,8 +143,8 @@ def compute_summary_for_change(
         node_id, snapshot_id, max_depth=SUMMARY_MAX_DEPTH
     )
 
-    direct_count = len(downstream)
-    indirect_count = len(upstream)
+    direct_count = sum(1 for item in downstream if item.get("depth", 0) == 1)
+    indirect_count = sum(1 for item in downstream if item.get("depth", 0) > 1)
     score = round(
         sum(item.get("impact_score", 0.0) for item in downstream)
         + sum(item.get("impact_score", 0.0) for item in upstream),

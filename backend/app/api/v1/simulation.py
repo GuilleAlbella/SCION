@@ -123,6 +123,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
         downstream = compute_downstream_impact(
             start_node_id=target_node_id,
             snapshot_id=request.snapshot_id,
+            max_depth=8,
         )
         # Convention: depth=1 = immediate dependents (direct), depth>1 =
         # transitive chain (indirect). Useful for UI grouping.
@@ -145,6 +146,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
         upstream = compute_upstream_impact(
             start_node_id=target_node_id,
             snapshot_id=request.snapshot_id,
+            max_depth=8,
         )
         for item in upstream[:10]:  # cap
             nid = item["node_id"]
