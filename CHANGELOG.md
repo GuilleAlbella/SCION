@@ -8,6 +8,27 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.01.00 (2026-07-20) — perf(graph): SQL-based degree computation + composite index + dead code removal
+
+**Graph engine performance (Phase 2 §2.5b / §2.6)**
+
+- **`graph_metrics.py`** — `compute_node_metrics` reemplazado: ya no carga todos los
+  edges en Python RAM (~700 MB en Transcend / 9.8M edges). Ahora usa dos `GROUP BY`
+  en SQL (`source_node_id`, `target_node_id`) y solo transfiere los conteos de grado.
+  `persist_node_metrics` sigue escribiendo los resultados a `node_metadata` JSON en
+  `graph_node` post-ingest — sin cambios en el formato ni en los consumers del API.
+- **`blast_radius.py`** — eliminado el bloque Step 4 que cargaba TODOS los `GraphNode`
+  por snapshot para construir `node_names`/`node_schemas`. Esos dicts nunca se leían
+  en el paso de rollup (los nombres ya venían de `object_identifier.split(".")`). En
+  Transcend escala esto era 1 SELECT de 337k filas en cada llamada al endpoint de impact.
+- **Alembic migration `a1b2c3d4e5f6`** — merge de los dos heads divergentes
+  (`f1a2b3c4d5e6` + `d61e9f7a2b34`) + crea índice compuesto
+  `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)`.
+  Usado por las páginas de Intelligence y Timeline al filtrar por objeto dentro de
+  un snapshot. Verificado en lab: `upgrade head` aplica correctamente.
+
+---
+
 ### v2.00.00 (2026-07-20) — feat(phase2): SQLite → Postgres migration complete in lab; version bump to Phase 2
 
 **Phase 2 kickoff — storage engine migration (lab complete)**

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.db.engine import engine
 from app.diff.diff_models import ChangeEvent
 from app.diff.diff_rules import get_severity, is_breaking
-from app.graph.graph_models import GraphNode
 # The ORM row class shares its name with the API dataclass below. Alias
 # it on import so the two never collide in this module's namespace.
 from app.graph.impact_models import ChangeImpactSummary as _ImpactSummaryRow
@@ -332,23 +331,9 @@ def compute_batch_impact(
             for row in rows:
                 summary_by_change[row.change_id] = row
 
-    # ──── Step 4: Pre-index node metadata for blast-radius rollups ────
-    # We still need names + schemas to populate ``affected_schemas`` and
-    # ``affected_tables`` in the BlastRadius rollup. These come from the
-    # changed objects themselves (not the impacted neighbours, which we
-    # no longer enumerate here — that's the per-change drill-down's job).
-    node_names: Dict[int, str] = {}
-    node_schemas: Dict[int, str] = {}
-    with Session(engine) as session:
-        for sto in unique_snap_tos:
-            nodes = session.query(GraphNode).filter(
-                GraphNode.snapshot_id == sto
-            ).all()
-            for n in nodes:
-                node_names[n.node_id] = n.object_name
-                node_schemas[n.node_id] = n.schema_name
-
-    # ──── Step 5: Build usage lookup (best-effort) ────
+    # ──── Step 4: Build usage lookup (best-effort) ────
+    # Schema/table names for the blast-radius rollup come directly from
+    # object_identifier.split(".") in step 5 — no node query needed here.
     usage_map: Dict[str, tuple[int, int]] = {}
     try:
         from app.usage.usage_models import UsageEvent

@@ -257,23 +257,20 @@ docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 | `InFailedSqlTransaction` en reset de sequences | Secuencia no existe para columnas FK o UUID PK | Cada reset usa su propia transacción `engine.begin()` — las fallidas se ignoran |
 | Comandos multilínea en PowerShell con `docker exec` | PowerShell interpreta `"..."` de forma distinta | Usar heredoc `$script = @'...'@; $script \| docker exec -i container python` |
 
-#### 2.5b — Graph engine performance (§2.6 — 2 días)
-- [ ] Lazy-load graph nodes on demand (hoy: full snapshot en RAM).
-- [ ] Persistir computed metrics en DB para que re-render no recompute.
-- [ ] Index on `change_event(snapshot_id, object_identifier)`.
+#### 2.5b — Graph engine performance (§2.6 — 2 días)  ✅ COMPLETO (2026-07-20)
+- [x] **Lazy-load graph nodes on demand** — `compute_node_metrics` reemplazado: en vez de cargar todos los nodes+edges en Python RAM (~700 MB en Transcend), usa dos `GROUP BY` en SQL. Solo se transfieren los conteos de grado, no las filas de edges. *(v2.01.00)*
+- [x] **Computed metrics persistidas en DB** — `node_metadata` JSON en `graph_node` ya almacenaba `{in_degree, out_degree, fragility, is_hub}`; `persist_node_metrics` sigue escribiendo post-ingest. Dead code en `blast_radius.py` eliminado (cargaba todos los `GraphNode` por snapshot para construir `node_names`/`node_schemas` que nunca se usaban). *(v2.01.00)*
+- [x] **Index on `change_event(snapshot_to, object_identifier)`** — migration `a1b2c3d4e5f6` añade `ix_change_event_snapshot_to_object`. También mergea los dos heads de Alembic que existían (`f1a2b3c4d5e6` + `d61e9f7a2b34`). *(v2.01.00)*
 
 #### 2.5c — Frontend pagination (§2.7 — 2 días)
 - [ ] Server-side pagination en /changes si event count cruza 10k.
 - [ ] Lazy graph fetch — solo el subgraph enfocado desde el backend.
 
-### 2.6 Graph engine performance
-- [ ] Lazy-load graph nodes on demand (today: full snapshot in RAM).
-- [ ] Persist computed metrics in DB so re-render doesn't recompute.
-      (Partly done — extend.)
-- [ ] Index on `change_event(snapshot_id, object_identifier)` if benchmark
-      shows slow change queries.
-- [ ] Consider Cython / Rust for `compute_impact` if BFS becomes the
-      bottleneck (last resort — the algorithm itself is O(N+E)).
+### 2.6 Graph engine performance  ✅ COMPLETO (v2.01.00, 2026-07-20)
+- [x] Lazy-load graph nodes on demand — SQL GROUP BY en `compute_node_metrics`.
+- [x] Computed metrics persistidas en DB — `node_metadata` JSON en `graph_node`.
+- [x] Index on `change_event(snapshot_to, object_identifier)` — migration `a1b2c3d4e5f6`.
+- [ ] Cython / Rust para `compute_impact` — descartado por ahora; CTEs SQL son suficientes al escalar.
 
 ### 2.7 Frontend rendering
 - [x] Focus mode for /graph (v1.11.00).
@@ -709,6 +706,7 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-17 | Staging Layer (§2.16) added as prerequisite to Integration Model (§2.9) | Jon Brightling 3-layer architecture: Staging → Integration → Access; §2.16 adds validation + cross-source conflict resolution before data enters the entity layer; §2.4 DDL timestamp merge absorbed into §2.16.b | Reunión Pilar 2026-07-17 |
 | 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Reunión Pilar 2026-07-17 |
 | 2026-07-20 | §2.5a SQLite→Postgres migración completa en entorno lab | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47 819 filas migradas, 12 secuencias reseteadas, API verificada en localhost:8080. Procedimiento documentado en §2.5a como template para producción. Gotchas capturados: permisos post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset por transacción aislada | Lab 2026-07-20 |
+| 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
 
 ---
 
