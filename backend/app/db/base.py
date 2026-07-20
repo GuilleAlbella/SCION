@@ -33,3 +33,7 @@ import app.taisa.taisa_models  # noqa: F401
 import app.usage.usage_models  # noqa: F401
 # PDCR DBQL query log table (Pipeline 3, added v1.21.6).
 import app.usage.dbql_models  # noqa: F401
+# §2.16 Staging Layer (v2.03.00): raw table/column rows pre-validation.
+import app.db.models.staging  # noqa: F401
+# §2.9 Integration Model (v2.04.00): persistent cross-snapshot entity IDs.
+import app.db.models.entity  # noqa: F401

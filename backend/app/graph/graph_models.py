@@ -36,10 +36,16 @@ class GraphNode(Base):
     schema_name: Mapped[str] = mapped_column(String, nullable=False)
     node_uid: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    # §2.9 Integration Model (v2.04.00): stable entity ID across snapshots.
+    entity_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
     __table_args__ = (
         Index("ix_graph_node_snapshot", "snapshot_id"),
         Index("ix_graph_node_search", "snapshot_id", "schema_name", "object_name"),
+        Index("ix_graph_node_entity", "entity_id"),
     )
 
 

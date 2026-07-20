@@ -12,6 +12,8 @@ export interface Snapshot {
   created_at: string;
   source_system: string;
   description: string;
+  /** §2.16 Staging Layer: pending | staged | committed | failed */
+  import_status?: string;
 }
 
 export interface SnapshotsResponse {

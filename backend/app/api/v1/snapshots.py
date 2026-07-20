@@ -95,6 +95,9 @@ def list_snapshots() -> dict[str, list[dict[str, str]]]:
             "created_at": row.snapshot_time.isoformat(),
             "source_system": row.source_system,
             "description": row.description or "",
+            # §2.16 Staging Layer (v2.03.00): import lifecycle status.
+            # Pre-staging rows return "committed" (migration server_default).
+            "import_status": getattr(row, "import_status", "committed"),
         }
         for row in rows
     ]

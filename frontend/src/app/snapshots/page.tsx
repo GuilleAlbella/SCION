@@ -1702,6 +1702,7 @@ export default function SnapshotsPage() {
                 <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium">Source</th>
                 <th className="px-4 py-3 font-medium">Contents / Extract time</th>
+                <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Active</th>
                 <th className="px-4 py-3 font-medium w-16">Actions</th>
               </tr>
@@ -1751,6 +1752,23 @@ export default function SnapshotsPage() {
                               )}
                               <div className="text-xs">{summary}</div>
                             </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const st = s.import_status ?? "committed";
+                          const cfg: Record<string, { label: string; cls: string }> = {
+                            committed: { label: "committed", cls: "bg-green-100 text-green-800" },
+                            staged:    { label: "staged",    cls: "bg-blue-100 text-blue-700" },
+                            pending:   { label: "pending",   cls: "bg-yellow-100 text-yellow-800" },
+                            failed:    { label: "failed",    cls: "bg-red-100 text-red-700" },
+                          };
+                          const { label, cls } = cfg[st] ?? { label: st, cls: "bg-gray-100 text-gray-600" };
+                          return (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
+                              {label}
+                            </span>
                           );
                         })()}
                       </td>

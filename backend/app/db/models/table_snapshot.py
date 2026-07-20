@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+from typing import Optional
+
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +29,14 @@ class TableSnapshot(Base):
     )
     table_name: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[str] = mapped_column(String, nullable=False)
+    # §2.9 Integration Model (v2.04.00): stable entity ID across snapshots.
+    # NULL for rows ingested before the entity resolution pass.
+    entity_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("object_entity.entity_id"),
+        nullable=True,
+        index=True,
+    )
 
     schema: Mapped["SchemaSnapshot"] = relationship(
         back_populates="tables",

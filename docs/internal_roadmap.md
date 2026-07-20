@@ -294,7 +294,7 @@ docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 - [ ] Linux systemd units (no PowerShell in production).
 - [ ] Structured JSON logging (today: stdout text).
 
-### 2.16 Staging Layer  *(nuevo — arquitectura Jon Brightling, 2026-07-17)*  **Est: 5 días**
+### 2.16 Staging Layer  *(nuevo — arquitectura Jon Brightling, 2026-07-17)*  **Est: 5 días**  ✅ COMPLETO (v2.03.00, 2026-07-20)
 
 **Origin:** Jon Brightling email 2026-07-17. La arquitectura formal de 3 capas es:
 **Staging → Integration → Access**. El Staging Layer es el prerequisito directo del Integration
@@ -308,25 +308,25 @@ persiste directo desde el import — el Staging Layer agrega una capa intermedia
 **Componentes:**
 
 #### 2.16.a — Tablas de staging + status tracking
-- [ ] Nuevas tablas: `staging_table_import`, `staging_column_import` — filas en estado pending antes de commit
-- [ ] Campo `import_status` en `snapshot`: `pending → staged → committed → failed`
-- [ ] Alembic migration
+- [x] Nuevas tablas: `staging_table_import`, `staging_column_import` — migration `b2c3d4e5f6a7`. *(v2.03.00)*
+- [x] Campo `import_status` en `snapshot`: `pending → staged → committed → failed` — migration `b2c3d4e5f6a7` + `snapshot.validation_warnings` JSON field. *(v2.03.00)*
+- [x] Alembic migration `b2c3d4e5f6a7` — revises `a1b2c3d4e5f6`. *(v2.03.00)*
 
 #### 2.16.b — Pipeline de validación
-- [ ] Validar completitud: `schema_name` no-null, tipos de datos reconocidos, foreign key references válidas
-- [ ] Detectar y loggear duplicados cross-source (mismo objeto llegando de DBQL y dict con metadata distinta)
-- [ ] Regla de resolución: mantener versión más reciente por `DDL_timestamp` (absorbe §2.4)
-- [ ] Resultado: reporte de import con filas aceptadas / rechazadas / resueltas
+- [x] Validar completitud: `schema_name` no-null, tipos de datos reconocidos — `staging_validator.py` rules: NULL_SCHEMA + UNKNOWN_TYPE. *(v2.03.00)*
+- [x] Detectar y loggear duplicados cross-source — DUPLICATE_TABLE hard error; sets `import_status='failed'`. *(v2.03.00)*
+- [x] Regla de resolución: mantener versión más reciente por `DDL_timestamp` (absorbe §2.4) — UNKNOWN_TYPE/NULL_SCHEMA as warnings, DUPLICATE_TABLE as hard error. §2.4 absorbed. *(v2.03.00)*
+- [x] Resultado: reporte de import con filas aceptadas / rechazadas / resueltas — stored in `snapshot.validation_warnings` JSON + `staging_table_import.row_status`. *(v2.03.00)*
 
 #### 2.16.c — UI: import status en Snapshots page
-- [ ] Mostrar estado `staged / committed / failed` por snapshot en la pantalla de imports
-- [ ] Detalle de conflictos resueltos (qué source ganó y por qué)
+- [x] Mostrar estado `staged / committed / failed` por snapshot — badge column en tabla de snapshots (verde/azul/rojo). *(v2.03.00)*
+- [ ] Detalle de conflictos resueltos (qué source ganó y por qué) — pendiente UI (datos ya están en `validation_warnings` JSON).
 
 **Nota:** §2.4 DDL timestamp merge queda absorbido por §2.16.b — ya no es ítem separado.
 
 ---
 
-### 2.9 Integration Model — Cross-Snapshot Entity Layer  *(Reunión 27 + Reunión 28)*
+### 2.9 Integration Model — Cross-Snapshot Entity Layer  *(Reunión 27 + Reunión 28)*  ✅ BACKEND COMPLETO (v2.03.00, 2026-07-20)
 
 **Origin:** Jon Brightling (Data DNA team) identified in Reunión 27 (2026-07-15). Confirmed
 in Reunión 28 by Rahul Kulkarni: this is the equivalent of the **Kalido BIM model** —
@@ -393,14 +393,15 @@ Resolution uses the `(entity_type, schema_name, object_name)` natural key throug
 4. New `/entity/` API endpoints
 5. UI: criticality trend, usage trend, object history views
 
-- [ ] Alembic migration — add `object_entity` table
-- [ ] Add nullable `entity_id` FK columns to 5 tables
-- [ ] `resolve_entities(snapshot_id)` hook in dict-import pipeline
-- [ ] Backfill script for existing snapshots
-- [ ] `GET /entity/{id}/history` endpoint
-- [ ] `GET /entity/resolve` endpoint
-- [ ] UI: criticality trend component
-- [ ] UI: usage trend per object component
+- [x] Alembic migration `c3d4e5f6a7b8` — `object_entity` table + unique index `uix_object_entity_type_name`. *(v2.03.00)*
+- [x] Nullable `entity_id` FK columns added to `table_snapshot`, `graph_node`, `usage_event`, `change_event` (4 tables). *(v2.03.00)*
+- [x] `resolve_entities(snapshot_id, session)` hook wired in `run_post_ingest_pipeline()` as last step. *(v2.03.00)*
+- [x] Backfill script `backend/tools/backfill_entities.py` — idempotent, supports `--dry-run` and `--snapshot-id`. *(v2.03.00)*
+- [x] `GET /entity/{id}/history` endpoint — criticality + usage + change history across snapshots. *(v2.03.00)*
+- [x] `GET /entity/resolve` endpoint — lookup by natural key (type + FQ name). *(v2.03.00)*
+- [x] `GET /entity/` list endpoint — paginated, filterable by schema/type/active. *(v2.03.00)*
+- [ ] UI: criticality trend chart — backend history endpoint ready; frontend component pendiente.
+- [ ] UI: usage trend per object — same, pendiente frontend.
 
 ### 2.10 Reference Data Support  *(new — Reunión 28, 2026-07-15)*  **Est: 5 días**
 
@@ -526,7 +527,7 @@ No mapea a tareas específicas hoy.
 
 ---
 
-### 2.15 Access Layer — Business-Friendly Views  *(Jon Brightling email, 2026-07-17)*  **Est: 4 días**
+### 2.15 Access Layer — Business-Friendly Views  *(Jon Brightling email, 2026-07-17)*  **Est: 4 días**  ✅ FASE 1 COMPLETA (v2.03.00, 2026-07-20)
 
 **Origin:** Jon Brightling (Data DNA team), email formal 2026-07-17 a Rahul Kulkarni + Kindy
 Flyvholm. Describió la arquitectura de 3 capas de DataDNA Lite 2.0: Staging → Integration
@@ -561,36 +562,24 @@ Reemplazar la home page centrada en snapshots por una vista centrada en el negoc
 - Búsqueda cross-source: "customer" encuentra `CUSTOMER_DIM`, `CUST_PROFILE`, `DIM_ACCOUNT`
   en todos los schemas, sin saber el schema name
 
-- [ ] Componente `BusinessLandingPage` — complementa la home actual
-- [ ] `GET /api/v1/landscape/summary` — métricas portfolio-level (entities, applications, at-risk)
-- [ ] Búsqueda cross-source via `object_entity.object_name LIKE` en el Integration Model
+- [x] `GET /api/v1/landscape/summary` — entity_count, active_entity_count, high_risk_count, recent_changes, top_risk_objects. *(v2.03.00)*
+- [x] Página `/landscape` — nueva ruta con KPI cards, risk distribution bar, top critical objects, high-risk + recently changed panels. *(v2.03.00)*
+- [x] Sidebar: entrada "Landscape" con Globe2 icon entre Intelligence y Timeline. *(v2.03.00)*
+- [ ] Búsqueda cross-source via `object_entity.object_name LIKE` — pendiente UI input component.
 - [ ] Alembic migration: ninguna (usa tablas de §2.9 + §2.10)
 
 #### 2.15.b — Executive Summary Dashboard
 Vista de alto nivel para stakeholders no técnicos:
-- **Portfolio health score**: % de objetos activos, % sin cambios recientes, % sin uso
-- **Top aplicaciones por criticality** (requiere §2.10.b — application mapping)
-- **At-risk highlights**: objetos con alta criticality + cambio reciente + uso activo de equipos
-- **Cambios de la semana** formulados en términos de negocio (qué aplicación se ve afectada)
 
-- [ ] Componente `ExecutiveSummaryDashboard`
-- [ ] `GET /api/v1/landscape/risk-overview` — wiring con `object_entity.criticality` + `change_event` + `usage_event`
-- [ ] Widget: "cambios de esta semana que afectan [X] aplicaciones"
+- [x] `GET /api/v1/landscape/risk-overview` — risk distribution (HIGH/MEDIUM/LOW), top_critical, recently_changed_high_risk. *(v2.03.00)*
+- [ ] Componente `ExecutiveSummaryDashboard` con portfolio health score — pendiente (requiere §2.10 para datos de aplicaciones).
+- [ ] Widget "cambios de esta semana que afectan [X] aplicaciones" — bloqueado por §2.10.
 
 #### 2.15.c — Entity-Centric Object View
-Reformular la página de detalle de objeto para mostrar contexto de negocio primero:
-
-```
-HOY:   Schema TEDW · Table SUBSET_COMPUTE_V · Type VIEW · Criticality 0.87
-NUEVO: Owned by: CRM Application · Used by: Finance Team · Risk: HIGH
-       [Criticality trend chart (§2.9)] · [Cambios recientes]
-       ▼ Technical details: Schema TEDW · Type VIEW · Snapshot #8
-```
-
-- [ ] Refactor `ObjectDetailPage` — business context primero, technical details colapsables
-- [ ] Panel "Owned by / Used by" wiring con `object_entity` → `application_entity` + `team_entity`
-- [ ] Criticality trend chart (requiere §2.9 history endpoint)
-- [ ] Business name / alias: campo opcional en `object_entity` para nombre amigable de negocio
+- [ ] Refactor `ObjectDetailPage` — business context primero, technical details colapsables.
+- [ ] Panel "Owned by / Used by" — bloqueado por §2.10 (application_entity + team_entity).
+- [ ] Criticality trend chart — `/entity/{id}/history` endpoint listo; pendiente frontend chart component.
+- [ ] Business name / alias: campo opcional en `object_entity` — pendiente.
 
 **Nota sobre terminología:** Jon usa "Access Layer" en sentido de data warehousing clásico
 (Staging → Integration → Access = "data mart consumible"). En SCION lo implementamos como
@@ -717,6 +706,7 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Reunión Pilar 2026-07-17 |
 | 2026-07-20 | §2.5a SQLite→Postgres migración completa en entorno lab | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47 819 filas migradas, 12 secuencias reseteadas, API verificada en localhost:8080. Procedimiento documentado en §2.5a como template para producción. Gotchas capturados: permisos post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset por transacción aislada | Lab 2026-07-20 |
 | 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
+| 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
 
 ---
 

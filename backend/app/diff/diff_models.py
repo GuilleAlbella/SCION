@@ -70,10 +70,13 @@ class ChangeEvent(Base):
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
+    # §2.9 Integration Model (v2.04.00): stable entity ID across snapshots.
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         Index("ix_change_event_snapshot_pair", "snapshot_from", "snapshot_to"),
         Index("ix_change_event_snapshot_to", "snapshot_to"),
         Index("ix_change_event_object_identifier", "object_identifier"),
+        Index("ix_change_event_entity", "entity_id"),
     )
 

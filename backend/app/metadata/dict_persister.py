@@ -213,6 +213,7 @@ def persist_batch(
         is_baseline=False,
         object_count=len(tables),  # tables/views/procs — the headline count
         extract_run_id=identity.extract_run_id,
+        import_status="staged",  # §2.16: pipeline sets → committed/failed in post-ingest
     )
     session.add(snap)
     session.flush()  # populate snap.snapshot_id without committing
@@ -602,6 +603,45 @@ def run_post_ingest_pipeline(
         "[post-ingest] impact_summary   in %s",
         _fmt_time(time.perf_counter() - t_step),
     )
+
+    # §2.16 — Staging validation pass.
+    # Runs last so all analytical data (graph, criticality) is in place
+    # before we mark the snapshot committed or failed.
+    _push_caption("validating import (§2.16)…")
+    t_step = time.perf_counter()
+    try:
+        from app.staging.staging_validator import validate_import
+
+        with ORMSession(bind=engine) as sess:
+            result = validate_import(snapshot_id, sess)
+            sess.commit()
+        logger.info(
+            "[post-ingest] staging_validate: status=%s tables=%d cols=%d hard_errors=%d warnings=%d",
+            result["status"],
+            result["tables_checked"],
+            result["columns_checked"],
+            result["hard_errors"],
+            result["warnings"],
+        )
+    except Exception as e:
+        logger.warning("post-ingest: staging_validate failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] staging_validate in %s", _fmt_time(time.perf_counter() - t_step))
+
+    # §2.9 — Entity resolution pass.
+    # Upserts object_entity rows and back-fills entity_id FKs on
+    # table_snapshot, graph_node, usage_event, change_event.
+    _push_caption("resolving cross-snapshot entities (§2.9)…")
+    t_step = time.perf_counter()
+    try:
+        from app.entity.entity_resolver import resolve_entities
+
+        with ORMSession(bind=engine) as sess:
+            n = resolve_entities(snapshot_id, sess)
+            sess.commit()
+        logger.info("[post-ingest] entity_resolve: resolved %d entities", n)
+    except Exception as e:
+        logger.warning("post-ingest: entity_resolve failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] entity_resolve   in %s", _fmt_time(time.perf_counter() - t_step))
 
 
 def _auto_diff_against_previous(snapshot_id: int) -> None:

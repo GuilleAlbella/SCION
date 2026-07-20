@@ -26,6 +26,8 @@ class UsageEvent(Base):
     # New imports always populate this via persist_object_usage's
     # `snapshot_id` parameter, so the null case shrinks to zero over time.
     snapshot_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    # §2.9 Integration Model (v2.04.00): stable entity ID across snapshots.
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     object_name: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     schema_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)

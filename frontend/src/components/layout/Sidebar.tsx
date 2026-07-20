@@ -22,12 +22,13 @@ import {
   Clock,
   Bell,
   FlaskConical,
+  Globe2,
 } from "lucide-react";
 
 // Top-level navigation. Order reflects the intended user flow:
 // observe (Dashboard, Snapshots) → analyse (Changes, Impact, What-If) →
 // explore (Lineage, Graph) → measure (Metrics, Usage, Intelligence) →
-// operate (Timeline, Alerts, Control).
+// access (Landscape) → operate (Timeline, Alerts, Control).
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/snapshots", label: "Snapshots", icon: Camera },
@@ -39,6 +40,8 @@ const NAV_ITEMS = [
   { href: "/metrics", label: "Metrics", icon: BarChart3 },
   { href: "/usage", label: "Usage", icon: Flame },
   { href: "/intelligence", label: "Intelligence", icon: ShieldCheck },
+  // §2.15 Access Layer (Phase 2): business-friendly portfolio view
+  { href: "/landscape", label: "Landscape", icon: Globe2 },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/control", label: "Control", icon: Settings },

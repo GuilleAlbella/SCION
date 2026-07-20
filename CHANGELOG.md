@@ -8,6 +8,33 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.03.00 (2026-07-20) — feat(arch): Architecture Layers — §2.16 Staging Layer + §2.9 Integration Model + §2.15 Access Layer
+
+**Architecture Layers (Phase 2 §2.16 / §2.9 / §2.15)**
+
+- **§2.16 Staging Layer** — Alembic migration `b2c3d4e5f6a7`: añade `import_status` y
+  `validation_warnings` a `snapshot`; nuevas tablas `staging_table_import` +
+  `staging_column_import`. `staging_validator.py` clasifica NULL_SCHEMA / UNKNOWN_TYPE /
+  DUPLICATE_TABLE; lifecycle `staged → committed | failed` ejecutado en
+  `run_post_ingest_pipeline()`. `snapshots/page.tsx` muestra badge de status.
+- **§2.9 Integration Model** — Alembic migration `c3d4e5f6a7b8`: nueva tabla
+  `object_entity` con unique key `(entity_type, object_name)`. FK nullable `entity_id`
+  añadida a `table_snapshot`, `graph_node`, `usage_event` y `change_event`.
+  `entity_resolver.py` hace upsert + back-fill en 4 pasos; llamado automáticamente tras
+  ingest. Tool `backfill_entities.py` para datos históricos.
+  API: `GET /entity/`, `/entity/{id}`, `/entity/{id}/history`, `/entity/resolve`.
+- **§2.15 Access Layer (Fase 1)** — Nueva página `/landscape`: KPI cards (active entities,
+  high-risk, recent changes, risk distribution), risk distribution bar, top critical
+  objects, high-risk + recently changed. API: `GET /landscape/summary` +
+  `/landscape/risk-overview`. Sidebar: enlace "Landscape" con icono Globe2.
+- **Modelos ORM actualizados:** `snapshot.py`, `table_snapshot.py`, `graph_models.py`,
+  `usage_models.py`, `diff_models.py` con campos `entity_id` / `import_status` /
+  `validation_warnings`. `db/base.py` registra los nuevos módulos staging y entity.
+- **Pendiente (lab):** aplicar migraciones `b2c3d4e5f6a7` + `c3d4e5f6a7b8` vía
+  `alembic upgrade head`; ejecutar `backfill_entities.py`.
+
+---
+
 ### v2.02.00 (2026-07-20) — feat(frontend): infinite scroll on /changes replaces Previous/Next pagination
 
 **Frontend pagination (Phase 2 §2.5c / §2.7)**

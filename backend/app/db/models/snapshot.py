@@ -7,7 +7,7 @@ from typing import List
 
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,6 +29,13 @@ class Snapshot(Base):
     # and demo-seed snapshots which don't have a per-run identifier.
     # Indexed (see migration a72b8c4f9d31) for fast idempotency lookups.
     extract_run_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    # §2.16 Staging Layer (v2.03.00): tracks import lifecycle.
+    # pending → staged → committed | failed
+    # Existing rows (pre-staging) default to 'committed' via migration server_default.
+    import_status: Mapped[str] = mapped_column(String(20), nullable=False, default="committed")
+    # Validation pass result: list of {type, severity, message, object_name?} dicts.
+    # NULL = not yet validated or zero issues.
+    validation_warnings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     schemas: Mapped[List["SchemaSnapshot"]] = relationship(
         back_populates="snapshot",
