@@ -74,6 +74,11 @@ Parser/**/*.dat
 Parser/**/*.log
 Parser/**/*.json
 
+# Parser team design docs — these live in the parser team's own repo.
+# Dropping them here locally for reference is fine; they should not be
+# tracked or pushed in the SCION repo.
+Parser/docs/
+
 # Local-only credential / secret notes. Catches casual filenames like
 # `Token Github.txt`, `secrets.md`, `pat.txt`, `credentials.txt` that
 # devs sometimes leave in the repo root while testing. Real secrets
