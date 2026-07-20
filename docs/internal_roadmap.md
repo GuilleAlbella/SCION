@@ -92,6 +92,17 @@ Decision gate resolved: SQLite performing within targets on current dataset; Pos
 **Trigger:** Phase 1 benchmark results. Phase 2 scope confirmed en Reunión 21 (2026-06-19) y ampliado en Reunión 28 (2026-07-15).
 **Owner:** Guillermo. Deadline estimación: **lunes 2026-07-21**. Presentación a Chris/Pilar: **jueves 2026-07-24**.
 
+> ⚠️ **Scope de trabajo — SOLO LAB hasta nueva indicación.**
+> Todo el desarrollo, testing y validación de Phase 2 se hace contra el entorno lab
+> (`docker-compose.lab.yml`, Postgres en `localhost:8080`). El deploy de producción
+> (`ps-ubuntu-0043`, `docker-compose.yml`) NO se toca hasta que Phase 2 esté validada
+> en lab. Las comprobaciones funcionales, los benchmarks y los tests se ejecutan en lab.
+>
+> **Base de datos activa en lab:** Postgres 16 — volumen `scion-lab_pgdata`.
+> Todo el stack (importer, graph engine, impact, TAISA, usage) apunta a Postgres
+> via `DATABASE_URL=postgresql+psycopg://scion:scion_lab@postgres:5432/scion`.
+> Los archivos SQLite en el container (`kalido_lite.db`, `scion_source.db`) son inertes.
+
 > **DataDNA Lite v1.0 declared complete by Rahul (Reunión 21, 2026-06-19).** SCION reemplaza tanto Kalido (integración de metadata) como Click (visualización). Phase 2 expande el scope a integration model completo + reference data + AI classification.
 
 ---
