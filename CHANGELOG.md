@@ -8,6 +8,28 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.00.00 (2026-07-20) — feat(phase2): SQLite → Postgres migration complete in lab; version bump to Phase 2
+
+**Phase 2 kickoff — storage engine migration (lab complete)**
+
+- **`docker-compose.lab.yml`** — nuevo entorno de lab con Postgres 16-alpine; SCION en
+  puerto 8080, separado del deploy de producción (`docker-compose.yml` sin cambios).
+- **`alembic/env.py`** — lee `DATABASE_URL` del entorno en lugar de usar siempre
+  el path SQLite de `alembic.ini`; importa `app.db.base` (registra los ~20 modelos ORM
+  vía side-effects, reemplazando los 4 imports manuales anteriores).
+- **`backend/tools/migrate_sqlite_to_postgres.py`** — script one-shot SQLite → Postgres:
+  FK-safe insert order, `DISABLE TRIGGER ALL` por tabla para orphaned rows de SQLite,
+  reset de sequences por transacción aislada. Soporta `--dry-run` y `--batch`.
+- **Lab migration result:** 47 819 filas migradas a Postgres, 12 sequences reseteadas.
+  `GET /api/v1/snapshots` verificado en `localhost:8080` devolviendo 10 snapshots.
+- **Docs:** `docs/internal_roadmap.md` §2.5a actualizado con procedimiento de migración
+  completo (template para producción); `docs/SPEC.md`, `docs/handover.md`,
+  `docs/release_policy.md` actualizados para reflejar estado Postgres en lab.
+- **Breaking change:** versión mayor bumpeada a 2.x — la migración de storage engine
+  requiere acción operacional al pasar a producción (ver §2.5a del roadmap).
+
+---
+
 ### v1.21.46 (2026-06-30) — fix(perf): Visual Diff instant render; Changes infinite scroll + loading overlay; Simulation UNKNOWN search; Snapshots extract time
 
 - **Visual Diff**: removed the blocking `/schema-tree/{snapshotTo}` fetch on open.

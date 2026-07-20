@@ -7,7 +7,7 @@ the first time, or picking up after a context switch.
 `docs/internal_roadmap.md` (the *what's next*) and `docs/SPEC.md`
 (the *what and why*). This doc is the *how to actually do it day one*.
 
-**Current version:** v1.21.43 (2026-06-26)
+**Current version:** v2.00.00 (2026-07-20)
 
 ---
 
@@ -53,7 +53,7 @@ If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
 
 ---
 
-## 3. Current state of the codebase (as of v1.21.26)
+## 3. Current state of the codebase (as of v2.00.00)
 
 ### What's live and stable
 

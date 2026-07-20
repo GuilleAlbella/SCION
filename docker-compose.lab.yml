@@ -1,0 +1,88 @@
+# SCION lab environment — Postgres backend.
+#
+# Builds images locally from source and runs them with a local Postgres
+# instance instead of SQLite. Use this for Phase 2 development and testing.
+# Does NOT affect the production deploy (docker-compose.yml).
+#
+# Usage:
+#   docker compose -f docker-compose.lab.yml up -d --build
+#   docker compose -f docker-compose.lab.yml logs -f backend
+#   docker compose -f docker-compose.lab.yml down          # stop (keeps pgdata)
+#   docker compose -f docker-compose.lab.yml down -v       # stop + wipe DB
+#
+# The backend entrypoint runs `db_init.py init` (alembic upgrade head)
+# automatically on every start — safe to re-run, no-op when already at HEAD.
+
+name: scion-lab
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: scion-lab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       scion
+      POSTGRES_USER:     scion
+      POSTGRES_PASSWORD: scion_lab
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scion -d scion"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: scion-backend:lab
+    container_name: scion-lab-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL:          postgresql+psycopg://scion:scion_lab@postgres:5432/scion
+      SCION_EXECUTION_MODE:  docker
+      SCION_BACKEND_HOST:    0.0.0.0
+      SCION_BACKEND_PORT:    "8000"
+      DATA_REGION:           lab
+      TAISA_API_KEY:         ${TAISA_API_KEY:-}
+      API_KEY:               ${API_KEY:-}
+      LOG_LEVEL:             ${LOG_LEVEL:-info}
+    networks: [default]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: /api/v1
+    image: scion-frontend:lab
+    container_name: scion-lab-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      NEXT_PUBLIC_API_KEY:      ${API_KEY:-}
+    networks: [default]
+
+  nginx:
+    image: nginx:1.29-alpine
+    container_name: scion-lab-nginx
+    restart: unless-stopped
+    depends_on: [backend, frontend]
+    ports:
+      - "${LAB_PORT:-8080}:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [default]
+
+volumes:
+  pgdata:

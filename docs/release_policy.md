@@ -111,7 +111,10 @@ To be filled in jointly with infosec. Placeholder:
 - No customer data leaves the deployment (LLM calls are the sole exception
   — TAISA sends *metadata only*, never row values).
 - All file imports are validated (schema, size cap, charset).
-- SQLite DB is the only persistence; no external network writes.
+- **Storage backend (as of v2.00.00):** lab environment uses Postgres 16
+  (via `docker-compose.lab.yml`); production still uses SQLite on a named
+  Docker volume pending the production migration (§2.5a of
+  `docs/internal_roadmap.md`). No external network writes in either case.
 
 ---
 

@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v1.21.43
+**Version:** BETA v2.00.00
 
 ---
 
@@ -70,7 +70,7 @@ backend/
       parser_import.py   #   POST /parser-import (JSON pipeline, v1.04+)
       dict_import.py     #   POST /dict-import (.dat batch pipeline, v1.12+)
       ...                #   snapshots, diff, graph, impact, …
-    db/                  # ORM models (SQLAlchemy) — 14 tables
+    db/                  # ORM models (SQLAlchemy) — 20 tables
       models/            #   snapshot, schema_snapshot, table_snapshot,
                          #   column_snapshot, process, step, attribute_lineage, …
     ddl/                 # DDL generator engine
@@ -204,24 +204,30 @@ Parser/                  # Sample payloads from the extractor team
 
 ---
 
-## Database Schema (14 tables)
+## Database Schema (20 tables)
 
-| Table | Purpose |
-|-------|---------|
-| `snapshot` | EDW state versions (now with indexed `extract_run_id` column for dict-import idempotency, v1.13.01) |
-| `schema_snapshot` | Databases within a snapshot |
-| `table_snapshot` | Tables/views within a database |
-| `column_snapshot` | Columns with types and positions |
-| `change_event` | Detected changes |
-| `graph_node` | Dependency graph nodes |
-| `graph_edge` | FEEDS and DEPENDS_ON relationships |
-| `impact_event` | Impact analysis results |
-| `reasoning_event` | TAISA reasoning results |
-| `usage_event` | Usage statistics |
-| `object_criticality` | Criticality scores |
-| **`process`** | **NEW v1.04 — SQL scripts/jobs from parser** |
-| **`step`** | **NEW v1.04 — statements / query blocks inside processes** |
-| **`attribute_lineage`** | **NEW v1.04 — Tier 1/2 column-to-column lineage with expressions** |
+| Table | Group | Purpose |
+|-------|-------|---------|
+| `snapshot` | Snapshot core | EDW state versions, keyed by `extract_run_id` for dict-import idempotency |
+| `schema_snapshot` | Snapshot core | Databases within a snapshot |
+| `table_snapshot` | Snapshot core | Tables/views within a database |
+| `column_snapshot` | Snapshot core | Columns with types and positions |
+| `index_snapshot` | Snapshot core | Index definitions (one row per index-column pair) |
+| `ddl_text_snapshot` | Snapshot core | Assembled DDL from `DBC.TableTextV` chunks |
+| `partitioning_snapshot` | Snapshot core | Teradata partition expressions verbatim |
+| `graph_node` | Graph | Dependency graph nodes (one per structural object per snapshot) |
+| `graph_edge` | Graph | FEEDS and DEPENDS_ON relationships |
+| `node_metadata` | Graph | Per-node computed metrics: fragility, centrality (persisted for perf) |
+| `change_event` | Diff & Impact | Append-only audit log of structural changes |
+| `impact_event` | Diff & Impact | Graph-walk impact results per change |
+| `change_impact_summary` | Diff & Impact | Pre-aggregated direct/indirect counts (avoids 500k CTE walks at request time) |
+| `proactive_alert` | Diff & Impact | Pre-computed alerts: breaking changes, orphans, hub-node changes |
+| `process` | Parser / Lineage | SQL scripts/jobs from the DataDNA parser |
+| `step` | Parser / Lineage | Statements / query blocks inside processes |
+| `attribute_lineage` | Parser / Lineage | Tier 1/2 column-to-column lineage with transformation expressions |
+| `reasoning_event` | Usage & AI | TAISA reasoning results |
+| `usage_event` | Usage & AI | Usage statistics ingested from PDCR extractor |
+| `object_criticality` | Usage & AI | Combined criticality scores (60% usage + 40% graph weight) |
 
 ---
 
@@ -443,7 +449,7 @@ Top-level phases at a glance:
 |-------|--------|------------|
 | **0 · Foundations** | ✅ Done | 7 engines, 14 UI pages, parser + dict ingest, narrative UX |
 | **1 · Pipelines 2 & 3** | ✅ Done | Pipeline 2 (dict) live v1.12; Pipeline 3 (PDCR usage) live v1.21.6; column-level lineage v1.21.23 |
-| **2 · Scale & hardening** | 🔵 Planned | Benchmark on real data, SQLite→Postgres decision, Docker packaging |
+| **2 · Scale & hardening** | 🔵 In progress | Docker deploy live (v1.21); Integration Model, ED integration, incremental snapshots |
 | **3 · First customer pilot** | 🔴 Future | Auth, infosec, release discipline (`docs/release_policy.md`) |
 | **4 · v1.0 GA** | 🔴 Future | Flip `APP_STAGE` from `BETA` once GA criteria are satisfied |
 

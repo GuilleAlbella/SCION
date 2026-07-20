@@ -14,19 +14,18 @@ BACKEND_PATH = os.path.join(PROJECT_ROOT, "backend")
 if BACKEND_PATH not in sys.path:
     sys.path.append(BACKEND_PATH)
 
-from app.db.base import Base
-
-# Import all ORM model modules so that their mapped classes are registered on
-# Base.metadata. Without these imports, Alembic would see an empty metadata
-# collection and autogenerate would not produce any DDL.
-from app.db.models.snapshot import Snapshot  # noqa: F401
-from app.db.models.schema_snapshot import SchemaSnapshot  # noqa: F401
-from app.db.models.table_snapshot import TableSnapshot  # noqa: F401
-from app.db.models.column_snapshot import ColumnSnapshot  # noqa: F401
+from app.db.base import Base  # noqa: F401 — side-effect imports register ALL ORM models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Allow DATABASE_URL env var to override the sqlalchemy.url in alembic.ini.
+# This lets `alembic upgrade head` work against Postgres in the lab environment
+# without editing alembic.ini: just set DATABASE_URL before invoking alembic.
+_db_url = os.environ.get("DATABASE_URL")
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -36,11 +35,6 @@ if config.config_file_name is not None:
 # target_metadata tells Alembic which SQLAlchemy metadata to inspect
 # so that it can detect model changes for autogeneration.
 target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def run_migrations_offline() -> None:

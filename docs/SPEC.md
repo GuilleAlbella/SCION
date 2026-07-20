@@ -233,7 +233,7 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 **Key properties:**
 
 - **Single-VM**, single-tenant. No clustering, no replicas, no orchestration. One customer = one VM = one stack.
-- **SQLite with WAL** in a Docker named volume. Fits up to a Transcend-class warehouse comfortably; Postgres is on the v1.25 roadmap for multi-tenant.
+- **Storage:** lab environment uses **Postgres 16** (`docker-compose.lab.yml`, Phase 2 §2.5a — complete 2026-07-20). Production still runs **SQLite with WAL** on a named volume; production migration to Postgres is the next step (see `docs/internal_roadmap.md` §2.5a).
 - **Three application containers** (backend, frontend, nginx) + the volume. Watchtower was removed in v1.21.4.
 - **TAISA** is the only external dependency — and it's optional. If TAISA is unreachable the reasoning features go quiet but everything else keeps working.
 
@@ -308,9 +308,9 @@ Cross-context calls SHOULD go through the public engines listed in §8.2, not by
 | **Backend language** | Python | 3.12 | Best ecosystem for ORM + LLM + scripting; we already use it for `db_init.py`, tests, etc. |
 | **API framework** | FastAPI | 0.115.6 | Type-driven, async-ready, OpenAPI for free. Bumped from 0.115.0 in v1.21.4 to pull starlette ≥0.41 (CVE-2024-47874). |
 | **ASGI server** | uvicorn | 0.30.6 | Standard for FastAPI; standalone, no external process supervisor needed inside the container. |
-| **ORM** | SQLAlchemy | 2.0.35 | New-style API, type-annotated, dialect-portable (sets up the Postgres migration in v1.25 with minimal churn). |
+| **ORM** | SQLAlchemy | 2.0.35 | New-style API, type-annotated, dialect-portable. Lab already running on Postgres; `alembic/env.py` reads `DATABASE_URL` env var at runtime. |
 | **Migrations** | Alembic | 1.13.3 | Canonical for SQLAlchemy; idempotent `db_init.py init` wraps it for one-command lifecycle. |
-| **Database** | SQLite + WAL | 3.40+ | Zero-config, embedded, file-backed. WAL gives readers a consistent snapshot during the heavy writer in `dict_persister`. Postgres roadmap = v1.25. |
+| **Database** | SQLite (prod) / Postgres 16 (lab) | 3.40+ / 16 | SQLite: zero-config, embedded, WAL for read concurrency. Postgres: lab complete (Phase 2 §2.5a); production migration pending. Driver: `psycopg[binary]` v3. |
 | **LLM client** | TAISA (custom client) | n/a | Wraps the LLM provider behind a stable interface so the underlying model can be swapped without touching `taisa_client.py` callers. |
 | **LLM model** | `llama-4-scout-17b-16e-instruct` | 2026-q1 | 131k-token context, fast, cheap, good at structured Q&A over metadata. Configured in `backend/app/config/taisa_llm.yaml` (baked into the private backend image). |
 | **Frontend framework** | Next.js | 16.2.3 | App Router, RSC-ready, native standalone output for tight Docker image. |
