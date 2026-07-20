@@ -2,10 +2,12 @@
 
 import Header from "./Header";
 import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 
 interface PageShellProps {
   title: string;
   subtitle?: string;
+  icon?: LucideIcon;
   children: React.ReactNode;
 }
 
@@ -15,12 +17,12 @@ interface PageShellProps {
  * to unmount/remount <main> on route change, so the page-in animation
  * replays each time the user navigates.
  */
-export default function PageShell({ title, subtitle, children }: PageShellProps) {
+export default function PageShell({ title, subtitle, icon, children }: PageShellProps) {
   const pathname = usePathname();
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">
-      <Header title={title} subtitle={subtitle} />
+      <Header title={title} subtitle={subtitle} icon={icon} />
       <main
         // Key on pathname so navigation replays the fade-in animation.
         key={pathname}
