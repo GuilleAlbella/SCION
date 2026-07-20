@@ -8,6 +8,20 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.02.00 (2026-07-20) — feat(frontend): infinite scroll on /changes replaces Previous/Next pagination
+
+**Frontend pagination (Phase 2 §2.5c / §2.7)**
+
+- **`changes/page.tsx`** — Previous/Next buttons eliminados. `fetchPage` ya tenía modo
+  `"append"` sin usar; ahora conectado a un `IntersectionObserver` sobre un sentinel div
+  al final de la tabla (`rootMargin: "400px"` para pre-carga anticipada). Status row
+  muestra `N / total cargados · all loaded` cuando se llega al final.
+- **Lazy graph fetch** — documentado como completo: `/graph/{snapshot_id}` trunca a
+  5 000 nodos y devuelve `truncated: true`; focus mode BFS ya operativo desde v1.11.00.
+- Declaradas ambas sub-tareas §2.5c / §2.7 como ✅ COMPLETO en roadmap.
+
+---
+
 ### v2.01.00 (2026-07-20) — perf(graph): SQL-based degree computation + composite index + dead code removal
 
 **Graph engine performance (Phase 2 §2.5b / §2.6)**

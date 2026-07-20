@@ -273,9 +273,9 @@ docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 - [x] **Computed metrics persistidas en DB** — `node_metadata` JSON en `graph_node` ya almacenaba `{in_degree, out_degree, fragility, is_hub}`; `persist_node_metrics` sigue escribiendo post-ingest. Dead code en `blast_radius.py` eliminado (cargaba todos los `GraphNode` por snapshot para construir `node_names`/`node_schemas` que nunca se usaban). *(v2.01.00)*
 - [x] **Index on `change_event(snapshot_to, object_identifier)`** — migration `a1b2c3d4e5f6` añade `ix_change_event_snapshot_to_object`. También mergea los dos heads de Alembic que existían (`f1a2b3c4d5e6` + `d61e9f7a2b34`). *(v2.01.00)*
 
-#### 2.5c — Frontend pagination (§2.7 — 2 días)
-- [ ] Server-side pagination en /changes si event count cruza 10k.
-- [ ] Lazy graph fetch — solo el subgraph enfocado desde el backend.
+#### 2.5c — Frontend pagination (§2.7 — 2 días)  ✅ COMPLETO (v2.02.00, 2026-07-20)
+- [x] Server-side pagination en /changes — infinite scroll con IntersectionObserver; reemplaza Previous/Next. `fetchPage` ya tenía modo `"append"`; ahora conectado a sentinel div + observer (rootMargin 400 px). Status row muestra `N / total cargados`. *(v2.02.00)*
+- [x] Lazy graph fetch — `/graph/{snapshot_id}` trunca a 5 000 nodos y devuelve `truncated: true`; frontend muestra banner para elegir anchor de focus mode. `/graph/focus` hace BFS server-side (cap 1 000 nodos). Ya operativo desde v1.11.00. *(v2.02.00)*
 
 ### 2.6 Graph engine performance  ✅ COMPLETO (v2.01.00, 2026-07-20)
 - [x] Lazy-load graph nodes on demand — SQL GROUP BY en `compute_node_metrics`.
@@ -283,11 +283,10 @@ docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 - [x] Index on `change_event(snapshot_to, object_identifier)` — migration `a1b2c3d4e5f6`.
 - [ ] Cython / Rust para `compute_impact` — descartado por ahora; CTEs SQL son suficientes al escalar.
 
-### 2.7 Frontend rendering
+### 2.7 Frontend rendering  ✅ COMPLETO (v2.02.00, 2026-07-20)
 - [x] Focus mode for /graph (v1.11.00).
-- [ ] Server-side pagination on /changes if event count crosses 10k.
-- [ ] Lazy graph fetch — only request the focused subgraph from backend
-      instead of the whole snapshot.
+- [x] Server-side infinite scroll on /changes — IntersectionObserver replaces Previous/Next; append mode wired to sentinel div. *(v2.02.00)*
+- [x] Lazy graph fetch — truncation at 5 000 nodes + focus-mode BFS already in place since v1.11.00. *(v2.02.00)*
 
 ### 2.8 Production runtime
 - [x] `docker-compose.yml` — backend + frontend (production build) + nginx reverse proxy. Live on ps-ubuntu-0043 since v1.21.x. GHCR image publish wired.
