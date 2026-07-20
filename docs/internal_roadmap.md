@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-20 · Current version: **v1.21.73 (BETA)**.
+Last updated: 2026-07-20 · Current version: **v2.04.00 (BETA)**.
 
 ---
 
@@ -288,11 +288,11 @@ docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 - [x] Server-side infinite scroll on /changes — IntersectionObserver replaces Previous/Next; append mode wired to sentinel div. *(v2.02.00)*
 - [x] Lazy graph fetch — truncation at 5 000 nodes + focus-mode BFS already in place since v1.11.00. *(v2.02.00)*
 
-### 2.8 Production runtime
+### 2.8 Production runtime  ✅ COMPLETO (v2.04.00, 2026-07-20)
 - [x] `docker-compose.yml` — backend + frontend (production build) + nginx reverse proxy. Live on ps-ubuntu-0043 since v1.21.x. GHCR image publish wired.
 - [x] Health check endpoints (`/healthz`, `/readyz`). *(v1.21.x)*
-- [ ] Linux systemd units (no PowerShell in production).
-- [ ] Structured JSON logging (today: stdout text).
+- [x] Linux systemd units — `deploy/systemd/scion.service` + `deploy/install_systemd.sh`. `docker/install.sh` paso 7 instala y habilita el unit automáticamente en Linux. Type=oneshot+RemainAfterExit; restart on-failure; EnvironmentFile desde `.env`. *(v2.04.00)*
+- [x] Structured JSON logging — `backend/app/logging_config.py` (dictConfig JSON/text, controlado por `LOG_FORMAT` env var). `python-json-logger==2.0.7`. nginx `log_format json_access escape=json` + security headers. `main.py` migrado a `lifespan`, `print()→logger.info()`, CORS desde `ALLOWED_ORIGINS` env var. *(v2.04.00)*
 
 ### 2.16 Staging Layer  *(nuevo — arquitectura Jon Brightling, 2026-07-17)*  **Est: 5 días**  ✅ COMPLETO (v2.03.00, 2026-07-20)
 
@@ -706,6 +706,7 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Reunión Pilar 2026-07-17 |
 | 2026-07-20 | §2.5a SQLite→Postgres migración completa en entorno lab | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47 819 filas migradas, 12 secuencias reseteadas, API verificada en localhost:8080. Procedimiento documentado en §2.5a como template para producción. Gotchas capturados: permisos post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset por transacción aislada | Lab 2026-07-20 |
 | 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
+| 2026-07-20 | §2.8 Production runtime completo en v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` paso 7 escribe unit al instalar. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrado a lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
 | 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
 
 ---

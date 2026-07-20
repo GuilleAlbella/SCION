@@ -19,3 +19,4 @@ requests==2.32.3   # used by app/llm/groq_provider.py — was previously a trans
 tenacity==9.0.0
 
 rich==13.9.2
+python-json-logger==2.0.7

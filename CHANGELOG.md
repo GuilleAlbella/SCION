@@ -8,6 +8,36 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.04.00 (2026-07-20) — feat(runtime): Production runtime — systemd units + structured JSON logging (§2.8)
+
+**Production runtime (Phase 2 §2.8)**
+
+- **Systemd service** — nuevo `deploy/systemd/scion.service`: unit file que gestiona el
+  stack docker-compose como servicio del SO Linux. Type=oneshot+RemainAfterExit,
+  WorkingDirectory configurable, EnvironmentFile desde `.env`, restart on-failure.
+  `deploy/install_systemd.sh`: instala/habilita/inicia el unit con substitución de
+  `SCION_INSTALL_DIR`; `--uninstall` elimina. `docker/install.sh` paso 7 integrado:
+  si systemd está disponible en Linux, escribe y habilita el unit automáticamente.
+- **Structured JSON logging** — `backend/app/logging_config.py`: dictConfig dual
+  (`json` | `text`) controlado por `LOG_FORMAT` env var; nivel via `LOG_LEVEL`.
+  JSON: `pythonjsonlogger.JsonFormatter` con campos `timestamp/level/logger/message`.
+  Aplica al root logger + `uvicorn/uvicorn.error/uvicorn.access`. Fallback a text si
+  la librería no está instalada. `python-json-logger==2.0.7` añadido a `requirements/base.txt`.
+- **`backend/app/main.py` refactor**:
+  - `logging.basicConfig()` reemplazado por `configure_logging()` (JSON en producción)
+  - `@app.on_event("startup")` (deprecado) migrado a `lifespan` context manager
+  - `print()` de startup reemplazados por `logger.info()` con fields estructurados
+  - CORS origins leídos de `ALLOWED_ORIGINS` env var (default: `http://localhost:3000`)
+- **`backend/app/config.py`** — nuevas vars: `LOG_LEVEL`, `LOG_FORMAT`, `ALLOWED_ORIGINS`
+- **nginx JSON access log** — `docker/nginx.conf`: `log_format json_access escape=json`
+  emite un objeto JSON por request con `timestamp/method/uri/status/request_time/upstream_time`.
+  Security headers añadidos: `X-Frame-Options`, `X-Content-Type-Options`,
+  `X-XSS-Protection`, `Referrer-Policy`.
+- **`docker/backend.Dockerfile`** — CMD añade `--no-access-log` (uvicorn access logs
+  suprimidos; nginx JSON cubre todos los requests evitando duplicados).
+
+---
+
 ### v2.03.00 (2026-07-20) — feat(arch): Architecture Layers — §2.16 Staging Layer + §2.9 Integration Model + §2.15 Access Layer
 
 **Architecture Layers (Phase 2 §2.16 / §2.9 / §2.15)**

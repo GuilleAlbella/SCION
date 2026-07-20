@@ -85,4 +85,6 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=4 \
     CMD curl -fsS http://localhost:8000/api/v1/health/ready || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-access-log: uvicorn per-request lines suppressed; nginx already
+# emits structured JSON access logs so we avoid duplicating every line.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

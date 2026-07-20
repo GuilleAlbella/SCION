@@ -62,3 +62,24 @@ SCION_TAISA_MODE: str = os.getenv("SCION_TAISA_MODE", "real")
 # available than the latest snapshot. Set to "" to disable the watcher.
 # Default matches the mount point configured on ps-ubuntu-0043.
 SCION_SHARE_MOUNT_PATH: str = os.getenv("SCION_SHARE_MOUNT_PATH", "/mnt/vm1_share")
+
+
+# Logging ----------------------------------------------------------------------
+
+# Level for the root logger and all managed sub-loggers.
+# Valid values: debug | info | warning | error | critical  (case-insensitive)
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
+
+# Output format. "json" (default for production) emits one JSON line per
+# record — suitable for Loki / CloudWatch / Datadog. "text" emits a compact
+# human-readable line for local development.
+LOG_FORMAT: str = os.getenv("LOG_FORMAT", "json")
+
+
+# CORS -------------------------------------------------------------------------
+
+# Comma-separated list of allowed CORS origins. The browser talks to nginx
+# (same origin), so this is only relevant for direct API calls. Defaults
+# to localhost for local dev; override in docker-compose or .env for other
+# environments.
+ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
