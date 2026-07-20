@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ColumnLineageResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse } from "./types";
+import type { ColumnLineageResponse, ColumnTraverseResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse } from "./types";
 
 export async function getGraph(snapshotId: number): Promise<GraphResponse> {
   const { data } = await client.get<GraphResponse>(`/graph/${snapshotId}`);
@@ -24,6 +24,18 @@ export async function getColumnLineage(
   const params: Record<string, string | number> = { snapshot_id: snapshotId, object };
   if (tier) params.tier = tier;
   const { data } = await client.get<ColumnLineageResponse>("/lineage/columns", { params });
+  return data;
+}
+
+export async function traverseColumnLineage(
+  snapshotId: number,
+  columnKey: string,
+  direction: "downstream" | "upstream" = "downstream",
+  maxDepth: number = 10,
+): Promise<ColumnTraverseResponse> {
+  const { data } = await client.get<ColumnTraverseResponse>("/lineage/columns/traverse", {
+    params: { snapshot_id: snapshotId, column_key: columnKey, direction, max_depth: maxDepth },
+  });
   return data;
 }
 

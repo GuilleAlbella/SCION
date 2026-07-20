@@ -302,6 +302,24 @@ export interface BatchImpactResponse {
   has_more?: boolean;
 }
 
+export interface TraverseNode {
+  column_key: string;
+  table_key: string;
+  column_name: string;
+  depth: number;
+  path: string[];
+  transformation_type: string | null;
+  tier: string | null;
+}
+
+export interface ColumnTraverseResponse {
+  column_key: string;
+  snapshot_id: number;
+  direction: string;
+  nodes: TraverseNode[];
+  total_hops: number;
+}
+
 export interface ReasoningResponse {
   change_id: number;
   classification: string;

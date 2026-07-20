@@ -57,7 +57,7 @@ import type {
 } from "@/lib/api/types";
 import { changeTypeLabel } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
-import { ArrowUp, ArrowDown, Info, Network, GitBranch, Layers, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowRight, Info, Network, GitBranch, Layers, ChevronDown, ChevronUp } from "lucide-react";
 
 const NODE_W = 220;
 const NODE_H = 60;
@@ -81,7 +81,7 @@ const COL_ROW_H = 19;  // px per column row
 const COL_TOP_PAD = 8; // padding above the column strip
 const MAX_COLS_SHOWN = 7;
 
-type NodeData = { label: string; type: string; metrics?: GN["metrics"]; columns?: string[] };
+type NodeData = { label: string; type: string; metrics?: GN["metrics"]; columns?: string[]; isNavPath?: boolean };
 
 /* ── Transformation-type icon badge (Feature 2) ─────────────────────── */
 // Maps the 10 parser-emitted transformation_type values to a single
@@ -218,7 +218,7 @@ function ColumnStrip({ columns, accent }: { columns: string[]; accent: string })
 /* ---- Custom nodes for the lineage subgraph ---- */
 function UpstreamNode({ data }: { data: NodeData }) {
   return (
-    <div style={{ background: "#FEF2F2", border: "2px solid #DC2626", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
+    <div style={{ background: "#FEF2F2", border: `2px solid ${data.isNavPath ? "#7C3AED" : "#DC2626"}`, borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer", boxShadow: data.isNavPath ? "0 0 0 3px #DDD6FE" : undefined }}>
       <Handle type="target" position={Position.Top} style={{ background: "#DC2626" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#DC2626" }} />
       <div style={{ fontSize: 9, color: "#DC2626", fontWeight: 600, letterSpacing: "0.03em" }}>SOURCE{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
@@ -231,7 +231,7 @@ function UpstreamNode({ data }: { data: NodeData }) {
 
 function CenterNode({ data }: { data: NodeData }) {
   return (
-    <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: "0 4px 12px rgba(37,99,235,0.2)", cursor: "default" }}>
+    <div style={{ background: "#EFF6FF", border: "3px solid #2563EB", borderRadius: 12, padding: "10px 14px", width: NODE_W, boxShadow: data.isNavPath ? "0 4px 12px rgba(37,99,235,0.2), 0 0 0 3px #DDD6FE" : "0 4px 12px rgba(37,99,235,0.2)", cursor: "default" }}>
       <Handle type="target" position={Position.Top} style={{ background: "#2563EB" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#2563EB" }} />
       <div style={{ fontSize: 9, color: "#2563EB", fontWeight: 600 }}>SELECTED{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
@@ -244,7 +244,7 @@ function CenterNode({ data }: { data: NodeData }) {
 
 function DownstreamNode({ data }: { data: NodeData }) {
   return (
-    <div style={{ background: "#F0FDF4", border: "2px solid #16A34A", borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer" }}>
+    <div style={{ background: "#F0FDF4", border: `2px solid ${data.isNavPath ? "#7C3AED" : "#16A34A"}`, borderRadius: 10, padding: "8px 12px", width: NODE_W, cursor: "pointer", boxShadow: data.isNavPath ? "0 0 0 3px #DDD6FE" : undefined }}>
       <Handle type="target" position={Position.Top} style={{ background: "#16A34A" }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#16A34A" }} />
       <div style={{ fontSize: 9, color: "#16A34A", fontWeight: 600, letterSpacing: "0.03em" }}>CONSUMER{data.type && data.type !== "UNKNOWN" ? ` · ${data.type}` : ""}</div>
@@ -421,6 +421,11 @@ function LineagePage() {
   // Which column card has its "Indirect impacts" section expanded.
   // null = all collapsed; string = column_name of the expanded card.
   const [expandedIndirect, setExpandedIndirect] = useState<string | null>(null);
+
+  // Col-lineage navigation: stack of tableKeys visited before current (oldest first),
+  // and the column name to highlight in the current table's panel.
+  const [colNavStack, setColNavStack] = useState<string[]>([]);
+  const [colNavHighlight, setColNavHighlight] = useState<string | null>(null);
 
   // Column lineage graph overlay — toggle + map over ALL visible nodes.
   const [showColumnLineage, setShowColumnLineage] = useState(false);
@@ -679,10 +684,17 @@ function LineagePage() {
     const rfEdges: Edge[] = [];
     const added = new Set<string>();
 
+    // Tables in the nav breadcrumb trail get a purple outline in the graph.
+    const navPathKeys = new Set(colNavStack.map(k => k.toUpperCase()));
+
     const pushNode = (id: string, type: "upstream" | "center" | "downstream") => {
       const n = nodeMap.get(id);
       if (!n || added.has(id)) return;
       added.add(id);
+      const objKey = (n.object_name.includes(".")
+        ? n.object_name
+        : `${n.schema_name ?? ""}.${n.object_name}`
+      ).toUpperCase();
       rfNodes.push({
         id,
         type,
@@ -690,6 +702,7 @@ function LineagePage() {
           label: n.object_name.split(".").pop() ?? n.object_name,
           type: n.object_type,
           metrics: n.metrics,
+          isNavPath: navPathKeys.size > 0 && navPathKeys.has(objKey),
         },
         position: { x: 0, y: 0 },
       });
@@ -845,7 +858,7 @@ function LineagePage() {
       selectedNodeData: selectedNode,
       isSelfReferencing: selfLoopNodeIds.has(String(rootId)),
     };
-  }, [focusData, selectedObject, showColumnLineage, columnLineageMap]);
+  }, [focusData, selectedObject, showColumnLineage, columnLineageMap, colNavStack]);
 
   // If the user ran an Impact analysis earlier, cachedImpactResults tells us
   // whether the selected object was part of that diff — used to show the
@@ -861,6 +874,28 @@ function LineagePage() {
   const focusOn = useCallback((name: string) => {
     setSelectedObject(name);
     setRedirectedFromColumn(null);
+    setColNavStack([]);
+    setColNavHighlight(null);
+  }, []);
+
+  // Navigate to a specific column in another table, building a breadcrumb trail.
+  const navigateToColumn = useCallback((tableKey: string, columnName: string) => {
+    setColNavStack(prev => [...prev, selectedObject]);
+    setSelectedObject(tableKey);
+    setRedirectedFromColumn(null);
+    setColNavHighlight(columnName);
+  }, [selectedObject]);
+
+  // Pop one level from the nav stack (back button).
+  const colNavBack = useCallback(() => {
+    setColNavStack(prev => {
+      if (prev.length === 0) return prev;
+      const prevTable = prev[prev.length - 1];
+      setSelectedObject(prevTable);
+      setRedirectedFromColumn(null);
+      setColNavHighlight(null);
+      return prev.slice(0, -1);
+    });
   }, []);
 
   // Click-handler for nodes IN THE GRAPH diagram: re-focus the lineage on
@@ -1535,6 +1570,43 @@ function LineagePage() {
                 </div>
               )}
 
+              {/* Navigation breadcrumb — shown only when in traversal mode */}
+              {colNavStack.length > 0 && (
+                <div className="px-4 py-1.5 bg-violet-50 border-b border-violet-100 flex items-center gap-1 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={colNavBack}
+                    className="shrink-0 flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-900 font-semibold mr-2"
+                  >
+                    <ArrowRight size={10} className="rotate-180" />
+                    Back
+                  </button>
+                  {colNavStack.map((tableKey, i) => (
+                    <span key={i} className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        className="text-[10px] font-mono text-violet-500 hover:text-violet-800 hover:underline"
+                        onClick={() => {
+                          setColNavStack(colNavStack.slice(0, i));
+                          setSelectedObject(tableKey);
+                          setRedirectedFromColumn(null);
+                          setColNavHighlight(null);
+                        }}
+                      >
+                        {tableKey.split(".").pop()}
+                      </button>
+                      <ArrowRight size={8} className="text-violet-300 shrink-0" />
+                    </span>
+                  ))}
+                  <span className="text-[10px] font-mono text-violet-900 font-semibold shrink-0">
+                    {selectedObject.split(".").pop()}
+                    {colNavHighlight && (
+                      <span className="ml-1 text-violet-500 font-normal">· {colNavHighlight}</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
               {/* Body */}
               {colLineageLoading ? (
                 <div className="px-4 py-6 text-xs text-td-gray-dark">Loading column mappings…</div>
@@ -1548,9 +1620,9 @@ function LineagePage() {
                     if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
                     return a.column_name.localeCompare(b.column_name);
                   }).map((col) => (
-                    <div key={col.column_name} className="rounded-lg border border-gray-200 overflow-hidden text-xs shadow-sm">
+                    <div key={col.column_name} className={`rounded-lg border overflow-hidden text-xs shadow-sm${colNavHighlight && col.column_name.toUpperCase() === colNavHighlight.toUpperCase() ? " border-violet-400 ring-2 ring-violet-300" : " border-gray-200"}`}>
                       {/* Column name pill */}
-                      <div className="bg-gray-800 px-3 py-2">
+                      <div className={`px-3 py-2${colNavHighlight && col.column_name.toUpperCase() === colNavHighlight.toUpperCase() ? " bg-violet-700" : " bg-gray-800"}`}>
                         <span className="font-mono font-bold text-white text-[11px] truncate block" title={col.column_name}>
                           {col.column_name}
                         </span>
@@ -1563,7 +1635,15 @@ function LineagePage() {
                           <div className="space-y-1">
                             {col.upstream.map((e, i) => (
                               <div key={i} className="flex items-center justify-between gap-1.5">
-                                <span className="font-mono text-[10px] text-red-900 truncate" title={e.column_key}>
+                                <button
+                                  type="button"
+                                  title={`Navigate to ${e.table_key}`}
+                                  onClick={() => navigateToColumn(e.table_key, e.column_name)}
+                                  className="text-violet-400 hover:text-violet-700 transition-colors shrink-0"
+                                >
+                                  <ArrowRight size={10} className="rotate-180" />
+                                </button>
+                                <span className="font-mono text-[10px] text-red-900 truncate flex-1" title={e.column_key}>
                                   <span className="text-red-400">{e.table_key.split(".").pop()}.</span>{e.column_name}
                                 </span>
                                 <TransformBadge
@@ -1583,13 +1663,23 @@ function LineagePage() {
                           <div className="space-y-1">
                             {col.downstream.map((e, i) => (
                               <div key={i} className="flex items-center justify-between gap-1.5">
-                                <span className="font-mono text-[10px] text-green-900 truncate" title={e.column_key}>
+                                <span className="font-mono text-[10px] text-green-900 truncate flex-1" title={e.column_key}>
                                   <span className="text-green-500">{e.table_key.split(".").pop()}.</span>{e.column_name}
                                 </span>
-                                <TransformBadge
-                                  type={e.transformation_type}
-                                  className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5"
-                                />
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <TransformBadge
+                                    type={e.transformation_type}
+                                    className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5"
+                                  />
+                                  <button
+                                    type="button"
+                                    title={`Navigate to ${e.table_key}`}
+                                    onClick={() => navigateToColumn(e.table_key, e.column_name)}
+                                    className="text-violet-400 hover:text-violet-700 transition-colors"
+                                  >
+                                    <ArrowRight size={10} />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>

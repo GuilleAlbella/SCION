@@ -8,6 +8,21 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.05.00 (2026-07-20) — feat(lineage): Col-lineage navigation — breadcrumb traversal + graph path highlight (§2.11)
+
+**Column-level lineage navigation (Phase 2 §2.11)**
+
+- **Backend traverse endpoint** — `GET /api/v1/lineage/columns/traverse?snapshot_id=N&column_key=X&direction=downstream|upstream&max_depth=10`: BFS desde una columna específica siguiendo `attribute_lineage`, omitiendo sentinelas `NOT APPLICABLE`. Devuelve `ColumnTraverseResponse` con `nodes[]` (depth, path, transformation_type, tier).
+- **Frontend API** — `traverseColumnLineage()` en `frontend/src/lib/api/graph.ts`; tipos `TraverseNode` y `ColumnTraverseResponse` en `types.ts`.
+- **Navigation state** — `colNavStack: string[]` (tableKeys visitados, más antiguo primero) y `colNavHighlight: string | null` (columna a resaltar en el panel actual).
+- **Navigate buttons** — cada fila de Sources y Feeds into en el panel de columnas tiene un botón `←/→` (púrpura) que llama a `navigateToColumn(tableKey, columnName)`: empuja el objeto actual al stack y salta al nuevo.
+- **Breadcrumb strip** — aparece cuando `colNavStack.length > 0`; muestra la ruta de navegación con botones clicables por paso y un "Back" para retroceder. El nodo actual muestra la columna que se está siguiendo.
+- **Column card highlight** — la tarjeta cuyo `column_name` coincide con `colNavHighlight` se resalta en violeta (ring-2 ring-violet-300, cabecera bg-violet-700).
+- **Graph node ring** — nodos de la ruta de navegación en el grafo ReactFlow reciben `isNavPath: true`, que aplica un anillo púrpura (`0 0 0 3px #DDD6FE`) sobre el borde original (rojo/azul/verde).
+- `focusOn()` limpia el nav stack al navegar manualmente desde el grafo o las listas laterales.
+
+---
+
 ### v2.04.00 (2026-07-20) — feat(runtime): Production runtime — systemd units + structured JSON logging (§2.8)
 
 **Production runtime (Phase 2 §2.8)**

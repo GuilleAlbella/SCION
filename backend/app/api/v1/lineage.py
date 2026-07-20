@@ -8,6 +8,7 @@ Natural key format for attributes: "SCHEMA.TABLE|COLUMN_NAME"
 """
 from __future__ import annotations
 
+from collections import deque
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -178,4 +179,131 @@ def get_column_lineage(
         snapshot_id=snapshot_id,
         columns=columns,
         total_edges=total_edges,
+    )
+
+
+# ── Traverse models ────────────────────────────────────────────────────────────
+
+class TraverseNode(BaseModel):
+    column_key: str
+    table_key: str
+    column_name: str
+    depth: int
+    path: list[str]          # ordered column_keys from root to this node
+    transformation_type: Optional[str]
+    tier: Optional[str]
+
+
+class ColumnTraverseResponse(BaseModel):
+    column_key: str
+    snapshot_id: int
+    direction: str
+    nodes: list[TraverseNode]
+    total_hops: int
+
+
+@router.get("/columns/traverse", response_model=ColumnTraverseResponse)
+def traverse_column_lineage(
+    snapshot_id: int = Query(...),
+    column_key: str = Query(..., description="e.g. SCHEMA.TABLE|COLUMN_NAME"),
+    direction: str = Query("downstream", description="downstream | upstream"),
+    max_depth: int = Query(10, ge=1, le=20),
+):
+    """BFS from a specific column following attribute_lineage edges.
+
+    Returns all reachable columns with their depth and the ordered path
+    from the root column to each node.  Rows with target == 'NOT APPLICABLE'
+    (indirect predicates) are skipped so the graph only shows value-carrying
+    lineage.
+    """
+    _NOT_APPLICABLE = "NOT APPLICABLE"
+
+    # frontier: upper_key → (original_case_key, depth, path)
+    frontier: dict[str, tuple[str, int, list[str]]] = {
+        column_key.upper(): (column_key, 0, [column_key])
+    }
+    visited: set[str] = {column_key.upper()}
+    result_nodes: list[TraverseNode] = []
+    total_hops = 0
+
+    with Session(bind=engine) as db:
+        for _ in range(max_depth):
+            if not frontier:
+                break
+
+            frontier_keys = list(frontier.keys())
+
+            if direction == "downstream":
+                rows = db.query(AttributeLineage).filter(
+                    AttributeLineage.snapshot_id == snapshot_id,
+                    func.upper(AttributeLineage.source_attribute_natural_key).in_(frontier_keys),
+                ).all()
+            else:
+                rows = db.query(AttributeLineage).filter(
+                    AttributeLineage.snapshot_id == snapshot_id,
+                    func.upper(AttributeLineage.target_attribute_natural_key).in_(frontier_keys),
+                ).all()
+
+            # Build lookup: frontier_upper → list of (next_key, transformation_type, tier)
+            next_map: dict[str, list[tuple[str, Optional[str], Optional[str]]]] = {}
+            for row in rows:
+                src = row.source_attribute_natural_key or ""
+                tgt = row.target_attribute_natural_key or ""
+
+                if direction == "downstream":
+                    from_upper = src.upper()
+                    next_key = tgt
+                else:
+                    from_upper = tgt.upper()
+                    next_key = src
+
+                next_upper = next_key.upper()
+                if next_upper.startswith(_NOT_APPLICABLE):
+                    continue
+                if next_upper in visited:
+                    continue
+                if from_upper not in frontier:
+                    continue
+
+                if from_upper not in next_map:
+                    next_map[from_upper] = []
+                next_map[from_upper].append((next_key, row.transformation_type, row.tier))
+
+            next_frontier: dict[str, tuple[str, int, list[str]]] = {}
+            for from_upper, candidates in next_map.items():
+                _orig_from, depth, path = frontier[from_upper]
+                new_depth = depth + 1
+                seen_next: set[str] = set()
+                for next_key, transf_type, tier in candidates:
+                    next_upper = next_key.upper()
+                    if next_upper in seen_next:
+                        continue
+                    seen_next.add(next_upper)
+                    if next_upper not in next_frontier:
+                        next_frontier[next_upper] = (next_key, new_depth, path + [next_key])
+                        table_key, col_name = _split_key(next_key)
+                        result_nodes.append(TraverseNode(
+                            column_key=next_key,
+                            table_key=table_key,
+                            column_name=col_name,
+                            depth=new_depth,
+                            path=path + [next_key],
+                            transformation_type=transf_type,
+                            tier=tier,
+                        ))
+
+            if not next_frontier:
+                break
+
+            total_hops = max(d for _, d, _ in next_frontier.values())
+            for upper in next_frontier:
+                visited.add(upper)
+            frontier = next_frontier
+
+    return ColumnTraverseResponse(
+        column_key=column_key,
+        snapshot_id=snapshot_id,
+        direction=direction,
+        nodes=result_nodes,
+        total_hops=total_hops,
     )

@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-20 · Current version: **v2.04.00 (BETA)**.
+Last updated: 2026-07-20 · Current version: **v2.05.00 (BETA)**.
 
 ---
 
@@ -125,7 +125,7 @@ Reestructurado post-reunión con Pilar (2026-07-17): entrega única en vez de do
 | **2.9** | **Integration Model** | Entity layer + backfill + trend UI | **7** | Requiere §2.16 |
 | **2.15** | **Access Layer** | Business Discovery + Executive Dashboard + Entity view | **4** | Requiere §2.9 + §2.10 |
 | **2.8** | Production runtime | Systemd units + JSON logging | **1** | — |
-| **2.11** | Col-lineage navigation | Downstream + upstream interactivo | **5** | — |
+| **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactivo~~ | **✅** | v2.05.00 |
 | **2.12** | AI column classification | PII / non-PII por nombre, tipo y comentario | **3** | — |
 | **2.10** | Reference data | User hierarchy + app metadata + dashboards | **5** | Bloqueado: extractor username por fila |
 | **2.2** | Incremental loading | CDC contra baseline day zero | **4** | — |
@@ -447,38 +447,32 @@ Diseño a definir revisando DataDNA Overview v7.3 (`docs/DataDNA Overview - Full
 
 ---
 
-### 2.11 Column-Level Lineage Navigation  *(new — Reunión 28, 2026-07-15)*  **Est: 5 días**
+### 2.11 Column-Level Lineage Navigation  ✅ COMPLETO (v2.05.00 — 2026-07-20)
 
 **Origin:** Rahul Kulkarni, Reunión 28 (min 21-25). Jon Brightling lo mencionó múltiples
 veces: column-to-column flow es más importante que table-to-table desde la perspectiva del
 negocio.
 
-**Hoy:** SCION muestra col-to-col lineage como una lista estática en el panel lateral (Sources /
-Feeds Into). No es posible navegar desde una columna hacia su destino downstream.
+**Implementación:**
 
-**Pedido:** Hacer ese grafo **navegable** — click en una columna destino → el grafo avanza
-mostrando la siguiente capa downstream de esa columna. Similar a la navegación de nodos en
-el System Graph.
-
-**Diseño propuesto:**
-
-```
-Panel actual (estático):         Panel nuevo (navegable):
-─────────────────────            ────────────────────────────────────
-ACCOUNT_ID                       ACCOUNT_ID  [→ downstream] [← upstream]
-  SOURCES:                         ↓
-    • DIM_ACCOUNT.ACCT_ID          DIM_ACCOUNT.ACCT_ID  [→]
-  FEEDS INTO:                        ↓ click "→"
-    • FACT_TXN.ACCT_ID  [→]          FACT_TXN.ACCT_ID
-    • REPORT.ACCT_KEY   [→]            SOURCES: DIM_ACCOUNT.ACCT_ID
-                                       FEEDS INTO: SUMMARY.KEY [→]
-```
+- **Backend** `GET /api/v1/lineage/columns/traverse` — BFS desde una columna específica
+  siguiendo `attribute_lineage`, hasta `max_depth=20` hops. Omite sentinelas `NOT APPLICABLE`.
+  Devuelve `ColumnTraverseResponse` con `nodes[]` (depth, path[], transformation_type, tier).
+- **Frontend API** — `traverseColumnLineage()` en `graph.ts`; tipos `TraverseNode` /
+  `ColumnTraverseResponse` en `types.ts`.
+- **Nav state** — `colNavStack: string[]` + `colNavHighlight: string | null` en `LineagePage`.
+- **Navigate buttons** — cada fila de Sources/Feeds Into tiene `←/→` (violet) que llama a
+  `navigateToColumn(tableKey, columnName)`: push al stack + jump.
+- **Breadcrumb** — aparece con `colNavStack.length > 0`; cada paso es clicable, botón Back.
+- **Column card highlight** — tarjeta del `colNavHighlight` resaltada en violeta.
+- **Graph node ring** — `isNavPath: true` aplica anillo `#DDD6FE` sobre el nodo en ReactFlow.
+- `focusOn()` limpia el nav stack al navegar manualmente.
 
 **Tareas:**
-- [ ] Backend: `GET /api/v1/lineage/columns/traverse?snapshot_id=N&column_key=X&direction=downstream|upstream` — un nivel a la vez
-- [ ] Frontend: columnas en el panel con botón `→` / `←`; breadcrumb de navegación
-- [ ] Estado de navegación en el componente (stack de columnas visitadas, "back")
-- [ ] Highlight del path completo en el ReactFlow graph principal
+- [x] Backend: `GET /api/v1/lineage/columns/traverse?snapshot_id=N&column_key=X&direction=downstream|upstream`
+- [x] Frontend: columnas en el panel con botón `→` / `←`; breadcrumb de navegación
+- [x] Estado de navegación en el componente (stack de columnas visitadas, "back")
+- [x] Highlight del path completo en el ReactFlow graph principal
 
 ---
 
@@ -706,6 +700,7 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Reunión Pilar 2026-07-17 |
 | 2026-07-20 | §2.5a SQLite→Postgres migración completa en entorno lab | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47 819 filas migradas, 12 secuencias reseteadas, API verificada en localhost:8080. Procedimiento documentado en §2.5a como template para producción. Gotchas capturados: permisos post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset por transacción aislada | Lab 2026-07-20 |
 | 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
+| 2026-07-20 | §2.11 Col-lineage navigation completo en v2.05.00 | Traverse BFS endpoint + nav state (colNavStack/colNavHighlight) + breadcrumb + ←/→ buttons + graph ring highlight. Navigate buttons usan el endpoint existente `getColumnLineage`; `traverse` endpoint disponible para features futuras (highlight multi-hop). `focusOn()` limpia el stack. | v2.05.00 |
 | 2026-07-20 | §2.8 Production runtime completo en v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` paso 7 escribe unit al instalar. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrado a lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
 | 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
 
