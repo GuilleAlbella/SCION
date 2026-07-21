@@ -36,7 +36,7 @@ class StagingTableImport(Base):
     row_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     validation_errors: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()"),
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"),
     )
 
     columns: Mapped[list["StagingColumnImport"]] = relationship(
@@ -68,7 +68,7 @@ class StagingColumnImport(Base):
     row_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     validation_errors: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("now()"),
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"),
     )
 
     staging_table: Mapped["StagingTableImport"] = relationship(back_populates="columns")

@@ -8,6 +8,14 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.09.07 (2026-07-21) — fix(ci): staging model CURRENT_TIMESTAMP for SQLite compatibility
+
+**CI fix**
+
+- **`server_default=text("now()")` falla en SQLite** (`backend/app/db/models/staging.py`): `now()` es una función de PostgreSQL; SQLite no la soporta. Los tests de CI usan SQLite in-memory con `create_all`, lo que causaba `OperationalError: near "(": syntax error` en 3 tests (`test_persist_creates_snapshot_and_skips_reimport`, `test_compute_snapshot_metrics_scales_past_sqlite_param_limit`, `test_compute_snapshot_metrics_empty_snapshot`). Fix: reemplazado por `CURRENT_TIMESTAMP` (SQL estándar, compatible con PostgreSQL y SQLite) en ambas tablas — `StagingTableImport` y `StagingColumnImport`.
+
+---
+
 ### v2.09.06 (2026-07-21) — fix(phase2-audit-final): 3 frontend bugs — Intelligence stale state, Snapshots FileReader error, Snapshots #0
 
 **Phase 2 final audit pass**
