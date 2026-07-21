@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-20 · Current version: **v2.07.00 (BETA)**.
+Last updated: 2026-07-21 · Current version: **v2.09.00 (BETA)**.
 
 ---
 
@@ -128,8 +128,8 @@ Reestructurado post-reunión con Pilar (2026-07-17): entrega única en vez de do
 | **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactivo~~ | **✅** | v2.05.00 |
 | **2.12** | ~~AI column classification~~ | ~~PII / non-PII por nombre, tipo y comentario~~ | **✅** | v2.06.00 |
 | **2.10** | ~~Reference data~~ | ~~User hierarchy + app metadata + dashboards~~ | **✅** | v2.07.00 |
-| **2.2** | Incremental loading | CDC contra baseline day zero | **4** | — |
-| **2.13** | Manifest timestamps | Timestamps del extractor en snapshot screen | **1** | — |
+| **2.2** | ~~Incremental loading~~ | ~~CDC contra baseline day zero~~ | **✅** | v2.08.00 |
+| **2.13** | ~~Manifest timestamps~~ | ~~Timestamps del extractor en snapshot screen~~ | **✅** | v2.09.00 |
 | **2.4** | DDL timestamp merge | Mantener versión más reciente en ingest | **1** | — |
 | **2.14** | Buffer (contingency) | Reservado para imprevistos | **5** | — |
 | | **TOTAL BRUTO** | | **49** | |
@@ -186,11 +186,11 @@ Ecosystem Decoded is an existing but dormant Teradata service that analyzes CPU 
 - ED data format / availability not yet confirmed — Rahul studying with a second person.
 - PII propagation via lineage requires column-level lineage to be stable (just shipped v1.21.23).
 
-### 2.2 Incremental snapshot handling *(confirmed Reunión 18)*
+### 2.2 Incremental snapshot handling *(confirmed Reunión 18)* ✅ COMPLETO (v2.08.00, 2026-07-21)
 
-- [ ] SCION must compare incremental batches against a "day zero" baseline (not the previous incremental).
-- [ ] Track cumulative object count across batches.
-- [ ] On full reset (gap in data), create a new day zero and reset baseline.
+- [x] SCION must compare incremental batches against a "day zero" baseline (not the previous incremental).
+- [x] Track cumulative object count across batches.
+- [x] On full reset (gap in data), create a new day zero and reset baseline.
 
 ### 2.3 Dict view-definition parsing *(confirmed Reunión 18 — parser team)*
 
@@ -487,7 +487,7 @@ todas las columnas downstream heredan el tag. Rahul lo mencionó pero lo marcó 
 
 ---
 
-### 2.13 Manifest-Derived Timestamps  *(confirmado Reunión 28)*  **Est: 1 día**
+### 2.13 Manifest-Derived Timestamps  *(confirmado Reunión 28)*  **Est: 1 día** ✅ COMPLETO (v2.09.00, 2026-07-21)
 
 **Origin:** Parked desde releases previos, confirmado como in-scope en Reunión 28.
 
@@ -496,9 +496,9 @@ vienen del momento de ingest en SCION, no del manifest que acompaña a los archi
 El manifest tiene el timestamp de cuando el extractor corrió en el cliente, que es el dato
 relevante para el negocio.
 
-- [ ] Leer campo de timestamp del manifest (formato a confirmar con Rahul — probablemente header del `.dat` o archivo separado)
-- [ ] Persistir `manifest_timestamp` en tabla `snapshot` (Alembic migration)
-- [ ] UI: Snapshots page muestra "Extracted: {manifest_timestamp}" en vez de "Imported: {created_at}"
+- [x] Leer campo de timestamp del manifest — el prefijo UTC de `extract_run_id` (`YYYYMMDDTHHMMSSz`) ya contiene la hora del extractor; no requiere archivo separado.
+- [x] Persistir `extract_timestamp` en tabla `snapshot` (migration `a7b8c9d0e1f2`).
+- [x] UI: Snapshots page muestra "Extracted: {extract_timestamp}" con fallback a "ingest time" para snapshots sin `extract_run_id`.
 
 ---
 
