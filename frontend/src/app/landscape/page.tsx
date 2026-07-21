@@ -100,6 +100,17 @@ export default function LandscapePage() {
       {loading && <LoadingSpinner />}
       {error && <ErrorAlert message={error} />}
 
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
+        <ShieldAlert size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Landscape is the business-owner view of the warehouse: every object scored by criticality,
+          ranked by risk, and surfaced as actionable intelligence. Criticality scores are derived from
+          PDCR usage frequency, query-count, and downstream impact depth — the higher the score, the
+          more a breakage in that object would affect the business. Use this page to spot which objects
+          need attention before a diff or deployment, and to track the overall risk posture over time.
+        </p>
+      </div>
+
       {!loading && !error && summary && overview && (
         <div className="space-y-6">
 

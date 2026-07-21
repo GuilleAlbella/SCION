@@ -220,6 +220,17 @@ export default function ReferencePage() {
         </p>
       </div>
 
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Reference Data bridges the gap between raw technical objects and the business teams that own them.
+          Upload your organisation hierarchy (users → teams → departments) and application catalogue once,
+          and SCION will automatically enrich every table, view and schema with ownership context — enabling
+          risk scoring by business domain, filtering by team, and impact analysis scoped to a department.
+          Schema and table mappings let you assign ownership at any granularity.
+        </p>
+      </div>
+
       {/* Load error — shown when the initial fetch fails (e.g. backend starting up) */}
       {loadError && (
         <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
