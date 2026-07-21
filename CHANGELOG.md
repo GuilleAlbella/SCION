@@ -8,6 +8,31 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.06.00 (2026-07-20) — feat(intelligence): AI Column PII Classification — badges, filter, classify endpoint (§2.12)
+
+**AI Column Classification — PII tagging (Phase 2 §2.12)**
+
+- **Alembic migration** — añade 3 columnas a `column_snapshot`: `pii_label TEXT`, `pii_confidence REAL`, `pii_classified_at TIMESTAMPTZ`. Revisión: `d4e5f6a7b8c9`.
+- **ORM** — `ColumnSnapshot` actualizado con los 3 campos mapeados (`backend/app/db/models/column_snapshot.py`).
+- **TAISA prompts** — `PII_SYSTEM_PROMPT` + `COLUMN_PII_BATCH_PROMPT` en `taisa_prompts.py`; taxonomía: `NAME | EMAIL | PHONE | SSN | DOB | ADDRESS | FINANCIAL | ID_NUMBER | NONE`.
+- **TaisaClient** — `classify_column_pii_batch()`: en modo `mock` usa heurísticas de keyword matching (instant, cero costo LLM); en modo `real` batchea 20 columnas por llamada LLM con fallback a heurística. `PiiClassificationResult` dataclass.
+- **Backend endpoints** (`backend/app/api/v1/columns.py`):
+  - `GET /api/v1/columns/pii?snapshot_id=N&object=SCHEMA.TABLE` — devuelve `PiiResponse` con label/confidence/classified_at por columna.
+  - `POST /api/v1/columns/classify?snapshot_id=N&object=SCHEMA.TABLE&force=false&limit=500` — clasifica columnas (skip si ya tienen label salvo `force=true`); devuelve `ClassifyResponse(classified, skipped, errors)`.
+- **Frontend types** — `PiiEntry`, `PiiResponse`, `ClassifyColumnsResponse` en `types.ts`; `getColumnPii()`, `classifyColumns()` en `graph.ts`.
+- **Lineage page UI** — panel Column-Level Lineage:
+  - Badge naranja `bg-orange-500` con el label PII (`NAME`, `ID_NUMBER`, etc.) en la cabecera de cada card clasificado.
+  - Badge gris `bg-gray-600` "non-PII" para columnas `NONE`.
+  - Borde naranja `border-orange-300` en cards PII.
+  - Toggle "🔒 PII only" para filtrar el grid.
+  - Botón "Classify PII" / "Re-classify" / "Classifying…" con auto-refresh tras clasificar.
+  - `useEffect` por `[snapshotId, selectedObject]` que carga el PII map al seleccionar un objeto.
+- **Bug fix** — `graph.py` `_serialize_graph`: `node_metadata` se almacenaba como JSON string; añadido guard `json.loads()` para evitar `ResponseValidationError` en `/graph/focus`.
+- **Dev proxy** — `next.config.ts` añade `rewrites()` para `/api/v1/*` → `http://localhost:8080/api/v1/*` en dev (evita CORS sin cambiar el servidor de producción).
+- **Turbopack fix** — `renderColumnCard` extraído como función fuera del JSX para evitar el parse error de Turbopack con block arrow functions dentro de expresiones JSX.
+
+---
+
 ### v2.05.00 (2026-07-20) — feat(lineage): Col-lineage navigation — breadcrumb traversal + graph path highlight (§2.11)
 
 **Column-level lineage navigation (Phase 2 §2.11)**

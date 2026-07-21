@@ -46,6 +46,37 @@ Context:
 
 Respond with JSON containing: classification, risk_level, recommendations, explanation."""
 
+# ── §2.12 PII Classification prompts ─────────────────────────────────────────
+
+PII_SYSTEM_PROMPT = (
+    "You are a data privacy analyst. Classify database columns as PII "
+    "(personally identifiable information) based on their name and data type.\n\n"
+    "You MUST respond ONLY with valid JSON (no markdown, no explanation outside JSON).\n"
+    "The JSON must have exactly this structure:\n"
+    '  {"results": {"COLUMN_NAME": {"pii_label": "...", "confidence": 0.0}, ...}}\n\n'
+    "Valid pii_label values:\n"
+    "  NAME       — full name, first name, last name, display name\n"
+    "  EMAIL      — email address\n"
+    "  PHONE      — phone number, mobile, fax\n"
+    "  SSN        — social security number, national identity number, tax file number\n"
+    "  DOB        — date of birth, birthdate, age field\n"
+    "  ADDRESS    — street address, city, state, zip/postal code\n"
+    "  FINANCIAL  — credit card, bank account number, salary, income, balance\n"
+    "  ID_NUMBER  — customer ID, user ID, employee ID, patient ID that identifies a person\n"
+    "  NONE       — not PII; technical or business metadata\n"
+)
+
+COLUMN_PII_BATCH_PROMPT = """Classify these database columns for PII:
+
+Table: {schema_name}.{table_name}
+
+Columns (name · data_type):
+{columns_list}
+
+Respond ONLY with JSON: {{"results": {{"COLUMN_NAME": {{"pii_label": "...", "confidence": 0.0}}, ...}}}}"""
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 BATCH_ANALYSIS_PROMPT = """Analyze ALL these database structural changes detected between two snapshots:
 
 Changes ({change_count} total):

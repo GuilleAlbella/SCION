@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.router import API_V1_PREFIX
 from app.api.dependencies import require_api_key
-from app.api.v1 import alerts, changes, control, ddl, dict_import, diff, entity, export, graph, health, impact, intelligence, landscape, lineage, metrics, notifications, objects, parser_import, reasoning, report, schema_tree, search, share_import, simulation, snapshots, system, timeline, usage
+from app.api.v1 import alerts, changes, columns, control, ddl, dict_import, diff, entity, export, graph, health, impact, intelligence, landscape, lineage, metrics, notifications, objects, parser_import, reasoning, report, schema_tree, search, share_import, simulation, snapshots, system, timeline, usage
 
 
 v1_router = APIRouter(prefix=API_V1_PREFIX)
@@ -55,5 +55,7 @@ v1_router.include_router(system.router)
 # §2.9 Integration Model + §2.15 Access Layer (Phase 2, v2.04.00)
 v1_router.include_router(entity.router, dependencies=[Depends(require_api_key)])
 v1_router.include_router(landscape.router, dependencies=[Depends(require_api_key)])
+# §2.12 AI Column Classification (Phase 2, v2.06.00)
+v1_router.include_router(columns.router, dependencies=[Depends(require_api_key)])
 
 __all__ = ["v1_router"]

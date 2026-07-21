@@ -48,12 +48,14 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { getColumnLineage, getFocusedGraph } from "@/lib/api/graph";
+import { classifyColumns, getColumnLineage, getColumnPii, getFocusedGraph } from "@/lib/api/graph";
 import type {
+  ColumnLineageEntry,
   ColumnLineageResponse,
   FocusedGraphResponse,
   GraphNode as GN,
   IndirectEdge,
+  PiiEntry,
 } from "@/lib/api/types";
 import { changeTypeLabel } from "@/lib/terminology";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -427,6 +429,12 @@ function LineagePage() {
   const [colNavStack, setColNavStack] = useState<string[]>([]);
   const [colNavHighlight, setColNavHighlight] = useState<string | null>(null);
 
+  // §2.12 PII classification — map keyed by UPPER(column_name)
+  const [piiMap, setPiiMap] = useState<Map<string, PiiEntry>>(new Map());
+  const [piiLoading, setPiiLoading] = useState(false);
+  const [showPiiOnly, setShowPiiOnly] = useState(false);
+  const [classifying, setClassifying] = useState(false);
+
   // Column lineage graph overlay — toggle + map over ALL visible nodes.
   const [showColumnLineage, setShowColumnLineage] = useState(false);
   const [columnLineageMap, setColumnLineageMap] = useState<Map<string, ColumnLineageResponse>>(new Map());
@@ -570,6 +578,26 @@ function LineagePage() {
       .then((data) => { if (!cancelled) setColumnLineage(data); })
       .catch(() => { if (!cancelled) setColumnLineage(null); })
       .finally(() => { if (!cancelled) setColLineageLoading(false); });
+    return () => { cancelled = true; };
+  }, [snapshotId, selectedObject]);
+
+  // §2.12 Fetch cached PII data whenever the selected object changes.
+  useEffect(() => {
+    if (!snapshotId || !selectedObject) {
+      setPiiMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    setPiiLoading(true);
+    getColumnPii(snapshotId, selectedObject)
+      .then((data) => {
+        if (cancelled) return;
+        const m = new Map<string, PiiEntry>();
+        for (const e of data.columns) m.set(e.column_name.toUpperCase(), e);
+        setPiiMap(m);
+      })
+      .catch(() => { if (!cancelled) setPiiMap(new Map()); })
+      .finally(() => { if (!cancelled) setPiiLoading(false); });
     return () => { cancelled = true; };
   }, [snapshotId, selectedObject]);
 
@@ -876,6 +904,7 @@ function LineagePage() {
     setRedirectedFromColumn(null);
     setColNavStack([]);
     setColNavHighlight(null);
+    setShowPiiOnly(false);
   }, []);
 
   // Navigate to a specific column in another table, building a breadcrumb trail.
@@ -1017,6 +1046,106 @@ function LineagePage() {
       : clickedEdge.srcObjKey;
     return other.split(".").pop() ?? other;
   }, [clickedEdge, selectedObject]);
+
+  const renderColumnCard = (col: ColumnLineageEntry) => {
+    const piiEntry = piiMap.get(col.column_name.toUpperCase());
+    const isPii = piiEntry?.pii_label != null && piiEntry.pii_label !== "NONE";
+    const isNavHighlight = !!(colNavHighlight && col.column_name.toUpperCase() === colNavHighlight.toUpperCase());
+    return (
+      <div key={col.column_name} className={`rounded-lg border overflow-hidden text-xs shadow-sm${isNavHighlight ? " border-violet-400 ring-2 ring-violet-300" : isPii ? " border-orange-300" : " border-gray-200"}`}>
+        {/* Column name pill */}
+        <div className={`px-3 py-2 flex items-center gap-2${isNavHighlight ? " bg-violet-700" : " bg-gray-800"}`}>
+          <span className="font-mono font-bold text-white text-[11px] truncate flex-1" title={col.column_name}>
+            {col.column_name}
+          </span>
+          {piiEntry?.pii_label && piiEntry.pii_label !== "NONE" && (
+            <span
+              title={`PII: ${piiEntry.pii_label} (${((piiEntry.pii_confidence ?? 0) * 100).toFixed(0)}% confidence)`}
+              className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-500 text-white uppercase tracking-wide"
+            >
+              {piiEntry.pii_label}
+            </span>
+          )}
+          {piiEntry?.pii_label === "NONE" && (
+            <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-gray-600 text-gray-300 uppercase tracking-wide">
+              non-PII
+            </span>
+          )}
+        </div>
+
+        {/* Sources (upstream → this column) */}
+        {col.upstream.length > 0 && (
+          <div className="bg-red-50 px-3 py-2 border-b border-red-100">
+            <div className="text-[9px] font-bold text-red-400 uppercase tracking-widest mb-1.5">Sources</div>
+            <div className="space-y-1">
+              {col.upstream.map((e, i) => (
+                <div key={i} className="flex items-center justify-between gap-1.5">
+                  <button
+                    type="button"
+                    title={`Navigate to ${e.table_key}`}
+                    onClick={() => navigateToColumn(e.table_key, e.column_name)}
+                    className="text-violet-400 hover:text-violet-700 transition-colors shrink-0"
+                  >
+                    <ArrowRight size={10} className="rotate-180" />
+                  </button>
+                  <span className="font-mono text-[10px] text-red-900 truncate flex-1" title={e.column_key}>
+                    <span className="text-red-400">{e.table_key.split(".").pop()}.</span>{e.column_name}
+                  </span>
+                  <TransformBadge
+                    type={e.transformation_type}
+                    className="text-[10px] bg-red-100 text-red-600 rounded px-1 py-0.5"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Feeds into (this column → downstream) */}
+        {col.downstream.length > 0 && (
+          <div className={`bg-green-50 px-3 py-2${col.indirect?.length > 0 ? " border-b border-green-100" : ""}`}>
+            <div className="text-[9px] font-bold text-green-500 uppercase tracking-widest mb-1.5">Feeds into</div>
+            <div className="space-y-1">
+              {col.downstream.map((e, i) => (
+                <div key={i} className="flex items-center justify-between gap-1.5">
+                  <span className="font-mono text-[10px] text-green-900 truncate flex-1" title={e.column_key}>
+                    <span className="text-green-500">{e.table_key.split(".").pop()}.</span>{e.column_name}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <TransformBadge
+                      type={e.transformation_type}
+                      className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5"
+                    />
+                    <button
+                      type="button"
+                      title={`Navigate to ${e.table_key}`}
+                      onClick={() => navigateToColumn(e.table_key, e.column_name)}
+                      className="text-violet-400 hover:text-violet-700 transition-colors"
+                    >
+                      <ArrowRight size={10} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Indirect impacts (filter / join conditions, no target column) */}
+        {col.indirect?.length > 0 && (
+          <IndirectSection
+            indirect={col.indirect}
+            expanded={expandedIndirect === col.column_name}
+            onToggle={() =>
+              setExpandedIndirect((prev) =>
+                prev === col.column_name ? null : col.column_name
+              )
+            }
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <PageShell title="Data Lineage" subtitle="Where does data come from and where does it go?">
@@ -1524,7 +1653,7 @@ function LineagePage() {
             <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               {/* Header */}
               <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <GitBranch size={14} className="text-purple-600" />
                   <h3 className="text-sm font-semibold text-gray-700">Column-Level Lineage</h3>
                   {!colLineageLoading && columnLineage && (
@@ -1532,14 +1661,53 @@ function LineagePage() {
                       <span className="text-[10px] bg-purple-100 text-purple-700 rounded px-1.5 py-0.5 font-medium">
                         {columnLineage.total_edges} edges · Tier 1/2
                       </span>
-                      <span className="ml-auto text-[10px] text-td-gray-dark">
+                    </>
+                  )}
+                  {/* PII controls */}
+                  <div className="ml-auto flex items-center gap-2">
+                    {piiMap.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPiiOnly((v) => !v)}
+                        className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
+                          showPiiOnly
+                            ? "bg-orange-500 border-orange-500 text-white"
+                            : "bg-white border-orange-300 text-orange-600 hover:bg-orange-50"
+                        }`}
+                      >
+                        🔒 PII only
+                      </button>
+                    )}
+                    {snapshotId && (
+                      <button
+                        type="button"
+                        disabled={classifying || piiLoading}
+                        onClick={() => {
+                          setClassifying(true);
+                          classifyColumns(snapshotId, selectedObject, false, 500)
+                            .then(() => getColumnPii(snapshotId, selectedObject))
+                            .then((data) => {
+                              const m = new Map<string, PiiEntry>();
+                              for (const e of data.columns) m.set(e.column_name.toUpperCase(), e);
+                              setPiiMap(m);
+                            })
+                            .catch(() => {})
+                            .finally(() => setClassifying(false));
+                        }}
+                        className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded border border-blue-300 text-blue-600 bg-white hover:bg-blue-50 transition-colors disabled:opacity-50"
+                      >
+                        {classifying ? "Classifying…" : piiMap.size > 0 ? "Re-classify" : "Classify PII"}
+                      </button>
+                    )}
+                    {!colLineageLoading && columnLineage && (
+                      <span className="text-[10px] text-td-gray-dark">
                         {filterIsActive
                           ? <>{filteredColLineage?.columns.length ?? 0} <span className="text-purple-600 font-medium">filtered</span> / {columnLineage.columns.length} columns</>
                           : <>{columnLineage.columns.length} column{columnLineage.columns.length !== 1 ? "s" : ""} mapped</>
                         }
                       </span>
-                    </>
-                  )}
+                    )}
+                  </div>
                 </div>
                 <p className="text-[11px] text-td-gray-dark mt-1.5 leading-relaxed">
                   Finer-grained view of <strong>which specific columns feed which</strong>, derived from the DataDNA parser
@@ -1619,87 +1787,11 @@ function LineagePage() {
                     const numB = parseInt(b.column_name.match(/(\d+)$/)?.[1] ?? "");
                     if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
                     return a.column_name.localeCompare(b.column_name);
-                  }).map((col) => (
-                    <div key={col.column_name} className={`rounded-lg border overflow-hidden text-xs shadow-sm${colNavHighlight && col.column_name.toUpperCase() === colNavHighlight.toUpperCase() ? " border-violet-400 ring-2 ring-violet-300" : " border-gray-200"}`}>
-                      {/* Column name pill */}
-                      <div className={`px-3 py-2${colNavHighlight && col.column_name.toUpperCase() === colNavHighlight.toUpperCase() ? " bg-violet-700" : " bg-gray-800"}`}>
-                        <span className="font-mono font-bold text-white text-[11px] truncate block" title={col.column_name}>
-                          {col.column_name}
-                        </span>
-                      </div>
-
-                      {/* Sources (upstream → this column) */}
-                      {col.upstream.length > 0 && (
-                        <div className="bg-red-50 px-3 py-2 border-b border-red-100">
-                          <div className="text-[9px] font-bold text-red-400 uppercase tracking-widest mb-1.5">Sources</div>
-                          <div className="space-y-1">
-                            {col.upstream.map((e, i) => (
-                              <div key={i} className="flex items-center justify-between gap-1.5">
-                                <button
-                                  type="button"
-                                  title={`Navigate to ${e.table_key}`}
-                                  onClick={() => navigateToColumn(e.table_key, e.column_name)}
-                                  className="text-violet-400 hover:text-violet-700 transition-colors shrink-0"
-                                >
-                                  <ArrowRight size={10} className="rotate-180" />
-                                </button>
-                                <span className="font-mono text-[10px] text-red-900 truncate flex-1" title={e.column_key}>
-                                  <span className="text-red-400">{e.table_key.split(".").pop()}.</span>{e.column_name}
-                                </span>
-                                <TransformBadge
-                                  type={e.transformation_type}
-                                  className="text-[10px] bg-red-100 text-red-600 rounded px-1 py-0.5"
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Feeds into (this column → downstream) */}
-                      {col.downstream.length > 0 && (
-                        <div className={`bg-green-50 px-3 py-2${col.indirect?.length > 0 ? " border-b border-green-100" : ""}`}>
-                          <div className="text-[9px] font-bold text-green-500 uppercase tracking-widest mb-1.5">Feeds into</div>
-                          <div className="space-y-1">
-                            {col.downstream.map((e, i) => (
-                              <div key={i} className="flex items-center justify-between gap-1.5">
-                                <span className="font-mono text-[10px] text-green-900 truncate flex-1" title={e.column_key}>
-                                  <span className="text-green-500">{e.table_key.split(".").pop()}.</span>{e.column_name}
-                                </span>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <TransformBadge
-                                    type={e.transformation_type}
-                                    className="text-[10px] bg-green-100 text-green-700 rounded px-1 py-0.5"
-                                  />
-                                  <button
-                                    type="button"
-                                    title={`Navigate to ${e.table_key}`}
-                                    onClick={() => navigateToColumn(e.table_key, e.column_name)}
-                                    className="text-violet-400 hover:text-violet-700 transition-colors"
-                                  >
-                                    <ArrowRight size={10} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Indirect impacts (filter / join conditions, no target column) */}
-                      {col.indirect?.length > 0 && (
-                        <IndirectSection
-                          indirect={col.indirect}
-                          expanded={expandedIndirect === col.column_name}
-                          onToggle={() =>
-                            setExpandedIndirect((prev) =>
-                              prev === col.column_name ? null : col.column_name
-                            )
-                          }
-                        />
-                      )}
-                    </div>
-                  ))}
+                  }).filter((col) => {
+                    if (!showPiiOnly) return true;
+                    const pii = piiMap.get(col.column_name.toUpperCase());
+                    return pii?.pii_label != null && pii.pii_label !== "NONE";
+                  }).map(renderColumnCard)}
                 </div>
               ) : null}
             </div>

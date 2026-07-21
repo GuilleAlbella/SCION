@@ -320,6 +320,29 @@ export interface ColumnTraverseResponse {
   total_hops: number;
 }
 
+// §2.12 AI Column Classification
+export interface PiiEntry {
+  column_id: number;
+  column_name: string;
+  data_type: string;
+  pii_label: string | null;
+  pii_confidence: number | null;
+  pii_classified_at: string | null;
+}
+
+export interface PiiResponse {
+  object: string;
+  snapshot_id: number;
+  columns: PiiEntry[];
+}
+
+export interface ClassifyColumnsResponse {
+  snapshot_id: number;
+  classified: number;
+  skipped: number;
+  errors: number;
+}
+
 export interface ReasoningResponse {
   change_id: number;
   classification: string;

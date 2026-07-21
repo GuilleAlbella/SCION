@@ -16,6 +16,7 @@ Two endpoints:
   too large.
 """
 
+import json as _json
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -377,7 +378,7 @@ def _serialize_graph(
             ),
             "object_name": row.object_name,
             "schema_name": row.schema_name,
-            "metrics": row.node_metadata,
+            "metrics": _json.loads(row.node_metadata) if isinstance(row.node_metadata, str) else row.node_metadata,
         }
         for row in node_rows
     ]

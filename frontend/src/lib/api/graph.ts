@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ColumnLineageResponse, ColumnTraverseResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse } from "./types";
+import type { ClassifyColumnsResponse, ColumnLineageResponse, ColumnTraverseResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse, PiiResponse } from "./types";
 
 export async function getGraph(snapshotId: number): Promise<GraphResponse> {
   const { data } = await client.get<GraphResponse>(`/graph/${snapshotId}`);
@@ -35,6 +35,28 @@ export async function traverseColumnLineage(
 ): Promise<ColumnTraverseResponse> {
   const { data } = await client.get<ColumnTraverseResponse>("/lineage/columns/traverse", {
     params: { snapshot_id: snapshotId, column_key: columnKey, direction, max_depth: maxDepth },
+  });
+  return data;
+}
+
+export async function getColumnPii(
+  snapshotId: number,
+  object: string,
+): Promise<PiiResponse> {
+  const { data } = await client.get<PiiResponse>("/columns/pii", {
+    params: { snapshot_id: snapshotId, object },
+  });
+  return data;
+}
+
+export async function classifyColumns(
+  snapshotId: number,
+  object?: string,
+  force = false,
+  limit = 500,
+): Promise<ClassifyColumnsResponse> {
+  const { data } = await client.post<ClassifyColumnsResponse>("/columns/classify", null, {
+    params: { snapshot_id: snapshotId, object, force, limit },
   });
   return data;
 }

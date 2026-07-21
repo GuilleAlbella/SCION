@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-20 · Current version: **v2.05.00 (BETA)**.
+Last updated: 2026-07-20 · Current version: **v2.06.00 (BETA)**.
 
 ---
 
@@ -126,7 +126,7 @@ Reestructurado post-reunión con Pilar (2026-07-17): entrega única en vez de do
 | **2.15** | **Access Layer** | Business Discovery + Executive Dashboard + Entity view | **4** | Requiere §2.9 + §2.10 |
 | **2.8** | Production runtime | Systemd units + JSON logging | **1** | — |
 | **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactivo~~ | **✅** | v2.05.00 |
-| **2.12** | AI column classification | PII / non-PII por nombre, tipo y comentario | **3** | — |
+| **2.12** | ~~AI column classification~~ | ~~PII / non-PII por nombre, tipo y comentario~~ | **✅** | v2.06.00 |
 | **2.10** | Reference data | User hierarchy + app metadata + dashboards | **5** | Bloqueado: extractor username por fila |
 | **2.2** | Incremental loading | CDC contra baseline day zero | **4** | — |
 | **2.13** | Manifest timestamps | Timestamps del extractor en snapshot screen | **1** | — |
@@ -476,7 +476,7 @@ negocio.
 
 ---
 
-### 2.12 AI-Based Column Classification (PII)  *(new — Reunión 28, 2026-07-15)*  **Est: 3 días**
+### 2.12 AI-Based Column Classification (PII)  ✅ COMPLETO (v2.06.00)
 
 **Origin:** Rahul Kulkarni, Reunión 28 (min 25-28).
 

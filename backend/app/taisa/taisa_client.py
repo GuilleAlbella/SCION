@@ -14,10 +14,47 @@ from .taisa_prompts import (
     SYSTEM_PROMPT,
     SINGLE_CHANGE_PROMPT,
     BATCH_ANALYSIS_PROMPT,
+    PII_SYSTEM_PROMPT,
+    COLUMN_PII_BATCH_PROMPT,
 )
 
 _BREAKING_TYPES = {"TABLE_REMOVED", "COLUMN_REMOVED", "COLUMN_TYPE_CHANGED",
                    "SCHEMA_REMOVED", "TABLE_TYPE_CHANGED"}
+
+# ── §2.12 PII heuristics ──────────────────────────────────────────────────────
+# Each tuple: (substrings_to_match_in_UPPERCASE_column_name, pii_label, confidence)
+# First match wins; NONE returned when nothing matches.
+_PII_KEYWORD_MAP: list[tuple[list[str], str, float]] = [
+    (["EMAIL", "E_MAIL", "EMAILADDRESS", "EMAIL_ADDRESS", "EMAIL_ADDR"], "EMAIL", 0.95),
+    (["SSN", "SOCIAL_SECURITY", "SOCIAL_INS", "NATIONAL_ID", "NATL_ID", "TAX_ID", "TAXPAYER_ID", "TFN", "TAXPAYER"], "SSN", 0.97),
+    (["DOB", "DATE_OF_BIRTH", "BIRTHDATE", "BIRTHDAY", "BIRTH_DATE", "DATEOFBIRTH", "BIRTH_DT"], "DOB", 0.97),
+    (["PHONENO", "PHONE_NO", "PHONE_NUM", "PHONENUM", "MOBILE", "CELLPHONE", "CELL_PHONE", "TELEPHONE", "TEL_NO", "TELNO", "PHONE"], "PHONE", 0.90),
+    (["STREETADDRESS", "STREET_ADDRESS", "STREETADDR", "STREET_ADDR", "ZIPCODE", "ZIP_CODE", "POSTALCODE", "POSTAL_CODE", "POSTCODE", "ADDRESS", "ADDR"], "ADDRESS", 0.85),
+    (["FIRSTNAME", "FIRST_NAME", "LASTNAME", "LAST_NAME", "FULLNAME", "FULL_NAME", "SURNAME", "GIVENNAME", "GIVEN_NAME", "MIDDLENAME", "MIDDLE_NAME", "CUSTOMER_NAME", "CUST_NAME", "PATIENT_NAME", "EMPLOYEE_NAME", "PERSON_NAME", "CONTACT_NAME", "DISPLAY_NAME"], "NAME", 0.92),
+    (["CREDITCARD", "CREDIT_CARD", "CARDNUMBER", "CARD_NUMBER", "CARDNUM", "CARD_NUM", "CVV", "CVC", "IBAN", "ACCOUNTNUMBER", "ACCOUNT_NUMBER", "ACCT_NO", "ACCTNO", "BANKACCOUNT", "BANK_ACCOUNT", "SALARY", "INCOME", "WAGES", "WAGE", "COMPENSATION", "PAYRATE", "PAY_RATE"], "FINANCIAL", 0.88),
+    (["PATIENT_ID", "PATIENTID", "CUSTOMER_ID", "CUSTOMERID", "CUST_ID", "EMPLOYEE_ID", "EMPLOYEEID", "EMP_ID", "USER_ID", "USERID", "MEMBER_ID", "MEMBERID", "PERSON_ID", "PERSONID", "INDIVIDUAL_ID", "INDIV_ID"], "ID_NUMBER", 0.85),
+]
+
+_PII_VALID_LABELS = frozenset(
+    {"NAME", "EMAIL", "PHONE", "SSN", "DOB", "ADDRESS", "FINANCIAL", "ID_NUMBER", "NONE"}
+)
+
+
+def _pii_heuristic(column_name: str) -> tuple[str, float]:
+    """Return (pii_label, confidence) for a column name using keyword matching."""
+    upper = column_name.upper()
+    for keywords, label, confidence in _PII_KEYWORD_MAP:
+        if any(kw in upper for kw in keywords):
+            return label, confidence
+    return "NONE", 0.85
+
+
+@dataclass
+class PiiClassificationResult:
+    """Result of classifying one column for PII."""
+    column_name: str
+    pii_label: str
+    confidence: float
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -810,3 +847,87 @@ class TaisaClient:
         qa_prompt += f"User: {question}\n\nTAISA:\n"
 
         return provider.generate(qa_prompt)
+
+    # ── §2.12 PII classification ──────────────────────────────────────────────
+
+    def classify_column_pii_batch(
+        self,
+        *,
+        table_name: str,
+        schema_name: str,
+        columns: List[Dict[str, Any]],
+    ) -> List["PiiClassificationResult"]:
+        """Classify a list of columns for PII using TAISA.
+
+        Args:
+            table_name: Name of the table the columns belong to.
+            schema_name: Schema/database name.
+            columns: List of dicts with keys ``column_name`` and ``data_type``.
+
+        Returns:
+            One ``PiiClassificationResult`` per input column, in the same order.
+        """
+        if SCION_TAISA_MODE == "real":
+            return self._classify_pii_llm(schema_name, table_name, columns)
+        return self._classify_pii_heuristic(columns)
+
+    def _classify_pii_heuristic(
+        self, columns: List[Dict[str, Any]]
+    ) -> List["PiiClassificationResult"]:
+        results = []
+        for col in columns:
+            label, confidence = _pii_heuristic(col["column_name"])
+            results.append(PiiClassificationResult(
+                column_name=col["column_name"],
+                pii_label=label,
+                confidence=confidence,
+            ))
+        return results
+
+    def _classify_pii_llm(
+        self,
+        schema_name: str,
+        table_name: str,
+        columns: List[Dict[str, Any]],
+    ) -> List["PiiClassificationResult"]:
+        """LLM-backed PII classification, batching up to 20 columns per call."""
+        results: List["PiiClassificationResult"] = []
+        BATCH = 20
+        for i in range(0, len(columns), BATCH):
+            batch = columns[i : i + BATCH]
+            cols_list = "\n".join(
+                f"- {c['column_name']} · {c['data_type']}" for c in batch
+            )
+            prompt = (
+                PII_SYSTEM_PROMPT
+                + "\n\n"
+                + COLUMN_PII_BATCH_PROMPT.format(
+                    schema_name=schema_name,
+                    table_name=table_name,
+                    columns_list=cols_list,
+                )
+            )
+            try:
+                provider = get_llm_provider()
+                raw = provider.generate(prompt)
+                parsed = _extract_json(raw)
+                batch_results = parsed.get("results", {}) if parsed else {}
+
+                for col in batch:
+                    entry = batch_results.get(col["column_name"]) if isinstance(batch_results, dict) else None
+                    if entry and isinstance(entry, dict):
+                        label = entry.get("pii_label", "NONE")
+                        if label not in _PII_VALID_LABELS:
+                            label = "NONE"
+                        confidence = float(entry.get("confidence", 0.5))
+                        confidence = max(0.0, min(1.0, confidence))
+                    else:
+                        label, confidence = _pii_heuristic(col["column_name"])
+                    results.append(PiiClassificationResult(
+                        column_name=col["column_name"],
+                        pii_label=label,
+                        confidence=confidence,
+                    ))
+            except Exception:
+                results.extend(self._classify_pii_heuristic(batch))
+        return results
