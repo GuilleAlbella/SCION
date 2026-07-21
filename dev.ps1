@@ -128,6 +128,7 @@ function Clear-Port {
 }
 Clear-Port 8000 "backend"
 Clear-Port 3000 "frontend"
+Clear-Port 3001 "frontend (alt)"   # Next.js 16 fallback port — also used by preview servers
 Write-Ok "Ports 8000 and 3000 free"
 Write-Host ""
 
