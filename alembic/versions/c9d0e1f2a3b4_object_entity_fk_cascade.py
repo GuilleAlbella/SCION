@@ -25,6 +25,7 @@ Revision: c9d0e1f2a3b4
 """
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
 
 revision = "c9d0e1f2a3b4"
@@ -34,6 +35,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # SQLite does not support named FK constraints — skip; demo DB doesn't
+    # enforce FKs and the CASCADE is only meaningful in Postgres.
+    if op.get_bind().dialect.name == "sqlite":
+        return
+
     # Drop auto-named constraints created by c3d4e5f6a7b8
     op.drop_constraint(
         "object_entity_first_seen_snapshot_id_fkey",
@@ -65,6 +71,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "sqlite":
+        return
+
     op.drop_constraint("fk_object_entity_last_seen", "object_entity", type_="foreignkey")
     op.drop_constraint("fk_object_entity_first_seen", "object_entity", type_="foreignkey")
     op.create_foreign_key(

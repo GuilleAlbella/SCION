@@ -25,6 +25,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # SQLite does not support named FK constraints — skip on SQLite.
+    if op.get_bind().dialect.name == "sqlite":
+        return
     op.create_foreign_key(
         "fk_snapshot_baseline_snapshot_id",
         "snapshot",
@@ -36,6 +39,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "sqlite":
+        return
     op.drop_constraint(
         "fk_snapshot_baseline_snapshot_id",
         "snapshot",
