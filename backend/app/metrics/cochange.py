@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Co-change association mining over the change_event history.
 
@@ -7,16 +7,16 @@ analysis** algorithm (Agrawal/Srikant 1994) to SCION's change history:
 
     "transaction" = one snapshot-delta
     "item"        = one object that changed in that delta
-    "rule A → B"  = P(B changed | A changed) across all deltas
+    "rule A â†’ B"  = P(B changed | A changed) across all deltas
 
 For each pair `(A, B)` of objects that have co-changed at least once,
 we compute three standard association metrics:
 
 - **support(A, B)** = fraction of deltas where BOTH changed
-- **confidence(A → B)** = P(B | A) = support(A, B) / support(A)
-- **lift(A, B)** = confidence(A → B) / P(B)
+- **confidence(A â†’ B)** = P(B | A) = support(A, B) / support(A)
+- **lift(A, B)** = confidence(A â†’ B) / P(B)
 
-`lift > 1` means B changes MORE than random chance when A changes —
+`lift > 1` means B changes MORE than random chance when A changes â€”
 i.e. the two are *historically coupled*. This surfaces invisible
 relationships the lineage graph cannot capture:
   - Cross-domain tables that the same team tweaks every release.
@@ -49,8 +49,8 @@ DEFAULT_MIN_LIFT = 1.5
 
 # Cap on history depth (most recent N consecutive snapshot pairs scanned).
 # Without this, mining the entire change_event table is O(rows) on every
-# request — a 250k-row Transcend extract turned the Intelligence page
-# into a multi-second wait per click. 20 pairs ≈ a quarter of operational
+# request â€” a 250k-row Transcend extract turned the Intelligence page
+# into a multi-second wait per click. 20 pairs â‰ˆ a quarter of operational
 # history for a typical weekly-import shop, which is plenty of signal
 # for Apriori-style mining.
 DEFAULT_MAX_HISTORY_PAIRS = 20
@@ -58,9 +58,9 @@ DEFAULT_MAX_HISTORY_PAIRS = 20
 # Maximum basket size (unique table-level objects per delta) before a
 # transaction is dropped from the mining input. Deltas with more objects
 # than this cap are mass-refresh events (full schema reloads, large
-# migrations) where every object changes together — they don't generate
+# migrations) where every object changes together â€” they don't generate
 # meaningful co-change signal and dominate the combinations step with
-# O(N²) pairs. At N=245k that's ~30 billion pairs; the algo would never
+# O(NÂ²) pairs. At N=245k that's ~30 billion pairs; the algo would never
 # finish. By skipping these "noisy" transactions we keep the mining
 # bounded. Set to 0 to disable the cap (not recommended on production).
 DEFAULT_MAX_BASKET_SIZE = 500
@@ -68,7 +68,7 @@ DEFAULT_MAX_BASKET_SIZE = 500
 
 @dataclass
 class CoChangePair:
-    """One directional association rule A → B with full metrics."""
+    """One directional association rule A â†’ B with full metrics."""
     object_a: str
     object_b: str
     co_occurrences: int    # # de deltas con ambos
@@ -76,7 +76,7 @@ class CoChangePair:
     occurrences_b: int     # # de deltas con B
     total_deltas: int      # universo
     support: float         # support(A, B)
-    confidence: float      # confidence(A → B)
+    confidence: float      # confidence(A â†’ B)
     lift: float            # lift(A, B)
 
 
@@ -93,12 +93,12 @@ def _load_deltas_as_transactions(
 
     History cap: only the ``max_history_pairs`` most recent consecutive
     snapshot pairs are scanned. Without this, every cochange request
-    on a 250k-row ``change_event`` table loaded all of them — multi-
+    on a 250k-row ``change_event`` table loaded all of them â€” multi-
     second latency per click. The cap is on number of *deltas* (pair
     transactions), not raw change-event rows; one delta usually
     contains a few hundred to a few thousand changes.
     """
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Pre-flight: which pairs are in scope? We pull distinct
         # (snapshot_from, snapshot_to) tuples sorted descending by the
         # ending snapshot, take the top N.
@@ -112,12 +112,12 @@ def _load_deltas_as_transactions(
         if not recent_pairs:
             return []
 
-        # ── Fast pre-filter by raw change count ──────────────────────────
+        # â”€â”€ Fast pre-filter by raw change count â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # Loading all rows for a pair with 450 k changes is wasteful when
         # the basket will be discarded anyway. We use COUNT(*) as a cheap
-        # upper bound on basket size (since COUNT(*) ≥ COUNT(DISTINCT)):
-        #   - If COUNT(*) ≤ max_basket_size → basket is guaranteed small: load it.
-        #   - If COUNT(*) > max_basket_size → basket *may* still be small
+        # upper bound on basket size (since COUNT(*) â‰¥ COUNT(DISTINCT)):
+        #   - If COUNT(*) â‰¤ max_basket_size â†’ basket is guaranteed small: load it.
+        #   - If COUNT(*) > max_basket_size â†’ basket *may* still be small
         #     (many changes to the same objects), but for typical production
         #     data the ratio is close to 1:1, so skip with high confidence.
         # This avoids loading 1.86 M rows when every delta is a mass-refresh.
@@ -154,7 +154,7 @@ def _load_deltas_as_transactions(
             candidate_pairs = recent_pairs
 
         if not candidate_pairs:
-            return []  # all pairs are too large — no useful signal
+            return []  # all pairs are too large â€” no useful signal
 
         pair_filter = or_(
             *[
@@ -195,7 +195,7 @@ def _load_deltas_as_transactions(
 
 
 def _collapse_to_table(identifier: str, object_type: str) -> str | None:
-    """Strip a column suffix so e.g. `core_banking.loans.principal` →
+    """Strip a column suffix so e.g. `core_banking.loans.principal` â†’
     `core_banking.loans`. Leaves schema-level identifiers alone.
     """
     if not identifier:
@@ -218,7 +218,7 @@ def mine_cochange_pairs(
     Returns rules where ``lift >= min_lift`` and the pair has co-occurred
     in at least ``min_pair_support`` deltas. Sorted by lift desc
     (strongest coupling first), then confidence. ``max_history_pairs``
-    bounds the input window — see ``_load_deltas_as_transactions``.
+    bounds the input window â€” see ``_load_deltas_as_transactions``.
     """
     transactions = _load_deltas_as_transactions(
         max_history_pairs=max_history_pairs,
@@ -228,7 +228,7 @@ def mine_cochange_pairs(
     if total == 0:
         return []
 
-    # ── 1. Count per-item and per-pair occurrences in a single pass ──
+    # â”€â”€ 1. Count per-item and per-pair occurrences in a single pass â”€â”€
     item_count: Dict[str, int] = {}
     pair_count: Dict[Tuple[str, str], int] = {}
 
@@ -238,17 +238,17 @@ def mine_cochange_pairs(
         for a, b in combinations(sorted(basket), 2):
             pair_count[(a, b)] = pair_count.get((a, b), 0) + 1
 
-    # ── 2. Emit both directions (A→B and B→A) — different confidences ──
+    # â”€â”€ 2. Emit both directions (Aâ†’B and Bâ†’A) â€” different confidences â”€â”€
     results: List[CoChangePair] = []
     for (a, b), co in pair_count.items():
         if co < min_pair_support:
             continue
         occ_a, occ_b = item_count[a], item_count[b]
         support = co / total
-        # A → B
+        # A â†’ B
         conf_ab = co / occ_a
         lift_ab = conf_ab / (occ_b / total)
-        # B → A
+        # B â†’ A
         conf_ba = co / occ_b
         lift_ba = conf_ba / (occ_a / total)
         # Both directions share the same lift (symmetric), but we report

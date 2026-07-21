@@ -82,6 +82,26 @@ _PROGRESS_LOG_EVERY_ROWS_INDICES = 50_000
 logger = logging.getLogger(__name__)
 
 
+def _parse_extract_run_id_timestamp(extract_run_id: Optional[str]) -> Optional[datetime]:
+    """Parse the UTC timestamp embedded in the extract_run_id prefix (§2.13).
+
+    extract_run_id format: YYYYMMDDTHHMMSSz_<uuid4_hex>
+    e.g. 20260429T135225Z_1eeaac7385244269b33f097127d64cb7
+    Returns a timezone-aware UTC datetime, or None if the format doesn't match.
+    """
+    if not extract_run_id:
+        return None
+    import re
+    m = re.match(r"^(\d{8}T\d{6}Z)", extract_run_id)
+    if not m:
+        return None
+    try:
+        from datetime import timezone
+        return datetime.strptime(m.group(1), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def _fmt_time(seconds: float) -> str:
     if seconds < 1:
         return f"{seconds * 1000:.0f} ms"
@@ -214,6 +234,8 @@ def persist_batch(
         object_count=len(tables),  # tables/views/procs — the headline count
         extract_run_id=identity.extract_run_id,
         import_status="staged",  # §2.16: pipeline sets → committed/failed in post-ingest
+        # §2.13: extractor's wall-clock time, parsed from extract_run_id prefix.
+        extract_timestamp=_parse_extract_run_id_timestamp(identity.extract_run_id),
     )
     session.add(snap)
     session.flush()  # populate snap.snapshot_id without committing
@@ -337,19 +359,26 @@ def persist_batch(
     # ──── Partitioning rows (v1.14.02) ────
     # One row per partitioning constraint. ConstraintText stored
     # verbatim — see model docstring for why we don't parse it.
+    # Uses bulk_insert_mappings (same pattern as columns/indices) to avoid
+    # 300k session.add() calls which inflate the ORM identity map to ~1 GB.
     t_phase = time.perf_counter()
-    partitioning_created = 0
+    partition_mappings: list[dict] = []
     for p in partitioning:
         table_id = table_id_by_qname.get((p.database_name, p.table_name))
         if table_id is None:
             continue
-        session.add(PartitioningSnapshot(
-            table_id=table_id,
-            constraint_type=p.constraint_type,
-            constraint_text=p.constraint_text,
-            create_timestamp=p.create_timestamp,
-        ))
-        partitioning_created += 1
+        partition_mappings.append({
+            "table_id": table_id,
+            "constraint_type": p.constraint_type,
+            "constraint_text": p.constraint_text,
+            "create_timestamp": p.create_timestamp,
+        })
+    if partition_mappings:
+        for i in range(0, len(partition_mappings), _BULK_INSERT_BATCH_SIZE):
+            session.bulk_insert_mappings(
+                PartitioningSnapshot, partition_mappings[i:i + _BULK_INSERT_BATCH_SIZE]
+            )
+    partitioning_created = len(partition_mappings)
     logger.info("[persist] partition  %9d rows in %s",
                 partitioning_created, _fmt_time(time.perf_counter() - t_phase))
 
@@ -377,6 +406,11 @@ def persist_batch(
         ddl_text_created += 1
     logger.info("[persist] ddl_text   %9d rows in %s",
                 ddl_text_created, _fmt_time(time.perf_counter() - t_phase))
+
+    # §2.2: assign baseline role (is_baseline, baseline_snapshot_id, gap_detected).
+    # Called here, inside the same open session, so the assignment is committed
+    # atomically with the rest of the snapshot's data.
+    _assign_baseline_role(snap, session)
 
     return PersistResult(
         snapshot_id=snap.snapshot_id,
@@ -450,7 +484,7 @@ def run_post_ingest_pipeline(
     t_step = time.perf_counter()
     try:
         h = compute_structural_hash(snapshot_id)
-        with ORMSession(bind=engine) as sess:
+        with ORMSession(engine) as sess:
             snap = sess.get(Snapshot, snapshot_id)
             if snap is not None:
                 snap.structural_hash = h
@@ -509,17 +543,17 @@ def run_post_ingest_pipeline(
         logger.warning("post-ingest: compute_criticality failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] criticality       in %s", _fmt_time(time.perf_counter() - t_step))
 
-    # Step 6: auto-diff vs the previous snapshot of the same source.
+    # Step 6: auto-diff vs the day-zero baseline (§2.2).
     # Without this, the user has to go to /changes and click Run Diff
     # by hand to see what moved between two dict imports — an obvious
     # ergonomic gap when the most natural workflow is "import this
-    # week's extract, see what changed since last week".
+    # week's extract, see what changed since day zero".
     #
-    # We compare against the most-recent prior snapshot whose
-    # source_system matches AND that has a structural_hash (set in
-    # step 1) — anything older without a hash is ignored because
-    # it's a "naked" snapshot that hasn't been through this pipeline.
-    # The diff engine itself is idempotent (skips re-inserting
+    # Since §2.2, we diff incremental snapshots against their baseline
+    # (baseline_snapshot_id) rather than the immediately preceding
+    # snapshot — this shows cumulative structural drift from day zero.
+    # Baseline snapshots themselves are skipped (nothing to compare
+    # against). The diff engine is idempotent (skips re-inserting
     # change_event rows for the same pair), so a re-run is a no-op.
     _push_caption("comparing against previous snapshot…")
     t_step = time.perf_counter()
@@ -612,7 +646,7 @@ def run_post_ingest_pipeline(
     try:
         from app.staging.staging_validator import validate_import
 
-        with ORMSession(bind=engine) as sess:
+        with ORMSession(engine) as sess:
             result = validate_import(snapshot_id, sess)
             sess.commit()
         logger.info(
@@ -635,7 +669,7 @@ def run_post_ingest_pipeline(
     try:
         from app.entity.entity_resolver import resolve_entities
 
-        with ORMSession(bind=engine) as sess:
+        with ORMSession(engine) as sess:
             n = resolve_entities(snapshot_id, sess)
             sess.commit()
         logger.info("[post-ingest] entity_resolve: resolved %d entities", n)
@@ -643,48 +677,170 @@ def run_post_ingest_pipeline(
         logger.warning("post-ingest: entity_resolve failed for %s: %s", snapshot_id, e)
     logger.info("[post-ingest] entity_resolve   in %s", _fmt_time(time.perf_counter() - t_step))
 
+    # §2.2 — Cumulative object count.
+    # Counts distinct (schema, table) pairs across the day-zero baseline and
+    # this snapshot. Runs last so all data is committed and visible.
+    _push_caption("computing cumulative object count (§2.2)…")
+    t_step = time.perf_counter()
+    try:
+        _compute_cumulative_count(snapshot_id)
+    except Exception as e:
+        logger.warning("post-ingest: cumulative_count failed for %s: %s", snapshot_id, e)
+    logger.info("[post-ingest] cumulative_count in %s", _fmt_time(time.perf_counter() - t_step))
+
 
 def _auto_diff_against_previous(snapshot_id: int) -> None:
-    """Find the prior snapshot from the same source and run a diff.
+    """Diff this snapshot against its day-zero baseline (§2.2).
 
-    No-op if there isn't one. The diff is logged at INFO level so
-    operators see it in the dev console without having to peek at
-    /changes — useful during testing when you want to know
-    immediately whether the new extract had any structural drift.
+    For baseline snapshots (is_baseline=True) — the very first import for a
+    source, or a reset after a gap — there is nothing to compare against, so
+    we skip. For incremental snapshots we use baseline_snapshot_id (the
+    day-zero anchor) rather than the immediately preceding snapshot, giving
+    callers a view of total structural drift since day zero rather than just
+    week-to-week churn.
+
+    DiffEngine.compute_diff is idempotent, so re-running is safe.
     """
-    from sqlalchemy import desc
     from sqlalchemy.orm import Session as ORMSession
     from app.db.engine import engine
     from app.diff.diff_engine import DiffEngine
 
-    with ORMSession(bind=engine) as sess:
+    with ORMSession(engine) as sess:
         current = sess.get(Snapshot, snapshot_id)
         if current is None:
             return
-        previous = (
-            sess.query(Snapshot)
-            .filter(Snapshot.source_system == current.source_system)
-            .filter(Snapshot.snapshot_id != snapshot_id)
-            .order_by(desc(Snapshot.snapshot_time))
-            .first()
-        )
-        if previous is None:
+        if current.is_baseline:
             logger.info(
-                "post-ingest: no prior snapshot for source=%r, skipping auto-diff",
-                current.source_system,
+                "post-ingest: snapshot %d is a baseline for source=%r — skipping auto-diff",
+                snapshot_id, current.source_system,
             )
             return
-        prev_id = previous.snapshot_id
-        prev_label = current.source_system
+        baseline_id = current.baseline_snapshot_id
+        source_label = current.source_system
+
+    if baseline_id is None:
+        logger.info(
+            "post-ingest: snapshot %d has no baseline_snapshot_id for source=%r — skipping auto-diff",
+            snapshot_id, source_label,
+        )
+        return
 
     # DiffEngine.compute_diff persists ChangeEvent rows itself
-    # (idempotent — skips re-inserting on duplicate runs). The list
-    # it returns is just for our log line; we don't use it further.
-    changes = DiffEngine().compute_diff(prev_id, snapshot_id)
+    # (idempotent — skips re-inserting on duplicate runs).
+    changes = DiffEngine().compute_diff(baseline_id, snapshot_id)
     logger.info(
-        "post-ingest: auto-diff %d→%d for %s produced %d change(s)",
-        prev_id, snapshot_id, prev_label, len(changes),
+        "post-ingest: auto-diff %d→%d (baseline→incremental) for %s produced %d change(s)",
+        baseline_id, snapshot_id, source_label, len(changes),
     )
+
+
+def _assign_baseline_role(snap: Snapshot, session: Session) -> None:
+    """Set is_baseline, baseline_snapshot_id, and gap_detected on a new snapshot.
+
+    Rules (§2.2):
+    - First snapshot for a source_system → baseline.
+    - Gap since last snapshot > SNAPSHOT_GAP_DAYS (default 7) → new baseline,
+      gap_detected=True.
+    - Otherwise → incremental; baseline_snapshot_id points to the active baseline.
+
+    Called from inside persist_batch's open session so the assignment is
+    committed atomically with all other snapshot data.
+    """
+    import os
+    from datetime import timedelta
+
+    gap_days = int(os.environ.get("SNAPSHOT_GAP_DAYS", "7"))
+
+    current_baseline = (
+        session.query(Snapshot)
+        .filter(
+            Snapshot.source_system == snap.source_system,
+            Snapshot.is_baseline.is_(True),
+            Snapshot.snapshot_id != snap.snapshot_id,
+        )
+        .order_by(Snapshot.snapshot_time.desc())
+        .first()
+    )
+
+    if current_baseline is None:
+        snap.is_baseline = True
+        snap.gap_detected = False
+        logger.info(
+            "[persist] §2.2 snapshot %d is the first baseline for source=%r",
+            snap.snapshot_id, snap.source_system,
+        )
+        return
+
+    last_snapshot = (
+        session.query(Snapshot)
+        .filter(
+            Snapshot.source_system == snap.source_system,
+            Snapshot.snapshot_id != snap.snapshot_id,
+        )
+        .order_by(Snapshot.snapshot_time.desc())
+        .first()
+    )
+
+    if last_snapshot is not None:
+        delta = snap.snapshot_time - last_snapshot.snapshot_time
+        if delta > timedelta(days=gap_days):
+            snap.is_baseline = True
+            snap.gap_detected = True
+            logger.info(
+                "[persist] §2.2 snapshot %d is a new baseline for source=%r (gap=%.1f days > %d)",
+                snap.snapshot_id, snap.source_system, delta.total_seconds() / 86400, gap_days,
+            )
+            return
+
+    snap.baseline_snapshot_id = current_baseline.snapshot_id
+    logger.info(
+        "[persist] §2.2 snapshot %d is incremental vs baseline %d for source=%r",
+        snap.snapshot_id, current_baseline.snapshot_id, snap.source_system,
+    )
+
+
+def _compute_cumulative_count(snapshot_id: int) -> None:
+    """Compute and persist snapshot.cumulative_object_count (§2.2).
+
+    For baselines: cumulative = own object_count (tables in this snapshot).
+    For incrementals: COUNT DISTINCT (schema_name, table_name) across the
+    union of baseline + this snapshot — captures every object seen from
+    day zero through the current extract.
+    """
+    from sqlalchemy import func
+    from sqlalchemy.orm import Session as ORMSession
+    from app.db.engine import engine
+    from app.db.models.schema_snapshot import SchemaSnapshot
+    from app.db.models.table_snapshot import TableSnapshot
+
+    with ORMSession(engine) as sess:
+        current = sess.get(Snapshot, snapshot_id)
+        if current is None:
+            return
+
+        if current.is_baseline or current.baseline_snapshot_id is None:
+            current.cumulative_object_count = current.object_count or 0
+            sess.commit()
+            return
+
+        baseline_id = current.baseline_snapshot_id
+        subq = (
+            select(
+                SchemaSnapshot.schema_name,
+                TableSnapshot.table_name,
+            )
+            .join(TableSnapshot, TableSnapshot.schema_id == SchemaSnapshot.schema_id)
+            .where(SchemaSnapshot.snapshot_id.in_([baseline_id, snapshot_id]))
+            .distinct()
+            .subquery()
+        )
+        result = sess.execute(select(func.count()).select_from(subq)).scalar() or 0
+        current.cumulative_object_count = result
+        sess.commit()
+        logger.info(
+            "[post-ingest] §2.2 cumulative_count=%d for snapshot %d (baseline %d)",
+            result, snapshot_id, baseline_id,
+        )
 
 
 # ──── Streaming bulk-insert helpers ────

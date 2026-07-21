@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Global Search API (v1).
 
@@ -39,13 +39,13 @@ def global_search(q: str = Query(..., min_length=1, description="Search query"))
     """Search for objects by name across graph nodes and change events."""
 
     # Dedup via composite key: the same object may appear as both a graph
-    # node and a change event — we want a single result row per "thing".
+    # node and a change event â€” we want a single result row per "thing".
     results: List[Dict[str, Any]] = []
     seen = set()
     query_lower = q.lower()
 
     # Search graph nodes
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         nodes = session.execute(
             select(GraphNode).where(
                 or_(
@@ -69,7 +69,7 @@ def global_search(q: str = Query(..., min_length=1, description="Search query"))
                 })
 
     # Search change events
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         changes = session.execute(
             select(ChangeEvent).where(
                 ChangeEvent.object_identifier.ilike(f"%{q}%")
@@ -87,7 +87,7 @@ def global_search(q: str = Query(..., min_length=1, description="Search query"))
                     "object_type": c.object_type,
                     "schema_name": parts[0] if parts else "",
                     "snapshot_id": c.snapshot_to,
-                    "context": f"{c.change_type} (#{c.snapshot_from}→#{c.snapshot_to})",
+                    "context": f"{c.change_type} (#{c.snapshot_from}â†’#{c.snapshot_to})",
                 })
 
     # Relevance tiering: exact match (0) > prefix match (1) > contains (2).

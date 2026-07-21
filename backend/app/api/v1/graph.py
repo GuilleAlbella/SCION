@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Graph API (v1).
 
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 
 # Soft cap on the full-graph endpoint. Above this we refuse to serialise
-# the snapshot — the browser can't dagre-layout that many nodes anyway,
+# the snapshot â€” the browser can't dagre-layout that many nodes anyway,
 # and we don't want to ship tens of MB just for the frontend to throw
 # them away. Tuned generously (5k) so the demo and small-customer
 # workloads keep the existing "see everything at once" UX. Above this,
@@ -42,7 +42,7 @@ FULL_GRAPH_NODE_CAP = 5000
 
 
 # Hard cap on focus subgraph size. Used to bound BFS even when the
-# caller asks for more — pathologically dense neighbourhoods can
+# caller asks for more â€” pathologically dense neighbourhoods can
 # explode quickly even at hops=2 ("hub" tables connect to thousands).
 FOCUS_GRAPH_HARD_CAP = 1000
 
@@ -68,7 +68,7 @@ class GraphResponse(BaseModel):
     # When True, the full graph exceeded ``FULL_GRAPH_NODE_CAP`` and we
     # bailed without returning rows. The frontend should switch to the
     # focus picker UX. ``total_nodes`` is the actual count, surfaced for
-    # the empty-state message ("This graph has 337k nodes — pick an
+    # the empty-state message ("This graph has 337k nodes â€” pick an
     # anchor to focus on").
     truncated: bool = False
     total_nodes: int = 0
@@ -83,13 +83,13 @@ class FocusedGraphResponse(BaseModel):
     edges: List[GraphEdgeItem]
     # True when BFS hit ``max_nodes`` before exhausting the requested
     # hop count. The frontend uses this to surface a "showing first N
-    # of more — increase max_nodes or narrow the search" affordance.
+    # of more â€” increase max_nodes or narrow the search" affordance.
     capped: bool
 
 
 # IMPORTANT: route ORDER matters here. FastAPI matches in source order,
 # so the static ``/focus`` route MUST come before the ``/{snapshot_id}``
-# parametrised route — otherwise ``GET /focus`` is routed to
+# parametrised route â€” otherwise ``GET /focus`` is routed to
 # ``get_graph`` which tries to parse the literal string "focus" as
 # ``snapshot_id: int`` and rejects it with 422 Unprocessable Entity.
 # (Yes, we hit this bug on the first /lineage call against Transcend.)
@@ -136,27 +136,27 @@ def get_focused_graph(
         ),
     ),
 ) -> Dict[str, Any]:
-    """Server-side BFS around an anchor — bounded subgraph for visualisation.
+    """Server-side BFS around an anchor â€” bounded subgraph for visualisation.
 
     Why this exists
     ---------------
     The full-graph endpoint returns hundreds of MB on a Transcend extract,
     and even after the wire transfer the browser has to run dagre's
-    O(V³) hierarchical layout over it. The historical client-side
-    "focus mode" carved out the subgraph in the browser — but that
+    O(VÂ³) hierarchical layout over it. The historical client-side
+    "focus mode" carved out the subgraph in the browser â€” but that
     required loading the entire graph first, defeating the purpose.
     This endpoint moves the BFS to the server, returns ~200 nodes, and
     keeps both the wire and the layout cheap.
 
     Behaviour
     ---------
-    1. Resolve ``root`` → ``node_id``. We try exact match on
+    1. Resolve ``root`` â†’ ``node_id``. We try exact match on
        ``(schema_name, object_name)`` after splitting on the first dot;
        fall back to ``object_name`` equality so callers can pass an
        unqualified name (matches the legacy ``ObjectPicker`` behaviour).
        404 if neither yields a row.
     2. BFS up to ``hops`` deep. Each hop runs a single SQL query for
-       all edges touching the current frontier — fast given the
+       all edges touching the current frontier â€” fast given the
        ``ix_graph_edge_snapshot`` index.
     3. Stop early when ``max_nodes`` is reached. Surface that as
        ``capped: true`` so the UI can warn the user.
@@ -166,7 +166,7 @@ def get_focused_graph(
 
     Edge type and direction filters are applied during traversal, so
     they affect both *which* nodes are reached AND which edges are
-    rendered — i.e. ``direction=down`` returns the downstream subgraph,
+    rendered â€” i.e. ``direction=down`` returns the downstream subgraph,
     not the full neighbourhood with downstream-only edges drawn.
     """
 
@@ -174,8 +174,8 @@ def get_focused_graph(
     if edge_types and edge_types.strip():
         edge_type_set = {t.strip().upper() for t in edge_types.split(",") if t.strip()}
 
-    with Session(bind=engine) as session:
-        # ──── Step 1: resolve root → graph_node_id ────
+    with Session(engine) as session:
+        # â”€â”€â”€â”€ Step 1: resolve root â†’ graph_node_id â”€â”€â”€â”€
         root_node = _resolve_root(session, snapshot_id, root)
         if root_node is None:
             raise HTTPException(
@@ -183,7 +183,7 @@ def get_focused_graph(
                 detail=f"No graph_node found for root={root!r} in snapshot {snapshot_id}.",
             )
 
-        # ──── Step 2: BFS ────
+        # â”€â”€â”€â”€ Step 2: BFS â”€â”€â”€â”€
         visited_ids: set[int] = {root_node.node_id}
         frontier: set[int] = {root_node.node_id}
         edges_collected: list[GraphEdge] = []
@@ -218,7 +218,10 @@ def get_focused_graph(
                     )
                 )
 
-            hop_edges = session.execute(edges_q).scalars().all()
+            # Guard against hub nodes with tens-of-thousands of edges: cap per-hop
+            # edge materialisation to max_nodes*10. The visited-node cap still fires
+            # normally; we just avoid loading the full adjacency list before it does.
+            hop_edges = session.execute(edges_q.limit(max_nodes * 10)).scalars().all()
 
             next_frontier: set[int] = set()
             for edge in hop_edges:
@@ -239,14 +242,14 @@ def get_focused_graph(
                 break
             frontier = next_frontier
 
-        # ──── Step 3: load full node rows for visited set ────
+        # â”€â”€â”€â”€ Step 3: load full node rows for visited set â”€â”€â”€â”€
         node_rows = []
         if visited_ids:
             node_rows = session.execute(
                 select(GraphNode).where(GraphNode.node_id.in_(visited_ids))
             ).scalars().all()
 
-    # ──── Step 4: serialize, dedupe edges, filter dangling ────
+    # â”€â”€â”€â”€ Step 4: serialize, dedupe edges, filter dangling â”€â”€â”€â”€
     nodes, edges = _serialize_graph(node_rows, edges_collected, restrict_to_ids=visited_ids)
 
     return {
@@ -272,7 +275,7 @@ def get_graph(snapshot_id: int) -> Dict[str, Any]:
     locking up the browser.
     """
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Cheap pre-flight count first. With the
         # ``ix_graph_node_snapshot`` index this is sub-millisecond even
         # on 337k-node extracts; doing it before the bulk fetch saves
@@ -312,7 +315,7 @@ def get_graph(snapshot_id: int) -> Dict[str, Any]:
     }
 
 
-# ──── Helpers ────
+# â”€â”€â”€â”€ Helpers â”€â”€â”€â”€
 
 
 def _resolve_root(session: Session, snapshot_id: int, root: str) -> Optional[GraphNode]:
@@ -320,7 +323,7 @@ def _resolve_root(session: Session, snapshot_id: int, root: str) -> Optional[Gra
 
     We accept two encodings (in order):
 
-    1. ``schema.object_name`` — split on the FIRST dot. Matches the
+    1. ``schema.object_name`` â€” split on the FIRST dot. Matches the
        output of ``/objects/search?source=graph``, which is what the
        autocomplete component sends.
     2. The raw ``root`` string against ``object_name`` directly.
@@ -354,7 +357,7 @@ def _serialize_graph(
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Project ORM rows into the {node_id, ...} JSON shape used by both endpoints.
 
-    ``restrict_to_ids`` is the BFS visited set for the focus path — we
+    ``restrict_to_ids`` is the BFS visited set for the focus path â€” we
     drop edges whose endpoints didn't make it into the subgraph and
     deduplicate edges that BFS traversed from both directions.
     """

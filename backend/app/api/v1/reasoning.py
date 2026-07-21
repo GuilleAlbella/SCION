@@ -1,6 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-"""Reasoning API (v1) — TAISA individual and batch analysis."""
+"""Reasoning API (v1) â€” TAISA individual and batch analysis."""
 
 from typing import Any, Dict, List, Optional
 
@@ -76,7 +76,7 @@ def execute_batch_reasoning(request: BatchReasoningRequest) -> Dict[str, Any]:
     from app.graph.blast_radius import _load_all_changes
     events = _load_all_changes(request.snapshot_from, request.snapshot_to)
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         snapshot = session.query(Snapshot).filter(
             Snapshot.snapshot_id == request.snapshot_to
         ).first()
@@ -116,7 +116,7 @@ def execute_batch_reasoning(request: BatchReasoningRequest) -> Dict[str, Any]:
 
     # Persist a single ReasoningEvent with change_id=NULL to mark this as a
     # batch-level verdict (distinguishable from per-change reasoning rows).
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         session.add(ReasoningEvent(
             change_id=None,
             taisa_version=PROMPT_CONTRACT_VERSION,
@@ -156,7 +156,7 @@ def execute_reasoning(change_id: int) -> ReasoningResponse:
     from app.taisa.taisa_models import ReasoningEvent
     from app.taisa.taisa_prompts import PROMPT_CONTRACT_VERSION
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         change = session.execute(
             select(ChangeEvent).where(ChangeEvent.change_id == change_id)
         ).scalar_one_or_none()
@@ -174,7 +174,7 @@ def execute_reasoning(change_id: int) -> ReasoningResponse:
                                 detail="snapshot not found.")
 
         # Join ImpactEvent -> GraphNode so we can feed TAISA object names
-        # (not opaque node ids) — critical for the LLM to reason usefully.
+        # (not opaque node ids) â€” critical for the LLM to reason usefully.
         impact_rows = session.execute(
             select(ImpactEvent, GraphNode)
             .join(GraphNode, GraphNode.node_id == ImpactEvent.impacted_node_id)
@@ -219,7 +219,7 @@ def execute_reasoning(change_id: int) -> ReasoningResponse:
         context=context_payload,
     )
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         session.add(ReasoningEvent(
             change_id=change_id,
             taisa_version=result.raw_response.get("prompt_version", PROMPT_CONTRACT_VERSION),

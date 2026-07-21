@@ -1,6 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-"""Simulation API (v1) — "what if" analysis.
+"""Simulation API (v1) â€” "what if" analysis.
 
 Lets a user pick a hypothetical change (e.g. "change this column type",
 "drop this table") and see the blast radius + TAISA analysis WITHOUT
@@ -89,7 +89,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
     severity = _SEVERITY_MAP.get(request.change_type, "LOW")
     is_breaking = _BREAKING.get(request.change_type, False)
 
-    # ──── Resolve the simulation target to a graph node ────
+    # â”€â”€â”€â”€ Resolve the simulation target to a graph node â”€â”€â”€â”€
     # Graph nodes are tables/views (schema.table), not columns. If the user
     # simulates a column-level change like COLUMN_REMOVED on
     # "schema.table.col", we walk impact from the parent TABLE node because
@@ -100,7 +100,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
         target_name = ".".join(parts[:2])  # schema.table
 
     # Find the node
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         nodes = session.execute(
             select(GraphNode).where(GraphNode.snapshot_id == request.snapshot_id)
         ).scalars().all()
@@ -162,10 +162,10 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
     users_affected = 0
     try:
         from app.usage.usage_models import UsageEvent
-        with Session(bind=engine) as session:
+        with Session(engine) as session:
             usage_rows = session.execute(select(UsageEvent)).scalars().all()
             # Index usage by BOTH full qualified name ("schema.table") and the
-            # short table name — query logs may store either form, and we
+            # short table name â€” query logs may store either form, and we
             # don't want to miss matches because of a prefix mismatch.
             usage_map = {}
             for u in usage_rows:
@@ -204,20 +204,20 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
     # Build recommendation
     if risk_level == "HIGH":
         recommendation = (
-            f"⚠️ HIGH RISK: This change would affect {impact_count} dependent object(s) "
+            f"âš ï¸ HIGH RISK: This change would affect {impact_count} dependent object(s) "
             f"and touch approximately {queries_affected:,} queries run by {users_affected} user(s). "
             f"DO NOT proceed without: (1) notifying all downstream consumers, "
             f"(2) updating dependent views/procedures, (3) running regression tests."
         )
     elif risk_level == "MEDIUM":
         recommendation = (
-            f"⚡ MEDIUM RISK: {impact_count} dependent object(s) would be affected. "
+            f"âš¡ MEDIUM RISK: {impact_count} dependent object(s) would be affected. "
             f"~{queries_affected:,} queries touch this object. "
             f"Review dependent code and plan a migration path before applying."
         )
     else:
         recommendation = (
-            f"✓ LOW RISK: Minimal impact detected ({impact_count} dependents, "
+            f"âœ“ LOW RISK: Minimal impact detected ({impact_count} dependents, "
             f"~{queries_affected:,} queries). Safe to proceed with standard testing."
         )
 

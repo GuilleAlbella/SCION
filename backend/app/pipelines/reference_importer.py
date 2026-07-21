@@ -1,4 +1,4 @@
-"""§2.10 Reference Data importer.
+﻿"""Â§2.10 Reference Data importer.
 
 Parses customer-supplied Excel (.xlsx) or CSV files and upserts the
 org hierarchy and business-application mappings into the DB.
@@ -33,7 +33,7 @@ from app.db.models.reference import (
 )
 
 
-# ── result dataclass ──────────────────────────────────────────────────
+# â”€â”€ result dataclass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @dataclass
@@ -47,7 +47,7 @@ class ImportResult:
     warnings: list[str] = field(default_factory=list)
 
 
-# ── helpers ───────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _normalise_headers(raw_headers: list[str]) -> dict[str, str]:
@@ -105,7 +105,7 @@ def _cell(row: dict[str, str], alias_map: dict[str, str], key: str) -> str:
     return row.get(col, "").strip() if col else ""
 
 
-# ── public API ────────────────────────────────────────────────────────
+# â”€â”€ public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def import_users(content: bytes, filename: str) -> ImportResult:
@@ -115,17 +115,17 @@ def import_users(content: bytes, filename: str) -> ImportResult:
     aliases = _normalise_headers(headers)
 
     if "username" not in aliases:
-        result.warnings.append("No 'username' column found — file skipped.")
+        result.warnings.append("No 'username' column found â€” file skipped.")
         return result
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         dept_cache: dict[str, int] = {}
         team_cache: dict[str, int] = {}
 
         for i, row in enumerate(rows):
             username = _cell(row, aliases, "username")
             if not username:
-                result.warnings.append(f"Row {i + 2}: blank username — skipped.")
+                result.warnings.append(f"Row {i + 2}: blank username â€” skipped.")
                 continue
 
             dept_name = _cell(row, aliases, "department")
@@ -199,17 +199,17 @@ def import_applications(content: bytes, filename: str) -> ImportResult:
     aliases = _normalise_headers(headers)
 
     if "application_name" not in aliases:
-        result.warnings.append("No 'application_name' column found — file skipped.")
+        result.warnings.append("No 'application_name' column found â€” file skipped.")
         return result
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         app_cache: dict[str, int] = {}
         team_cache: dict[str, int] = {}
 
         for i, row in enumerate(rows):
             app_name = _cell(row, aliases, "application_name")
             if not app_name:
-                result.warnings.append(f"Row {i + 2}: blank application_name — skipped.")
+                result.warnings.append(f"Row {i + 2}: blank application_name â€” skipped.")
                 continue
 
             owner_team_name = _cell(row, aliases, "owner_team")

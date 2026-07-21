@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Share-folder watcher and notification endpoint.
 
@@ -22,7 +22,7 @@ from app.db.models.snapshot import Snapshot
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-# Subdirectory names inside the share → category label
+# Subdirectory names inside the share â†’ category label
 _SHARE_DIRS: dict[str, str] = {
     "Data Dictionary": "dict",
     "Data Lineage":    "lineage",
@@ -48,9 +48,9 @@ class NotificationsResponse(BaseModel):
     share_path: str
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Helpers
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _scan_share(mount_path: str) -> tuple[bool, float, list[str], str]:
     """Return (reachable, newest_mtime_epoch, categories, date_label)."""
@@ -88,20 +88,20 @@ def _scan_share(mount_path: str) -> tuple[bool, float, list[str], str]:
 
 def _latest_snapshot_mtime() -> float:
     """Return the snapshot_time of the most recent snapshot as epoch seconds."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         row = session.execute(
             select(Snapshot).order_by(Snapshot.snapshot_time.desc()).limit(1)
         ).scalar_one_or_none()
         if row is None:
             return 0.0
         dt: datetime = row.snapshot_time
-        # snapshot_time is stored without tzinfo in SQLite — treat as UTC
+        # snapshot_time is stored without tzinfo in SQLite â€” treat as UTC
         return dt.timestamp()
 
 
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Endpoint
-# ──────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @router.get("", response_model=NotificationsResponse)
 def get_notifications() -> NotificationsResponse:

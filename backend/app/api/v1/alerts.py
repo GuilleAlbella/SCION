@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Alerts API (v1).
 
@@ -49,7 +49,7 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     alert_id = 0
 
     # Breaking / high-severity changes
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = session.execute(
             select(ChangeEvent)
             .where(
@@ -69,7 +69,7 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
                 "message": f"Breaking change detected: {r.change_type} on {r.object_identifier}",
                 "object_identifier": r.object_identifier,
                 "timestamp": r.detected_at.isoformat() if r.detected_at else "",
-                "source": f"Diff #{r.snapshot_from}→#{r.snapshot_to}",
+                "source": f"Diff #{r.snapshot_from}â†’#{r.snapshot_to}",
             })
         elif r.severity == "HIGH":
             alert_id += 1
@@ -80,13 +80,13 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
                 "message": f"High-severity change: {r.change_type} on {r.object_identifier}",
                 "object_identifier": r.object_identifier,
                 "timestamp": r.detected_at.isoformat() if r.detected_at else "",
-                "source": f"Diff #{r.snapshot_from}→#{r.snapshot_to}",
+                "source": f"Diff #{r.snapshot_from}â†’#{r.snapshot_to}",
             })
 
     # High-risk reasoning events
     try:
         from app.taisa.taisa_models import ReasoningEvent
-        with Session(bind=engine) as session:
+        with Session(engine) as session:
             reasoning_rows = session.execute(
                 select(ReasoningEvent)
                 .where(ReasoningEvent.risk_level.in_(["HIGH", "CRITICAL"]))
@@ -108,9 +108,9 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # ──── Proactive structural alerts (read from pre-computed table) ────
+    # â”€â”€â”€â”€ Proactive structural alerts (read from pre-computed table) â”€â”€â”€â”€
     # Until v1.19, this block loaded every graph_node + graph_edge for
-    # the latest snapshot and ran the 3 checks inline on each request —
+    # the latest snapshot and ran the 3 checks inline on each request â€”
     # 337k+ rows + Python walks per click. The work has moved to
     # ``run_post_ingest_pipeline`` (writes into ``proactive_alert``),
     # so the endpoint just reads indexed rows. Lazy fallback: if no
@@ -120,7 +120,7 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
         from app.db.models.snapshot import Snapshot
         from app.graph.impact_models import ProactiveAlert
 
-        with Session(bind=engine) as session:
+        with Session(engine) as session:
             latest_snap = session.execute(
                 select(Snapshot).order_by(desc(Snapshot.snapshot_id)).limit(1)
             ).scalar_one_or_none()
@@ -155,7 +155,7 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
                         ).scalars().all()
                     except Exception:
                         # Keep the endpoint usable even if backfill
-                        # fails — the change-event-based alerts above
+                        # fails â€” the change-event-based alerts above
                         # are independent and already populated.
                         pre_rows = []
 
@@ -184,10 +184,10 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     }
 
 
-# ──── Statistical anomaly detection (v1.07 data-science pack) ────
+# â”€â”€â”€â”€ Statistical anomaly detection (v1.07 data-science pack) â”€â”€â”€â”€
 # Kept as a dedicated endpoint rather than folded into /alerts so the UI
 # can render a visually distinct "statistical anomalies" card (z-scores,
-# expected vs observed) — the generic /alerts schema has no room for
+# expected vs observed) â€” the generic /alerts schema has no room for
 # those fields.
 
 @router.get("/anomalies", status_code=status.HTTP_200_OK)
@@ -197,7 +197,7 @@ def get_anomalies(
 ) -> Dict[str, Any]:
     """Per-(schema, snapshot) change-volume anomalies flagged by z-score.
 
-    Uses leave-one-out mean/stdev over the schema's own history — so a
+    Uses leave-one-out mean/stdev over the schema's own history â€” so a
     spike can't hide itself inside its own baseline. Returns the full
     list sorted by |z-score| desc.
     """

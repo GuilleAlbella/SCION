@@ -130,7 +130,11 @@ def resolve_entities(snapshot_id: int, session: Session) -> int:
     ).all()
 
     for usage_id, obj_name, schema_name, object_type in usage_rows:
-        fq_name = obj_name if "." in (obj_name or "") else f"{schema_name or ''}.{obj_name or ''}"
+        # Skip rows where we can't build a qualified name — they would produce
+        # ".TABLE" which never matches an ObjectEntity and silently break linkage.
+        if not schema_name and "." not in (obj_name or ""):
+            continue
+        fq_name = obj_name if "." in (obj_name or "") else f"{schema_name}.{obj_name or ''}"
         entity_type = (object_type or "TABLE").upper()
 
         entity = session.execute(
@@ -172,10 +176,32 @@ def resolve_entities(snapshot_id: int, session: Session) -> int:
                 .values(entity_id=entity.entity_id)
             )
 
+    # ── Step 5 (baseline only): retire entities no longer in the schema ────────
+    # Incremental snapshots only capture diffs — a missing table does NOT mean
+    # it was dropped. Only a baseline snapshot is a complete picture, so we
+    # only mark entities inactive when processing a baseline.
+    is_baseline: bool = bool(
+        session.execute(
+            select(Snapshot.is_baseline).where(Snapshot.snapshot_id == snapshot_id)
+        ).scalar_one_or_none()
+    )
+    deactivated = 0
+    if is_baseline:
+        seen_fq_names = {f"{schema_name}.{table_name}" for _, table_name, _, schema_name in rows}
+        if seen_fq_names:
+            result = session.execute(
+                update(ObjectEntity)
+                .where(~ObjectEntity.object_name.in_(seen_fq_names))
+                .where(ObjectEntity.is_active == True)  # noqa: E712
+                .values(is_active=False)
+            )
+            deactivated = result.rowcount or 0
+
     logger.info(
-        "[entity-resolver] snapshot=%s upserted=%d graph_nodes=%d usage_events=%d change_events=%d",
+        "[entity-resolver] snapshot=%s upserted=%d deactivated=%d graph_nodes=%d usage_events=%d change_events=%d",
         snapshot_id,
         resolved,
+        deactivated,
         len(node_rows),
         len(usage_rows),
         len(change_rows),

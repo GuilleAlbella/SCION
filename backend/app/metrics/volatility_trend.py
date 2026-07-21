@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Rolling volatility trend per schema/domain.
 
@@ -35,7 +35,7 @@ from app.diff.diff_models import ChangeEvent
 
 # Default rolling window (in snapshots). Tuned for demo-scale data where
 # we only have ~10 snapshots; in production with daily snapshots this
-# would be 7–14 and would represent weekly cadence.
+# would be 7â€“14 and would represent weekly cadence.
 DEFAULT_WINDOW = 3
 
 # Cap on history depth (most recent N snapshots scanned). Same motivation
@@ -71,7 +71,7 @@ class SchemaVolatilityTrend:
 def _classify_trend(delta_pct: float, epsilon: float = 5.0) -> str:
     """Label a percentage delta as worsening / improving / stable.
 
-    The epsilon band (±5%) avoids labelling rounding noise as a trend.
+    The epsilon band (Â±5%) avoids labelling rounding noise as a trend.
     Sign convention: delta > 0 means volatility went UP = WORSE.
     """
     if delta_pct > epsilon:
@@ -88,13 +88,13 @@ def compute_schema_volatility_trend(
     """Return rolling volatility per schema across the recent history.
 
     Algorithm:
-      1. Identify the ``max_history_snapshots`` most recent snapshots —
+      1. Identify the ``max_history_snapshots`` most recent snapshots â€”
          this is the universe scanned for changes. Anything older is
          excluded so the function stays bounded at production scale.
-      2. Load schema→table counts for those snapshots.
+      2. Load schemaâ†’table counts for those snapshots.
       3. Load change events for those snapshots, indexed by
          (schema, snapshot_to).
-      4. For each schema × snapshot_t in scope, compute:
+      4. For each schema Ã— snapshot_t in scope, compute:
            numerator   = distinct objects in this schema that changed
                          in snapshots (t-window+1 .. t)
            denominator = # of objects in this schema AT snapshot t
@@ -102,7 +102,7 @@ def compute_schema_volatility_trend(
       5. Emit the per-schema series plus the delta between the last and
          second-to-last points.
     """
-    # ── 1. Snapshot order + per-schema object counts per snapshot ──
+    # â”€â”€ 1. Snapshot order + per-schema object counts per snapshot â”€â”€
     # Restricted to the most-recent ``max_history_snapshots`` so this
     # never tries to walk every historical snapshot at Transcend scale.
     #
@@ -111,7 +111,7 @@ def compute_schema_volatility_trend(
     # IN-clause (up to 37 k schema_ids), causing multi-second latency on
     # production. Replaced with a single JOIN-based aggregate per snapshot
     # so the work stays server-side and benefits from the existing indexes.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         recent_snapshot_ids = [
             int(s) for s in session.execute(
                 select(SchemaSnapshot.snapshot_id)
@@ -125,7 +125,7 @@ def compute_schema_volatility_trend(
 
         snap_id_list = ",".join(str(s) for s in recent_snapshot_ids)
 
-        # (snapshot_id, schema_name, table_count) — one row per schema×snap.
+        # (snapshot_id, schema_name, table_count) â€” one row per schemaÃ—snap.
         # JOIN keeps all work server-side; no large IN-clause over schema_ids.
         count_rows = session.execute(text(f"""
             SELECT ss.snapshot_id, ss.schema_name, COUNT(ts.table_id) AS table_count
@@ -135,7 +135,7 @@ def compute_schema_volatility_trend(
             GROUP BY ss.snapshot_id, ss.schema_name
         """)).fetchall()
 
-        # (snapshot_to, schema_name, objects_changed) aggregate — avoids
+        # (snapshot_to, schema_name, objects_changed) aggregate â€” avoids
         # loading all 1.86 M change_event rows into Python.
         # COLUMN changes are collapsed to their parent table using inline
         # SUBSTR so the numerator counts "tables touched", not raw columns.
@@ -144,7 +144,7 @@ def compute_schema_volatility_trend(
         #   p2 = p1 + position of the first dot in the remainder
         #        (i.e. position of the second dot in the full identifier)
         #
-        # If object_type = COLUMN and a second dot exists → return
+        # If object_type = COLUMN and a second dot exists â†’ return
         # SCHEMA.TABLE; otherwise return the full identifier.
         change_agg = session.execute(text(f"""
             SELECT
@@ -186,7 +186,7 @@ def compute_schema_volatility_trend(
         (r[1], int(r[0])): int(r[2]) for r in change_agg
     }
 
-    # ── 3. Build the per-schema series ──
+    # â”€â”€ 3. Build the per-schema series â”€â”€
     all_schemas = sorted({r[1] for r in count_rows})
     trends: List[SchemaVolatilityTrend] = []
 
@@ -210,7 +210,7 @@ def compute_schema_volatility_trend(
                 objects_total=total,
             ))
 
-        # ── 4. Delta between the most recent and its predecessor ──
+        # â”€â”€ 4. Delta between the most recent and its predecessor â”€â”€
         current = series[-1].volatility if series else 0.0
         prior = series[-2].volatility if len(series) >= 2 else current
         delta = current - prior

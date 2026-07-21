@@ -1,4 +1,4 @@
-"""Persist a `ParsedLineagePayload` into SCION's database tables.
+﻿"""Persist a `ParsedLineagePayload` into SCION's database tables.
 
 Produces:
 
@@ -14,12 +14,12 @@ Produces:
 
 Stubs used until parser v2 lands:
 
-- ``table_snapshot.object_type`` → ``"UNKNOWN"`` if parser didn't send
+- ``table_snapshot.object_type`` â†’ ``"UNKNOWN"`` if parser didn't send
   ``datasetType``. Will switch to the real value automatically when Rahul
   adds it.
-- ``column_snapshot.data_type`` → ``"UNKNOWN"``. Same story.
-- ``column_snapshot.nullable`` → ``True`` (permissive default).
-- ``column_snapshot.ordinal_position`` → deterministic index within table.
+- ``column_snapshot.data_type`` â†’ ``"UNKNOWN"``. Same story.
+- ``column_snapshot.nullable`` â†’ ``True`` (permissive default).
+- ``column_snapshot.ordinal_position`` â†’ deterministic index within table.
 """
 
 from __future__ import annotations
@@ -29,9 +29,9 @@ from typing import Dict, List, Optional, Tuple
 from .parser_models import IngestionReport, ParsedLineagePayload
 
 # NOTE: All SQLAlchemy model imports are done LAZILY inside `ingest()`.
-# The project uses `app.db.base` as the eager-import aggregator — importing
+# The project uses `app.db.base` as the eager-import aggregator â€” importing
 # any model at module load here creates a circular import chain through
-# base.py → diff_models → column_snapshot → … while base.py is still
+# base.py â†’ diff_models â†’ column_snapshot â†’ â€¦ while base.py is still
 # initializing. Late imports avoid the cycle and match the pattern used by
 # the rest of `app/api/v1/` endpoints.
 
@@ -45,7 +45,7 @@ def ingest(
 ) -> IngestionReport:
     """Persist `payload` into SCION and return an ingestion report.
 
-    All inserts happen within a single transaction — if any row fails,
+    All inserts happen within a single transaction â€” if any row fails,
     the whole snapshot is rolled back. Caller gets the surrogate snapshot_id.
 
     Args:
@@ -65,7 +65,7 @@ def ingest(
     # predictable order before we pull in individual ORM classes. This works
     # around a cold-start circular-import that otherwise fires when the very
     # first model resolution in a process is `ColumnSnapshot`.
-    import app.db.base  # noqa: F401 — side-effect eager load
+    import app.db.base  # noqa: F401 â€” side-effect eager load
 
     from sqlalchemy.orm import Session
     from app.db.engine import engine
@@ -93,9 +93,9 @@ def ingest(
         "processes": 0, "steps": 0, "attribute_lineage": 0,
     }
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         with session.begin():
-            # ──── 1. Create or reuse Snapshot row ────
+            # â”€â”€â”€â”€ 1. Create or reuse Snapshot row â”€â”€â”€â”€
             if attach_to_snapshot_id is not None:
                 from sqlalchemy import select as _select
                 snap = session.execute(
@@ -120,8 +120,8 @@ def ingest(
                 session.flush()  # force PK assignment so FKs below can reference it
             report.snapshot_id = snap.snapshot_id
 
-            # ──── 2. Containers → schema_snapshot ────
-            # Maps container natural key → inserted schema_id for dataset lookups.
+            # â”€â”€â”€â”€ 2. Containers â†’ schema_snapshot â”€â”€â”€â”€
+            # Maps container natural key â†’ inserted schema_id for dataset lookups.
             schema_id_by_container: Dict[str, int] = {}
             for c in payload.containers:
                 schema_row = SchemaSnapshot(
@@ -133,10 +133,10 @@ def ingest(
                 schema_id_by_container[c.container_natural_key] = schema_row.schema_id
                 persisted["databases"] += 1
 
-            # ──── 3. Datasets → table_snapshot + graph_node ────
+            # â”€â”€â”€â”€ 3. Datasets â†’ table_snapshot + graph_node â”€â”€â”€â”€
             # The parser's dataset name is "container.table"; we strip the
             # container prefix to match SCION's existing table_name format.
-            # Datasets orphaned (no container match) are skipped — that can
+            # Datasets orphaned (no container match) are skipped â€” that can
             # happen when noise_filter dropped the container but left a
             # dataset referencing it.
             table_id_by_dataset: Dict[str, int] = {}
@@ -146,7 +146,7 @@ def ingest(
                 if schema_id is None:
                     report.warnings.append(
                         f"Dataset {d.dataset_natural_key!r} has unknown container "
-                        f"{d.container_natural_key!r} — skipped."
+                        f"{d.container_natural_key!r} â€” skipped."
                     )
                     continue
 
@@ -178,7 +178,7 @@ def ingest(
                 node_id_by_dataset[d.dataset_natural_key] = node.node_id
                 persisted["graph_nodes"] += 1
 
-            # ──── 4. Attributes → column_snapshot ────
+            # â”€â”€â”€â”€ 4. Attributes â†’ column_snapshot â”€â”€â”€â”€
             # Group by dataset so we can assign deterministic ordinal positions
             # when the parser hasn't emitted them. Order within group uses
             # first-seen (list position) as a stable proxy.
@@ -189,7 +189,7 @@ def ingest(
                     # Attribute's table was filtered out or unknown.
                     report.warnings.append(
                         f"Attribute {a.attribute_natural_key!r} has unknown "
-                        f"dataset {a.dataset_natural_key!r} — skipped."
+                        f"dataset {a.dataset_natural_key!r} â€” skipped."
                     )
                     continue
 
@@ -216,7 +216,7 @@ def ingest(
                 session.add(col)
                 persisted["columns"] += 1
 
-            # ──── 5. Processes and steps ────
+            # â”€â”€â”€â”€ 5. Processes and steps â”€â”€â”€â”€
             # Two passes: processes first so steps can reference the FK.
             process_id_by_natural: Dict[str, int] = {}
             for p in payload.processes:
@@ -239,7 +239,7 @@ def ingest(
                 if process_id is None:
                     report.warnings.append(
                         f"Step {s.step_natural_key!r} references unknown "
-                        f"process {s.process_natural_key!r} — skipped."
+                        f"process {s.process_natural_key!r} â€” skipped."
                     )
                     continue
 
@@ -257,7 +257,7 @@ def ingest(
                 session.add(step_row)
                 persisted["steps"] += 1
 
-            # ──── 6. Dataset lineage → graph_edge ────
+            # â”€â”€â”€â”€ 6. Dataset lineage â†’ graph_edge â”€â”€â”€â”€
             # `node_id_by_dataset` was built in step 3; edges to unknown
             # datasets are dropped (noise_filter should have done it, but
             # we double-check here so nothing dangling slips through).
@@ -274,8 +274,8 @@ def ingest(
                 if src is None or tgt is None:
                     report.warnings.append(
                         f"Dataset lineage edge "
-                        f"{e.source_dataset_natural_key!r} → "
-                        f"{e.target_dataset_natural_key!r} has missing endpoint — skipped."
+                        f"{e.source_dataset_natural_key!r} â†’ "
+                        f"{e.target_dataset_natural_key!r} has missing endpoint â€” skipped."
                     )
                     continue
 
@@ -300,7 +300,7 @@ def ingest(
                 session.add(edge)
                 persisted["graph_edges"] += 1
 
-            # ──── 6.5. Resolve UNKNOWN-schema references via attribute lineage ────
+            # â”€â”€â”€â”€ 6.5. Resolve UNKNOWN-schema references via attribute lineage â”€â”€â”€â”€
             # The parser emits UNKNOWN.<Name> when it can't infer the schema
             # from the SQL context. Noise-filter drops those datasets as
             # unresolvable containers, so their edges are missing from step 6.
@@ -308,7 +308,7 @@ def ingest(
             # endpoint. If the bare object name uniquely matches exactly one
             # real node in this snapshot, we emit the graph_edge so lineage
             # remains visible. Ambiguous names (same table in multiple schemas)
-            # are skipped — better to show nothing than to show the wrong link.
+            # are skipped â€” better to show nothing than to show the wrong link.
             node_ids_by_bare_name: Dict[str, List[int]] = {}
             for key, nid in node_id_by_dataset.items():
                 if "." in key:
@@ -357,7 +357,7 @@ def ingest(
                 session.add(edge)
                 persisted["graph_edges"] += 1
 
-            # ──── 7. Attribute-level lineage ────
+            # â”€â”€â”€â”€ 7. Attribute-level lineage â”€â”€â”€â”€
             for e in payload.attribute_lineage:
                 row = AttributeLineage(
                     snapshot_id=snap.snapshot_id,
@@ -388,9 +388,9 @@ def ingest(
     return report
 
 
-# ──────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Helpers
-# ──────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _strip_prefix(s: str, prefix: str) -> str:
     """Remove `prefix` from `s` if present; otherwise return `s` unchanged.
@@ -402,7 +402,7 @@ def _strip_prefix(s: str, prefix: str) -> str:
     return s[len(prefix):] if s.startswith(prefix) else s
 
 
-# Parser `datasetType` → SCION `object_type`. Kept small and explicit;
+# Parser `datasetType` â†’ SCION `object_type`. Kept small and explicit;
 # unknown values fall through as-is (uppercased). Will be extended as we
 # see more Teradata TableKind variants in real data.
 _DATASET_TYPE_MAP = {
@@ -422,7 +422,7 @@ def _map_dataset_type(dataset_type: Optional[str]) -> str:
     """Normalize parser `datasetType` to SCION's `object_type` enumeration.
 
     Until the parser emits a real value (v2 request), this just returns
-    ``"UNKNOWN"`` — SCION's UI already renders UNKNOWN nodes with a neutral
+    ``"UNKNOWN"`` â€” SCION's UI already renders UNKNOWN nodes with a neutral
     style so this is a safe placeholder.
     """
     if not dataset_type:

@@ -8,6 +8,123 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.09.06 (2026-07-21) — fix(phase2-audit-final): 3 frontend bugs — Intelligence stale state, Snapshots FileReader error, Snapshots #0
+
+**Phase 2 final audit pass**
+
+- **Estado obsoleto visible mientras carga un nuevo snapshot en Intelligence** (`app/intelligence/page.tsx`): `loadData` no limpiaba `scorecard`, `domainRisks`, `coChange` ni `volTrend` antes de lanzar los nuevos fetches. Durante el tiempo de carga se mostraban datos del snapshot anterior, y el botón "Export CSV" apuntaba al nuevo snapshot mientras el contenido visible correspondía al viejo. Fix: `setScorecard(null)`, `setDomainRisks(null)`, `setCoChange(null)`, `setVolTrend(null)` al inicio de `loadData`.
+- **Sin `reader.onerror` en `handleFileSelect` de Snapshots** (`app/snapshots/page.tsx`): un fallo de `FileReader.readAsText` (p.ej. unidad de red desconectada, objeto `File` revocado) dejaba el panel de importación en blanco sin feedback ni mensaje de error. Fix: añadido `reader.onerror` que llama a `setImportError("Could not read the selected file.")` y limpia `importFile`.
+- **"Snapshot #0 created" cuando `snapshotId` es null en importación manual** (`app/snapshots/page.tsx`): cuando el usuario sube únicamente archivos `.json` de lineage sin `.dat`, `snapshotId` puede permanecer `null` y `setShareManualResult` se llamaba con `snapshot_id: snapshotId ?? 0`, renderizando "Snapshot #0 created". Fix: el bloque `setShareManualResult` se envuelve en `if (snapshotId != null)`.
+
+---
+
+### v2.09.05 (2026-07-21) — fix(phase2-audit-6): Session(bind=) eradicated across all 38 production files + SnapshotMetricsResponse type fix
+
+**Phase 2 sixth-pass audit**
+
+- **`Session(bind=engine)` en 32 archivos adicionales de `backend/app`**: el patrón `Session(bind=X)` era incompatible con SQLAlchemy 2.0. Reemplazado masivamente en todos los ficheros de `api/v1/` (alerts, changes, columns, ddl, dict_import, diff, entity, export, graph, health, landscape, notifications, objects, reasoning, reference_data, reference_import, report, schema_tree, search, share_import, simulation, snapshots, timeline, usage), `graph/` (impact_summary, proactive_alerts), `metrics/` (anomaly_detection, cochange, volatility_trend), `pipelines/reference_importer`, `parser_ingest/ingestor` y `taisa/taisa_client`. Resultado: 0 ocurrencias de `Session(bind=` en todo el código de producción.
+- **`SnapshotMetricsResponse.structural_hash: string` debería ser `string | null`** (`frontend/src/lib/api/types.ts`): en v2.09.04 el backend fue corregido para retornar `null` para snapshots legacy, pero el tipo TypeScript del frontend aún declaraba `string` (no nullable). Corregido a `string | null`, alineando el tipo con la respuesta real de la API.
+
+---
+
+### v2.09.04 (2026-07-21) — fix(phase2-audit-5): 9 bugs found in fifth-pass Phase 2 audit
+
+**Phase 2 fifth-pass audit — correctness + race-condition fixes**
+
+- **`Session(bind=engine)` en `impact.py` (×2)** (`api/v1/impact.py` líneas 160, 272): `_resolve_node_for_change` y `execute_impact` usaban `Session(bind=engine)`, incompatible con SQLAlchemy 2.0. Fix: `Session(engine)`.
+- **`Session(bind=engine)` en `lineage.py` (×2)** (`api/v1/lineage.py` líneas 89, 239): mismo patrón en `get_column_lineage` y `traverse_column_lineage`. Fix: `Session(engine)`.
+- **setState dentro del updater funcional en `colNavBack`** (`app/lineage/page.tsx`): el callback de `setColNavStack` llamaba `setSelectedObject`, `setRedirectedFromColumn` y `setColNavHighlight` como efecto secundario, lo cual React en concurrent mode puede disparar múltiples veces o de forma síncrona con estado inconsistente. Fix: sacar las tres mutaciones fuera del updater; `setColNavStack` permanece con updater para garantizar la lectura del estado más reciente.
+- **Stale closure en PII classify** (`app/lineage/page.tsx`): si el usuario navegaba a otro objeto mientras la clasificación estaba en vuelo, `setPiiMap` se llamaba con los datos del objeto anterior sobreescribiendo los datos del objeto actual. Fix: añadido `selectedObjectRef` (ref síncrona al `selectedObject` actual); el handler captura `targetObj` al click y comprueba `selectedObjectRef.current !== targetObj` antes de `setPiiMap`.
+- **Race condition en `fetchPage`** (`app/changes/page.tsx`): dos fetches concurrentes (trigger por cambio de filtro) podían interleavar sus `setState` y el resultado más lento sobreescribía el más reciente. Fix: añadido `fetchIdRef` incremental; cada llamada captura `myFetchId` y abandona el setState si ya hay un fetch más nuevo en vuelo.
+- **`navigator.clipboard.writeText` crash en HTTP** (`app/changes/page.tsx`): `navigator.clipboard` es `undefined` en contextos no seguros (HTTP). Fix: `navigator.clipboard?.writeText(text).catch(() => {})`.
+
+---
+
+### v2.09.03 (2026-07-21) — fix(phase2-audit-4): 5 bugs found in fourth-pass Phase 2 audit
+
+**Phase 2 fourth-pass audit — correctness fixes**
+
+- **`AttributeError: 'NoneType' has no attribute 'lower'` en `/usage/object`** (`api/v1/usage.py`): cuando el parámetro `object` es un nombre no cualificado (sin punto), `schema` es `None` pero `schema.lower()` se evalúa de todas formas como argumento del constructor `or_()` de SQLAlchemy. Resultado: HTTP 500 en cualquier lookup de objeto sin schema. Fix: `schema_clause = func.lower(...) == schema.lower() if schema is not None else sa_true()`.
+- **N+1 queries por tabla tras agotar el límite de clasificación PII** (`api/v1/columns.py`): el loop sobre las 240k tablas de un snapshot grande seguía ejecutando un `SELECT` por tabla incluso tras consumir el presupuesto `limit`, solo para contar `skipped`. Fix: `break` cuando `remaining <= 0` antes de emitir la query, eliminando las 239.995 queries de más.
+- **`_maybe_reverse` ausente en el return de idempotency interno** (`diff/diff_engine.py`): si un worker concurrente inserta el diff entre el check externo y el inicio de la transacción del worker local, el return interno devolvía los `Change` objects en dirección canónica sin invertir para el caller que pidió `compute_diff(B, A)`. Fix: envuelto en `_maybe_reverse(..., is_reversed)`.
+- **Colisión de nombre en `all_table_names` genera aristas FEEDS cruzadas entre schemas** (`graph/graph_builder.py`): `all_table_names` usaba `table_name.lower()` como clave única — en warehouses con múltiples schemas que comparten nombres de tabla (ej. `SALES_EU.CUSTOMERS` y `SALES_US.CUSTOMERS`), cada tabla sobreescribía la anterior y la heurística FK apuntaba al schema equivocado. Fix: cambiado a `Dict[str, List[...]]`; en Step 7 sólo se emite arista cuando hay exactamente un match (nombre unívoco).
+- **Stale closure en IntersectionObserver permite doble fetch en Impact page** (`app/impact/page.tsx`): el observer capturaba `handleLoadMore` con el estado `loadingMore=false` antes de que React re-renderizara, permitiendo dos requests idénticos con el mismo offset. Fix: añadido `loadingMoreRef = useRef(false)` que se actualiza síncronamente en `handleLoadMore`, y el guard del observer comprueba la ref en lugar del estado.
+
+---
+
+### v2.09.02 (2026-07-21) — fix(phase2-audit-3): 6 bugs found in third-pass Phase 2 audit
+
+**Phase 2 third-pass audit — correctness + reliability fixes**
+
+- **Usage-by-app OOM on large snapshots** (`api/v1/reference_data.py`): `GET /reference/usage-by-app` fetched every `UsageEvent` row for the snapshot into Python memory for aggregation (500k rows → ~200 MB per request). Fixed by pushing `GROUP BY (schema_name, object_name)` to SQL — Python loop now sees one row per distinct object instead of one row per fact.
+- **Entity linkage silent breakage when `schema_name` is NULL** (`entity/entity_resolver.py` line 133): `f"{schema_name or ''}.{obj_name}"` produced a leading-dot key (e.g. `".SOME_TABLE"`) for usage rows with no schema context. No `ObjectEntity` will ever have that name, so entity_id was silently left NULL for all such rows. Fixed by skipping the lookup when no schema is available and the name is unqualified.
+- **`is_active` never set to False — lifecycle column functionally dead** (`entity/entity_resolver.py`): the entity resolver only ever set `is_active=True`; dropped tables were never retired. Added a Step 5 pass (baseline snapshots only — incremental snapshots are diffs and cannot determine what was deleted) that marks all entities not seen in the current snapshot as `is_active=False`.
+- **BFS hop query unbounded on hub nodes** (`api/v1/graph.py` line 221): for a hub node with 50k+ outgoing edges, each BFS iteration materialised all edges before the `max_nodes` cap fired. Fixed by adding `.limit(max_nodes * 10)` to the per-hop edge query, bounding materialization per iteration.
+- **Initial load errors silently swallowed in Reference page** (`app/reference/page.tsx`): the `catch {}` block discarded all errors and the page rendered with empty data and no explanation. Added `loadError` state and an `<AlertCircle>` banner so backend startup failures are visible.
+- **Missing `eslint-disable` on intentional incomplete dep array** (`app/intelligence/page.tsx` line 80): `useEffect` omitting `scorecard` and `loadData` from deps is intentional (guard prevents clobbering manual selections), but without the disable comment CI ESLint would fail with `--max-warnings 0`, and a future maintainer adding `scorecard` to the array would create an infinite fetch loop. Added `// eslint-disable-next-line react-hooks/exhaustive-deps`.
+
+---
+
+### v2.09.01 (2026-07-21) — fix(phase2-audit): 8 bugs found in Phase 2 deep audit
+
+**Phase 2 audit — correctness + reliability fixes**
+
+- **`delete_snapshot` FK violation on Postgres** (`api/v1/snapshots.py`): `object_entity.first_seen_snapshot_id` / `last_seen_snapshot_id` lacked `ON DELETE` action, defaulting to RESTRICT. Any snapshot touched by the entity resolver would fail to delete with a ForeignKeyViolation. Fix: migration `c9d0e1f2a3b4` replaces both FK constraints with `ON DELETE CASCADE`.
+- **Missing FK constraint for `baseline_snapshot_id`** (`alembic/versions/b8c9d0e1f2a3`): the incremental-loading migration added the column as a plain integer; migration `b8c9d0e1f2a3` adds the DB-level FK with `ON DELETE SET NULL`.
+- **Staging validator OOM** (`staging/staging_validator.py`): `.all()` on `ColumnSnapshot` would allocate ~4 GB for Transcend-scale extracts (9.8M rows). Replaced with two targeted SQL queries: `COUNT` for the row count, `SELECT DISTINCT data_type` for the type vocabulary check.
+- **Table-level app mapping never matched** (`api/v1/reference_data.py`): `table_map` was keyed as `"SCHEMA.TABLE"` but the lookup used bare `obj` (just the table name). Fixed lookup key to `f"{schema}.{obj}"`.
+- **`StagingTableImport`/`StagingColumnImport` missing ORM `server_default`** (`db/models/staging.py`): `created_at` had no `default`/`server_default` on the ORM model; inserting via ORM would send NULL and violate the NOT NULL constraint. Added `server_default=text("now()")`.
+- **`snapshot_time` serialised without UTC offset** (`api/v1/snapshots.py`): naive datetimes were emitted as bare ISO strings (e.g. `"2026-07-21T12:00:00"`) while `extract_timestamp` emitted `"+00:00"`. Fixed to append `"+00:00"` when `tzinfo` is absent.
+- **`colSpan={7}` on expand row** (`app/snapshots/page.tsx`): table has 8 columns; expand row left the Actions column uncovered. Fixed to `colSpan={8}`.
+- **VACUUM block incompatible with Postgres** (`api/v1/snapshots.py`): `os.path.getsize(engine.url.database)` treats the Postgres DB name as a file path, causing silent OSError warnings. Fixed with `engine.url.get_dialect().name == "sqlite"` guard; VACUUM is skipped with `"not applicable for Postgres"` reason.
+
+**Deferred (noted, not blocked):**
+- N+1 query pattern in `entity_resolver.py` (~240k SELECTs per ingest) — performance optimization deferred.
+- Staging rows never inserted by `dict_persister.py` (per-object staging tracking is a design gap, not a runtime error).
+- Unqualified `object` param in `/columns/pii` returns first-DB-match — edge case, low priority.
+- Concurrent baseline designation race under multi-worker ingest — advisory lock deferred.
+
+---
+
+### v2.09.00 (2026-07-21) — feat(timestamps): §2.13 Manifest-Derived Timestamps — extractor timestamp en Snapshots
+
+**Manifest-Derived Timestamps — Phase 2 §2.13**
+
+- **Alembic migration** `a7b8c9d0e1f2` (revisa `f6a7b8c9d0e1`): añade `extract_timestamp TIMESTAMPTZ NULL` a `snapshot`.
+- **Modelo** `backend/app/db/models/snapshot.py` — nuevo campo `extract_timestamp: Mapped[Optional[datetime]]`.
+- **Parser** — nueva función `_parse_extract_run_id_timestamp()` en `dict_persister.py`: extrae el prefijo UTC (`YYYYMMDDTHHMMSSz`) del `extract_run_id` y lo convierte a `datetime` timezone-aware. NULL para snapshots sin `extract_run_id` (parser-import, demo seeds).
+- **`persist_batch`** — popula `snap.extract_timestamp` en la creación del snapshot.
+- **API** — `GET /snapshots` expone `extract_timestamp` (ISO string o null) en cada fila.
+- **Frontend** — Snapshots page:
+  - Columna "Created" renombrada a "Extracted".
+  - Si `extract_timestamp` disponible: muestra la hora del extractor con fecha de ingest como subtext "imported {date}".
+  - Fallback para snapshots sin `extract_timestamp` (parser/demo): muestra `created_at` con etiqueta italic "ingest time".
+  - Columna "Contents / Extract time" renombrada a "Contents"; la hora de extracción ya no se muestra ahí cuando `extract_timestamp` está disponible (eliminando duplicación).
+
+---
+
+### v2.08.00 (2026-07-21) — feat(incremental): §2.2 Incremental Snapshot Handling — baseline tracking, gap detection, cumulative object count
+
+**Incremental Loading — Phase 2 §2.2**
+
+- **Alembic migration** `f6a7b8c9d0e1` (revisa `e5f6a7b8c9d0`): añade tres columnas a `snapshot`:
+  - `baseline_snapshot_id INTEGER` — FK a la baseline de day-zero para este snapshot (NULL en baselines).
+  - `cumulative_object_count INTEGER` — objetos únicos (schema, table) vistos desde la baseline hasta este snapshot.
+  - `gap_detected BOOLEAN NOT NULL DEFAULT false` — activado cuando el gap desde el último extract supera `SNAPSHOT_GAP_DAYS`.
+- **Modelo** `backend/app/db/models/snapshot.py` — tres nuevos campos con `Mapped[Optional[...]]`.
+- **Baseline logic** — nueva función `_assign_baseline_role` en `dict_persister.py`:
+  - Primer snapshot de un `source_system` → `is_baseline=True` (campo ya existía pero nunca se activaba).
+  - Gap > `SNAPSHOT_GAP_DAYS` (env var, default 7 días) → nuevo baseline, `gap_detected=True`.
+  - Resto → incremental; `baseline_snapshot_id` apunta al baseline activo.
+- **Auto-diff cambiado** — `_auto_diff_against_previous` ahora difiere contra la baseline (no el snapshot previo), mostrando drift estructural acumulado desde day-zero.
+- **Cumulative count** — nuevo paso `_compute_cumulative_count` al final del post-ingest pipeline: COUNT DISTINCT (schema, table) en la unión de baseline + snapshot actual.
+- **API** — `GET /snapshots` expone `is_baseline`, `baseline_snapshot_id`, `gap_detected`, `cumulative_object_count` en cada fila.
+- **Frontend** — Snapshots page:
+  - Badge `baseline` (índigo) o `gap reset` (naranja) junto al snapshot ID para baselines.
+  - Panel de detalle expandido: chip "Day-zero baseline" para baselines, chip "Cumulative (since baseline)" con count para incrementales.
+
+---
+
 ### v2.07.00 (2026-07-20) — feat(reference): §2.10 Reference Data — org hierarchy + business application metadata
 
 **Reference Data — Phase 2 §2.10**

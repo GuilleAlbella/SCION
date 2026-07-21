@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Usage & Criticality API (v1)."""
 
@@ -55,7 +55,7 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
       graph are returned. A snapshot whose objects have no matching
       usage_event rows (e.g. dict-imported snapshots, since dict
       doesn't bring usage data) returns an empty list.
-    - Without `snapshot_id`: legacy behaviour — global aggregation
+    - Without `snapshot_id`: legacy behaviour â€” global aggregation
       across every usage_event row.
 
     Why a graph_node join (and not table_snapshot): graph_node has the
@@ -71,7 +71,7 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
     from app.usage.usage_models import UsageEvent
     from app.graph.graph_models import GraphNode
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         stmt = (
             select(
                 UsageEvent.object_name,
@@ -86,7 +86,7 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
 
         if snapshot_id is not None:
             # Restrict to objects present in the snapshot's graph.
-            # `IN (subquery)` is fine here — graph_node is small per
+            # `IN (subquery)` is fine here â€” graph_node is small per
             # snapshot (hundreds to thousands of rows even for big
             # warehouses) and SQLite/Postgres both pick a hash join.
             scoped_names = (
@@ -95,7 +95,7 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
             )
             stmt = stmt.where(UsageEvent.object_name.in_(scoped_names))
 
-        # Hard cap is 50 rows post-filter — keeps the payload small
+        # Hard cap is 50 rows post-filter â€” keeps the payload small
         # for the UI which only ever shows the top 12 in the heatmap.
         stmt = stmt.limit(50)
         rows = session.execute(stmt).all()
@@ -118,7 +118,7 @@ def get_usage_summary(snapshot_id: Optional[int] = None) -> Dict[str, Any]:
 def get_object_usage_detail(snapshot_id: int, object: str) -> Dict[str, Any]:
     """Full usage + criticality profile for ONE object in a snapshot.
 
-    Powers the Usage page's per-object drill-down — click a row, or arrive
+    Powers the Usage page's per-object drill-down â€” click a row, or arrive
     via ``/usage?object=X`` from a Changes row. Unlike ``/summary`` and
     ``/criticality`` (which return top-N rankings), this resolves a
     specific object even when it sits far outside the top of either list,
@@ -131,7 +131,7 @@ def get_object_usage_detail(snapshot_id: int, object: str) -> Dict[str, Any]:
     caller passes a qualified name, disambiguate the bare match by schema
     so we don't sum a same-named table from another database.
     """
-    from sqlalchemy import and_, func, or_, select
+    from sqlalchemy import and_, func, or_, select, true as sa_true
     from sqlalchemy.orm import Session
     from app.db.engine import engine
     from app.usage.usage_models import ObjectCriticality, UsageEvent
@@ -140,19 +140,23 @@ def get_object_usage_detail(snapshot_id: int, object: str) -> Dict[str, Any]:
     leaf = object.split(".")[-1]
     schema = object.split(".")[0] if "." in object else None
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Case-insensitive match: PDCR emits identifiers in UPPERCASE while
         # the dictionary preserves the CREATE-statement case, so an exact
         # compare would miss most real usage rows (the same reason the
         # PDCR persister resolves case-insensitively against graph_node).
+        # Build the schema filter first to avoid calling .lower() on None.
+        # When schema is None the caller passed an unqualified name â€” any schema matches.
+        schema_clause = (
+            func.lower(UsageEvent.schema_name) == schema.lower()
+            if schema is not None
+            else sa_true()
+        )
         usage_filter = or_(
             func.lower(UsageEvent.object_name) == qualified.lower(),
             and_(
                 func.lower(UsageEvent.object_name) == leaf.lower(),
-                or_(
-                    schema is None,
-                    func.lower(UsageEvent.schema_name) == schema.lower(),
-                ),
+                schema_clause,
             ),
         )
         total_queries, max_users, last_accessed, usage_obj_type = session.execute(
@@ -256,7 +260,7 @@ def get_criticality(
         if cached_count > 0:
             with Session(engine) as session:
                 # Single GROUP BY to populate all four counts in one
-                # round-trip — at most 3 buckets returned regardless of
+                # round-trip â€” at most 3 buckets returned regardless of
                 # how many rows the snapshot contains.
                 level_rows = session.execute(
                     select(
@@ -306,7 +310,7 @@ def get_criticality(
                 "low_count": counts.get("LOW", 0),
             }
 
-    # Cache miss or forced — fall back to the full compute path. This
+    # Cache miss or forced â€” fall back to the full compute path. This
     # is potentially expensive on Transcend-scale snapshots; future
     # work could move it to a background task with progress reporting,
     # but in the v1.19 flow post-ingest always populates the cache so

@@ -457,6 +457,10 @@ function LineagePage() {
     tgtColNames: string[];
   } | null>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
+  // Always tracks the current selectedObject synchronously so async callbacks
+  // can check whether the user navigated away while a request was in-flight.
+  const selectedObjectRef = useRef(selectedObject);
+  selectedObjectRef.current = selectedObject;
 
   // When the URL points at a column (3-part identifier like
   // `schema.table.column`), we resolve to the parent table because columns
@@ -607,6 +611,7 @@ function LineagePage() {
       setColumnLineageMap(new Map());
       return;
     }
+    let cancelled = false;
     setColMapLoading(true);
     const objects = focusData.nodes
       .filter((n) => !["SCHEMA", "DATABASE"].includes(n.object_type))
@@ -616,13 +621,16 @@ function LineagePage() {
         getColumnLineage(snapshotId, obj).then((r) => [obj.toUpperCase(), r] as const),
       ),
     ).then((results) => {
+      if (cancelled) return;
       const m = new Map<string, ColumnLineageResponse>();
       for (const r of results)
         if (r.status === "fulfilled" && r.value[1].total_edges > 0)
           m.set(r.value[0], r.value[1]);
       setColumnLineageMap(m);
-      setColMapLoading(false);
+    }).finally(() => {
+      if (!cancelled) setColMapLoading(false);
     });
+    return () => { cancelled = true; };
   }, [showColumnLineage, focusData, snapshotId]);
 
   // ──── Build the 5-lane lineage view from the focused subgraph ────
@@ -917,15 +925,13 @@ function LineagePage() {
 
   // Pop one level from the nav stack (back button).
   const colNavBack = useCallback(() => {
-    setColNavStack(prev => {
-      if (prev.length === 0) return prev;
-      const prevTable = prev[prev.length - 1];
-      setSelectedObject(prevTable);
-      setRedirectedFromColumn(null);
-      setColNavHighlight(null);
-      return prev.slice(0, -1);
-    });
-  }, []);
+    if (colNavStack.length === 0) return;
+    const prevTable = colNavStack[colNavStack.length - 1];
+    setSelectedObject(prevTable);
+    setRedirectedFromColumn(null);
+    setColNavHighlight(null);
+    setColNavStack(prev => prev.slice(0, -1));
+  }, [colNavStack]);
 
   // Click-handler for nodes IN THE GRAPH diagram: re-focus the lineage on
   // the clicked object, mirroring the upstream/downstream list rows (and
@@ -1683,10 +1689,12 @@ function LineagePage() {
                         type="button"
                         disabled={classifying || piiLoading}
                         onClick={() => {
+                          const targetObj = selectedObjectRef.current;
                           setClassifying(true);
-                          classifyColumns(snapshotId, selectedObject, false, 500)
-                            .then(() => getColumnPii(snapshotId, selectedObject))
+                          classifyColumns(snapshotId, targetObj, false, 500)
+                            .then(() => getColumnPii(snapshotId, targetObj))
                             .then((data) => {
+                              if (selectedObjectRef.current !== targetObj) return;
                               const m = new Map<string, PiiEntry>();
                               for (const e of data.columns) m.set(e.column_name.toUpperCase(), e);
                               setPiiMap(m);

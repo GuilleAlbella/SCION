@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Timeline API (v1).
 
@@ -49,7 +49,7 @@ class TimelineResponse(BaseModel):
 
 
 # Server-side defaults / hard caps for timeline pagination. Default is
-# generous (200) because the typical use case — a single object's history —
+# generous (200) because the typical use case â€” a single object's history â€”
 # rarely has more than a few dozen events; the cap exists for the pathological
 # case where ``object_name`` is short enough that the substring match catches
 # tens of thousands of identifiers.
@@ -75,21 +75,21 @@ def get_timeline(
     # Build snapshot time lookup once. Snapshot count is small (dozens),
     # so loading them all is cheap and lets us O(1)-attach the timestamp
     # to every event row below.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         snapshots = session.execute(select(Snapshot)).scalars().all()
         snap_times = {
             s.snapshot_id: s.snapshot_time.isoformat() if s.snapshot_time else ""
             for s in snapshots
         }
 
-    # Shared filter — applied to both COUNT and the page query. Pre-built
+    # Shared filter â€” applied to both COUNT and the page query. Pre-built
     # once so the two queries can't drift if the filter logic changes.
     where_clause = or_(
         ChangeEvent.object_identifier.ilike(object_name),
         ChangeEvent.object_identifier.ilike(f"%{object_name}%"),
     )
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Total count (for UI "Showing X of Y" + has_more).
         total = int(
             session.execute(
@@ -148,7 +148,7 @@ def list_timeline_objects() -> Dict[str, Any]:
     capped so it can't bring the server down.
     """
     TIMELINE_OBJECTS_HARD_CAP = 1000
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = session.execute(
             select(ChangeEvent.object_identifier)
             .distinct()

@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-"""Columns API — PII classification and retrieval.
+"""Columns API â€” PII classification and retrieval.
 
 Two endpoints:
-  POST /columns/classify  — run TAISA PII analysis over unclassified columns
+  POST /columns/classify  â€” run TAISA PII analysis over unclassified columns
                             in a snapshot (or a specific table), caching results
                             on column_snapshot.pii_label / pii_confidence.
-  GET  /columns/pii       — return cached PII data for one SCHEMA.TABLE object.
+  GET  /columns/pii       â€” return cached PII data for one SCHEMA.TABLE object.
 """
 
 from datetime import datetime, timezone
@@ -58,7 +58,7 @@ def get_column_pii(
     schema_name = parts[0] if len(parts) >= 2 else None
     table_name = parts[1] if len(parts) >= 2 else parts[0]
 
-    with Session(bind=engine) as db:
+    with Session(engine) as db:
         stmt = (
             select(TableSnapshot.table_id)
             .join(SchemaSnapshot, TableSnapshot.schema_id == SchemaSnapshot.schema_id)
@@ -106,7 +106,7 @@ def classify_columns(
     limit: int = Query(500, ge=1, le=5000, description="Max columns to classify in this call"),
     force: bool = Query(False, description="Re-classify already-classified columns"),
     object: Optional[str] = Query(
-        None, description="Scope to a single SCHEMA.TABLE — omit to process all tables"
+        None, description="Scope to a single SCHEMA.TABLE â€” omit to process all tables"
     ),
 ) -> ClassifyResponse:
     """Batch-classify columns using TAISA PII analysis, caching results on column_snapshot."""
@@ -116,7 +116,7 @@ def classify_columns(
     skipped = 0
     errors = 0
 
-    with Session(bind=engine) as db:
+    with Session(engine) as db:
         table_stmt = (
             select(
                 TableSnapshot.table_id,
@@ -137,6 +137,13 @@ def classify_columns(
         tables = db.execute(table_stmt).all()
 
         for table_id, table_name, schema_name in tables:
+            remaining = limit - classified
+            if remaining <= 0:
+                # Budget exhausted â€” skip remaining tables without querying them.
+                # We don't count precise skipped-column totals past this point,
+                # but avoid issuing N more SQL queries for tables we won't classify.
+                break
+
             col_stmt = select(ColumnSnapshot).where(
                 ColumnSnapshot.table_id == table_id
             )
@@ -145,11 +152,6 @@ def classify_columns(
 
             cols = db.execute(col_stmt).scalars().all()
             if not cols:
-                continue
-
-            remaining = limit - classified
-            if remaining <= 0:
-                skipped += len(cols)
                 continue
 
             to_classify = cols[:remaining]

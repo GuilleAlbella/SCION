@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Report Generation API (v1).
 
@@ -84,7 +84,7 @@ def _build_html_report(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCION Impact Report — Snapshot #{snapshot_from} → #{snapshot_to}</title>
+<title>SCION Impact Report â€” Snapshot #{snapshot_from} â†’ #{snapshot_to}</title>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a2e; }}
@@ -114,9 +114,9 @@ def _build_html_report(
 </head>
 <body>
 <div class="header">
-    <div class="brand">TERADATA — PROJECT SCION</div>
+    <div class="brand">TERADATA â€” PROJECT SCION</div>
     <h1>Impact Comparison Report</h1>
-    <div class="meta">Snapshot #{snapshot_from} → #{snapshot_to} &nbsp;|&nbsp; Generated: {now}</div>
+    <div class="meta">Snapshot #{snapshot_from} â†’ #{snapshot_to} &nbsp;|&nbsp; Generated: {now}</div>
 </div>
 <div class="content">
     <!-- Executive Summary -->
@@ -167,7 +167,7 @@ def _build_html_report(
     </div>
 </div>
 <div class="footer">
-    SCION — Structural Change Intelligence &amp; Observability Node &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
+    SCION â€” Structural Change Intelligence &amp; Observability Node &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
 </div>
 </body>
 </html>"""
@@ -185,7 +185,7 @@ def generate_report(snapshot_from: int, snapshot_to: int) -> str:
     from app.db.models.snapshot import Snapshot
 
     # Load changes
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         all_snaps = session.execute(
             select(Snapshot.snapshot_id)
             .where(Snapshot.snapshot_id >= snapshot_from, Snapshot.snapshot_id <= snapshot_to)
@@ -199,7 +199,7 @@ def generate_report(snapshot_from: int, snapshot_to: int) -> str:
     else:
         pairs = [(snapshot_from, snapshot_to)]
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = []
         for sf, st in pairs:
             pair_rows = session.query(ChangeEvent).filter(
@@ -217,7 +217,7 @@ def generate_report(snapshot_from: int, snapshot_to: int) -> str:
             "is_breaking": r.is_breaking or False,
         })
 
-    # Blast radius and TAISA reasoning are best-effort — if either engine is
+    # Blast radius and TAISA reasoning are best-effort â€” if either engine is
     # stopped or fails, the report still renders with the diff section so the
     # user at least gets the raw change list.
     blast_radius = None

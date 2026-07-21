@@ -156,9 +156,11 @@ export default function ReferencePage() {
   const [appUsage, setAppUsage] = useState<AppUsageResponse | null>(null);
   const [tab, setTab] = useState<"org" | "apps">("org");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [s, t, a, tu, au] = await Promise.all([
         getReferenceStatus(),
@@ -172,8 +174,8 @@ export default function ReferencePage() {
       setApps(a);
       setTeamUsage(tu);
       setAppUsage(au);
-    } catch {
-      // ignore — empty state shown
+    } catch (e: unknown) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load reference data");
     } finally {
       setLoading(false);
     }
@@ -217,6 +219,14 @@ export default function ReferencePage() {
           Link technical metadata to business context — teams, departments, and owning applications.
         </p>
       </div>
+
+      {/* Load error — shown when the initial fetch fails (e.g. backend starting up) */}
+      {loadError && (
+        <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span>{loadError}</span>
+        </div>
+      )}
 
       {/* KPI row */}
       {status && (

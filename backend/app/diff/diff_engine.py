@@ -400,20 +400,24 @@ class DiffEngine:
                     )
 
                     if existing_events:
-                        # Idempotency: never insert duplicates for the same
-                        # pair; just project back to Change objects.
-                        return [
-                            Change(
-                                object_type=e.object_type,
-                                object_identifier=e.object_identifier,
-                                change_type=e.change_type,
-                                before_state=e.before_state,
-                                after_state=e.after_state,
-                                severity=e.severity or get_severity(e.change_type),
-                                is_breaking=e.is_breaking if e.is_breaking is not None else is_breaking(e.change_type),
-                            )
-                            for e in existing_events
-                        ]
+                        # Idempotency: a concurrent worker inserted the diff between
+                        # our outer check and the start of this transaction. Return
+                        # the rows they inserted, respecting direction normalisation.
+                        return _maybe_reverse(
+                            [
+                                Change(
+                                    object_type=e.object_type,
+                                    object_identifier=e.object_identifier,
+                                    change_type=e.change_type,
+                                    before_state=e.before_state,
+                                    after_state=e.after_state,
+                                    severity=e.severity or get_severity(e.change_type),
+                                    is_breaking=e.is_breaking if e.is_breaking is not None else is_breaking(e.change_type),
+                                )
+                                for e in existing_events
+                            ],
+                            is_reversed,
+                        )
 
                     if not changes:
                         # Nothing to persist, but keep behaviour consistent.

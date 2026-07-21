@@ -77,6 +77,7 @@ export default function IntelligencePage() {
   // Auto-analyze the TO-side of the active diff, but only if we don't have a
   // scorecard yet — otherwise we'd clobber a manual selection every time
   // context updates. The `scorecard` guard also prevents duplicate loads.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeDiffPair && !scorecard) {
       loadData(String(activeDiffPair.snapshotTo));
@@ -90,6 +91,10 @@ export default function IntelligencePage() {
     setError(null);
     setSelectedSnap(snapId);
     setDbFilter("");
+    setScorecard(null);
+    setDomainRisks(null);
+    setCoChange(null);
+    setVolTrend(null);
     try {
       // v1.07: fetch the DS-pack endpoints alongside the classic scorecard.
       // `allSettled` so a failure in one (e.g. cochange with no pairs yet)

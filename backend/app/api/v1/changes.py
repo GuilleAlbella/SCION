@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Changes API (v1).
 
@@ -63,7 +63,7 @@ def list_changes() -> Dict[str, Any]:  # pragma: no cover - thin HTTP wrapper
     - When no changes exist, return {"changes": []}.
     """
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         stmt = (
             select(ChangeEvent)
             .order_by(desc(ChangeEvent.detected_at))

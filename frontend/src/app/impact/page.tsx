@@ -57,6 +57,10 @@ export default function ImpactPage() {
   const [manualTo, setManualTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Ref mirrors loadingMore state so the IntersectionObserver closure always
+  // reads the current value synchronously, preventing a double-fetch when the
+  // observer fires twice before React flushes the setLoadingMore(true) update.
+  const loadingMoreRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   // ``result`` keeps the latest server response — we read summary,
   // blast_radius, and pagination metadata off it. ``items`` is the
@@ -132,7 +136,8 @@ export default function ImpactPage() {
   }
 
   async function handleLoadMore() {
-    if (from == null || to == null || !result || !result.has_more || loadingMore) return;
+    if (from == null || to == null || !result || !result.has_more || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const nextOffset = (result.offset ?? 0) + (result.limit ?? IMPACT_PAGE_SIZE);
@@ -150,6 +155,7 @@ export default function ImpactPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load more");
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }

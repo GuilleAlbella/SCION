@@ -516,11 +516,11 @@ export default function SnapshotsPage() {
         );
       }
 
-      // Reuse the ShareImportResponse shape for display
-      setShareManualResult({
-        snapshot_id: snapshotId ?? 0,
+      // Reuse the ShareImportResponse shape for display — only when a snapshot was created
+      if (snapshotId != null) setShareManualResult({
+        snapshot_id: snapshotId,
         dict_result: dictResult ?? {
-          snapshot_id: snapshotId ?? 0,
+          snapshot_id: snapshotId,
           skipped_existing: false,
           source_system_name: "",
           extract_run_id: "",
@@ -577,6 +577,10 @@ export default function SnapshotsPage() {
     setImportPayload(null);
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      setImportError("Could not read the selected file.");
+      setImportFile(null);
+    };
     reader.onload = async (ev) => {
       let json: unknown;
       try {
@@ -1699,9 +1703,9 @@ export default function SnapshotsPage() {
               <tr className="bg-td-navy text-white text-left">
                 <th className="px-4 py-3 font-medium w-8"></th>
                 <th className="px-4 py-3 font-medium">ID</th>
-                <th className="px-4 py-3 font-medium">Created</th>
+                <th className="px-4 py-3 font-medium">Extracted</th>
                 <th className="px-4 py-3 font-medium">Source</th>
-                <th className="px-4 py-3 font-medium">Contents / Extract time</th>
+                <th className="px-4 py-3 font-medium">Contents</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Active</th>
                 <th className="px-4 py-3 font-medium w-16">Actions</th>
@@ -1735,9 +1739,32 @@ export default function SnapshotsPage() {
                           ? <ChevronDown size={13} className="text-td-navy" />
                           : <ChevronRight size={13} />}
                       </td>
-                      <td className="px-4 py-3 font-mono">{s.snapshot_id}</td>
+                      <td className="px-4 py-3 font-mono">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {s.snapshot_id}
+                          {s.is_baseline && (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${s.gap_detected ? "bg-orange-100 text-orange-700" : "bg-indigo-100 text-indigo-700"}`}>
+                              {s.gap_detected ? "gap reset" : "baseline"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-td-gray-dark">
-                        {new Date(s.created_at).toLocaleString()}
+                        {s.extract_timestamp ? (
+                          <div>
+                            <div className="text-xs font-medium text-td-navy">
+                              {new Date(s.extract_timestamp).toLocaleString()}
+                            </div>
+                            <div className="text-[10px] text-td-gray-dark/60 mt-0.5">
+                              imported {new Date(s.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-xs">{new Date(s.created_at).toLocaleString()}</div>
+                            <div className="text-[10px] text-td-gray-dark/50 mt-0.5 italic">ingest time</div>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">{s.source_system}</td>
                       <td className="px-4 py-3 text-td-gray-dark">
@@ -1745,7 +1772,8 @@ export default function SnapshotsPage() {
                           const { extractTime, summary } = parseSnapshotDescription(s.description);
                           return (
                             <div title={s.description || undefined}>
-                              {extractTime && (
+                              {/* show extract time fallback only when no dedicated extract_timestamp */}
+                              {!s.extract_timestamp && extractTime && (
                                 <div className="text-[10px] font-medium text-td-navy mb-0.5">
                                   Extract: {extractTime}
                                 </div>
@@ -1796,7 +1824,7 @@ export default function SnapshotsPage() {
                     </tr>,
                     isExpanded && (
                       <tr key={`${s.snapshot_id}-detail`} className={isActive ? "bg-blue-50/60" : "bg-gray-50/60"}>
-                        <td colSpan={7} className="px-6 pb-4 pt-0 border-b border-gray-100">
+                        <td colSpan={8} className="px-6 pb-4 pt-0 border-b border-gray-100">
                           {detailLoadingId === id ? (
                             <div className="flex items-center gap-2 py-2 text-xs text-td-gray-dark">
                               <svg className="animate-spin h-3 w-3 text-td-navy" fill="none" viewBox="0 0 24 24">
@@ -1806,7 +1834,7 @@ export default function SnapshotsPage() {
                               Loading snapshot contents…
                             </div>
                           ) : detailCache.has(id) ? (
-                            <SnapshotDetailPanel detail={detailCache.get(id)!} />
+                            <SnapshotDetailPanel detail={detailCache.get(id)!} snapshot={s} />
                           ) : null}
                         </td>
                       </tr>
@@ -2021,14 +2049,14 @@ function ShareFileRow({
 }
 
 // SnapshotDetailPanel — shown in the expand row when the user clicks a snapshot.
-function SnapshotDetailPanel({ detail }: { detail: SnapshotDetail }) {
+function SnapshotDetailPanel({ detail, snapshot }: { detail: SnapshotDetail; snapshot?: import("@/lib/api/types").Snapshot }) {
   const items: { icon: React.ReactNode; label: string; value: number; always?: boolean }[] = [
     { icon: <Database size={13} />, label: "Databases", value: detail.databases, always: true },
     { icon: <Table2 size={13} />, label: "Tables / Views", value: detail.tables, always: true },
     { icon: <Columns3 size={13} />, label: "Columns", value: detail.columns, always: true },
     { icon: <Network size={13} />, label: "Graph nodes", value: detail.graph_nodes },
     { icon: <GitMerge size={13} />, label: "Graph edges", value: detail.graph_edges },
-    { icon: <BarChart2 size={13} />, label: "Changes (→ this)", value: detail.changes },
+    { icon: <BarChart2 size={13} />, label: "Changes (→ baseline)", value: detail.changes },
     { icon: <Zap size={13} />, label: "Usage events", value: detail.usage_events },
     { icon: <GitBranch size={13} />, label: "Indices", value: detail.indices },
   ];
@@ -2051,6 +2079,32 @@ function SnapshotDetailPanel({ detail }: { detail: SnapshotDetail }) {
           </div>
         </div>
       ))}
+      {/* §2.2: cumulative object count chip */}
+      {snapshot?.cumulative_object_count != null && !snapshot.is_baseline && (
+        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 min-w-[130px]">
+          <span className="text-indigo-400 shrink-0"><Table2 size={13} /></span>
+          <div>
+            <div className="text-[10px] text-indigo-600 uppercase tracking-wide">Cumulative (since baseline)</div>
+            <div className="text-sm font-bold text-indigo-800 font-mono">
+              {snapshot.cumulative_object_count.toLocaleString()}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* §2.2: baseline indicator */}
+      {snapshot?.is_baseline && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 min-w-[130px] border ${snapshot.gap_detected ? "bg-orange-50 border-orange-200" : "bg-indigo-50 border-indigo-200"}`}>
+          <span className={`shrink-0 ${snapshot.gap_detected ? "text-orange-400" : "text-indigo-400"}`}><GitBranch size={13} /></span>
+          <div>
+            <div className={`text-[10px] uppercase tracking-wide ${snapshot.gap_detected ? "text-orange-600" : "text-indigo-600"}`}>
+              {snapshot.gap_detected ? "New baseline (gap reset)" : "Day-zero baseline"}
+            </div>
+            <div className={`text-sm font-bold font-mono ${snapshot.gap_detected ? "text-orange-800" : "text-indigo-800"}`}>
+              {(snapshot.cumulative_object_count ?? detail.tables).toLocaleString()} objects
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

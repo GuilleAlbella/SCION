@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Export API (v1).
 
@@ -43,7 +43,7 @@ def export_changes(snapshot_from: int, snapshot_to: int):
     """Export changes as CSV."""
     from app.db.models.snapshot import Snapshot
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         all_snaps = session.execute(
             select(Snapshot.snapshot_id)
             .where(Snapshot.snapshot_id >= snapshot_from, Snapshot.snapshot_id <= snapshot_to)
@@ -57,7 +57,7 @@ def export_changes(snapshot_from: int, snapshot_to: int):
     else:
         pairs = [(snapshot_from, snapshot_to)]
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows_db = []
         for sf, st in pairs:
             rows_db.extend(
@@ -108,7 +108,7 @@ def export_usage():
     """Export usage summary as CSV."""
     from app.usage.usage_models import UsageEvent
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows_db = session.execute(
             select(UsageEvent).order_by(desc(UsageEvent.query_count))
         ).scalars().all()
@@ -129,7 +129,7 @@ def export_intelligence(snapshot_id: int):
     """Export criticality scores as CSV."""
     from app.usage.usage_models import ObjectCriticality
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows_db = session.execute(
             select(ObjectCriticality)
             .where(ObjectCriticality.snapshot_id == snapshot_id)

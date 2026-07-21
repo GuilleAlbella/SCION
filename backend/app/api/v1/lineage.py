@@ -8,12 +8,11 @@ Natural key format for attributes: "SCHEMA.TABLE|COLUMN_NAME"
 """
 from __future__ import annotations
 
-from collections import deque
 from typing import Optional
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
@@ -87,18 +86,22 @@ def get_column_lineage(
     obj_upper = object.upper()
     prefix = obj_upper + "|"
 
-    with Session(bind=engine) as db:
+    with Session(engine) as db:
+        # Natural keys are stored in UPPERCASE by the parser (Teradata identifiers
+        # are case-insensitive and normalised to upper on import). Using bare column
+        # comparisons (no func.upper wrapper) lets Postgres/SQLite use the composite
+        # indexes ix_attr_lineage_source and ix_attr_lineage_target.
         q = db.query(AttributeLineage).filter(
             AttributeLineage.snapshot_id == snapshot_id,
             or_(
-                func.upper(AttributeLineage.source_attribute_natural_key).like(prefix + "%"),
-                func.upper(AttributeLineage.target_attribute_natural_key).like(prefix + "%"),
+                AttributeLineage.source_attribute_natural_key.like(prefix + "%"),
+                AttributeLineage.target_attribute_natural_key.like(prefix + "%"),
             ),
         )
         if tier:
-            q = q.filter(func.upper(AttributeLineage.tier) == tier.upper())
+            q = q.filter(AttributeLineage.tier == tier.upper())
 
-        rows = q.all()
+        rows = q.limit(5000).all()
 
     # col_map[col_upper] = {
     #   "name": str,
@@ -140,7 +143,7 @@ def get_column_lineage(
             if key not in col_map:
                 col_map[key] = _init_entry(col)
 
-            if tgt.upper().startswith(_NOT_APPLICABLE):
+            if tgt.upper() == _NOT_APPLICABLE:
                 # Indirect: this column is used in a predicate, not as a value source
                 col_map[key]["indirect"].append(IndirectEdge(
                     source_column_key=src,
@@ -216,7 +219,14 @@ def traverse_column_lineage(
     (indirect predicates) are skipped so the graph only shows value-carrying
     lineage.
     """
+    if direction not in ("downstream", "upstream"):
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=422, detail=f"direction must be 'downstream' or 'upstream', got {direction!r}")
+
     _NOT_APPLICABLE = "NOT APPLICABLE"
+    _MAX_TRAVERSE_NODES = 2000  # cap total nodes to prevent OOM on dense graphs
+    _CHUNK = 500                # SQLite 999-variable limit guard
+    _HOP_LIMIT = 10_000         # max rows per chunk query to bound hub-node blowup
 
     # frontier: upper_key → (original_case_key, depth, path)
     frontier: dict[str, tuple[str, int, list[str]]] = {
@@ -226,23 +236,32 @@ def traverse_column_lineage(
     result_nodes: list[TraverseNode] = []
     total_hops = 0
 
-    with Session(bind=engine) as db:
+    with Session(engine) as db:
         for _ in range(max_depth):
             if not frontier:
+                break
+            if len(result_nodes) >= _MAX_TRAVERSE_NODES:
                 break
 
             frontier_keys = list(frontier.keys())
 
-            if direction == "downstream":
-                rows = db.query(AttributeLineage).filter(
-                    AttributeLineage.snapshot_id == snapshot_id,
-                    func.upper(AttributeLineage.source_attribute_natural_key).in_(frontier_keys),
-                ).all()
-            else:
-                rows = db.query(AttributeLineage).filter(
-                    AttributeLineage.snapshot_id == snapshot_id,
-                    func.upper(AttributeLineage.target_attribute_natural_key).in_(frontier_keys),
-                ).all()
+            # Keys are already uppercase; avoid func.upper() so the composite
+            # index is usable. Chunk into batches of 500 to avoid SQLite's
+            # 999-variable limit (SQLITE_MAX_VARIABLE_NUMBER).
+            rows: list[AttributeLineage] = []
+            for i in range(0, len(frontier_keys), _CHUNK):
+                chunk = frontier_keys[i:i + _CHUNK]
+                if direction == "downstream":
+                    chunk_rows = db.query(AttributeLineage).filter(
+                        AttributeLineage.snapshot_id == snapshot_id,
+                        AttributeLineage.source_attribute_natural_key.in_(chunk),
+                    ).limit(_HOP_LIMIT).all()
+                else:
+                    chunk_rows = db.query(AttributeLineage).filter(
+                        AttributeLineage.snapshot_id == snapshot_id,
+                        AttributeLineage.target_attribute_natural_key.in_(chunk),
+                    ).limit(_HOP_LIMIT).all()
+                rows.extend(chunk_rows)
 
             # Build lookup: frontier_upper → list of (next_key, transformation_type, tier)
             next_map: dict[str, list[tuple[str, Optional[str], Optional[str]]]] = {}
@@ -258,7 +277,7 @@ def traverse_column_lineage(
                     next_key = src
 
                 next_upper = next_key.upper()
-                if next_upper.startswith(_NOT_APPLICABLE):
+                if next_upper == _NOT_APPLICABLE:
                     continue
                 if next_upper in visited:
                     continue

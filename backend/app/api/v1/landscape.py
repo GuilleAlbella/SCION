@@ -1,4 +1,4 @@
-"""§2.15 Access Layer — landscape / portfolio-level API endpoints.
+﻿"""Â§2.15 Access Layer â€” landscape / portfolio-level API endpoints.
 
 GET /landscape/summary
     High-level business view: entity count, high-risk objects,
@@ -25,7 +25,7 @@ from app.diff.diff_models import ChangeEvent
 router = APIRouter(prefix="/landscape", tags=["landscape"])
 
 
-# ── response schemas ─────────────────────────────────────────────────
+# â”€â”€ response schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class RiskObject(BaseModel):
@@ -44,7 +44,7 @@ class LandscapeSummary(BaseModel):
     high_risk_count: int
     recent_changes_count: int
     top_risk_objects: list[RiskObject]
-    # §2.10 Reference Data context
+    # Â§2.10 Reference Data context
     teams_count: int = 0
     applications_count: int = 0
 
@@ -62,13 +62,13 @@ class LandscapeRiskOverview(BaseModel):
     recently_changed_high_risk: list[RiskObject]
 
 
-# ── endpoints ────────────────────────────────────────────────────────
+# â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @router.get("/summary", response_model=LandscapeSummary)
 def get_landscape_summary(top_n: int = Query(10, le=50)) -> LandscapeSummary:
     """Portfolio-level summary for the business landing page."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Latest snapshot
         latest_snap = session.execute(
             select(Snapshot).order_by(desc(Snapshot.snapshot_id)).limit(1)
@@ -156,7 +156,7 @@ def get_risk_overview(
     top_n: int = Query(10, le=50),
 ) -> LandscapeRiskOverview:
     """Risk distribution + trending critical objects for the executive view."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         if snapshot_id is None:
             latest = session.execute(
                 select(Snapshot.snapshot_id).order_by(desc(Snapshot.snapshot_id)).limit(1)

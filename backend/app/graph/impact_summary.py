@@ -1,4 +1,4 @@
-"""Pre-aggregated impact summaries for the Impact Analysis page.
+﻿"""Pre-aggregated impact summaries for the Impact Analysis page.
 
 Why this module
 ---------------
@@ -8,15 +8,15 @@ Transcend extract that meant 500k recursive-CTE walks, which froze
 the browser at 5+ minutes. Even with the v1.15.00 indexes (which made
 each individual CTE fast), the per-change loop is fundamentally O(N).
 
-The fix is structural: compute the per-change counts ONCE — during
-post-ingest — and persist them. ``/impact/batch`` then becomes a
+The fix is structural: compute the per-change counts ONCE â€” during
+post-ingest â€” and persist them. ``/impact/batch`` then becomes a
 paginated read of pre-aggregated rows.
 
 Key trade-offs
 --------------
 - We recurse to ``max_depth = 3`` rather than the per-request endpoint's
   10. With the inverse-depth scoring (``1/d``) anything past depth 3
-  contributes ≤0.33 to the score and rarely changes the qualitative
+  contributes â‰¤0.33 to the score and rarely changes the qualitative
   picture (HIGH / MEDIUM / LOW). Capping the depth bounds the CTE's
   blow-up on dense graphs (a hub with 1000 out-edges at depth 10 is
   catastrophic; at depth 3 it's tractable).
@@ -66,7 +66,7 @@ SUMMARY_MAX_DEPTH = 3
 # limit raises ``sqlite3.OperationalError: too many SQL variables``,
 # which is what crashed ``/impact/batch`` on the first Transcend test.
 # We chunk every ``IN (...)`` query through this cap. Postgres has no
-# equivalent limit but the chunking is cheap there too — round trips
+# equivalent limit but the chunking is cheap there too â€” round trips
 # scale linearly with chunk count and there are at most ~250 chunks
 # even on a 250k-change Transcend extract.
 _SQL_IN_CHUNK = 900
@@ -75,7 +75,7 @@ _SQL_IN_CHUNK = 900
 def _chunked(items: Sequence[int], size: int = _SQL_IN_CHUNK) -> Iterable[List[int]]:
     """Yield slices of ``items`` no larger than ``size``.
 
-    Local helper rather than a `more_itertools` import — the chunking is
+    Local helper rather than a `more_itertools` import â€” the chunking is
     a one-line generator and the dependency would be the only place
     we'd need it.
     """
@@ -90,13 +90,13 @@ def filter_uncomputed(change_ids: Iterable[int]) -> List[int]:
     changes a previous (interrupted) run already finished. Cheap thanks
     to the ``change_id`` primary key, but at production scale (250k
     changes) we have to chunk the ``IN`` clause around SQLite's
-    999-variable limit — see ``_SQL_IN_CHUNK``.
+    999-variable limit â€” see ``_SQL_IN_CHUNK``.
     """
     ids = list(change_ids)
     if not ids:
         return []
     existing: set[int] = set()
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         for chunk in _chunked(ids):
             existing.update(
                 session.execute(
@@ -125,7 +125,7 @@ def compute_summary_for_change(
     /impact/batch endpoint doesn't re-trigger work for it.
 
     ``node_id_by_change`` lets the batch caller share a single
-    ``link_changes_to_graph`` call across many changes — the per-change
+    ``link_changes_to_graph`` call across many changes â€” the per-change
     cost of the resolver is negligible but the per-snapshot setup is
     not, so passing it in cuts O(N) overhead in tight loops.
     """
@@ -190,7 +190,7 @@ def persist_summaries_for_pair(
         included.
     skip_existing:
         When True (default), changes that already have a row in
-        ``change_impact_summary`` are skipped — the operation becomes a
+        ``change_impact_summary`` are skipped â€” the operation becomes a
         no-op for already-computed snapshots, which is what the
         post-ingest hook wants. Set False when re-computing after a
         graph rebuild.
@@ -207,7 +207,7 @@ def persist_summaries_for_pair(
     # Resolve change list. Pulling change_ids in one query is cheap
     # thanks to the (snapshot_from, snapshot_to) index added in
     # v1.15.00.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         if change_ids is None:
             change_ids = session.execute(
                 select(ChangeEvent.change_id).where(
@@ -222,8 +222,8 @@ def persist_summaries_for_pair(
     if not target_ids:
         return 0
 
-    # Resolve once per snapshot — link_changes_to_graph reads the entire
-    # change_event ↔ graph_node mapping for the snapshot, which is far
+    # Resolve once per snapshot â€” link_changes_to_graph reads the entire
+    # change_event â†” graph_node mapping for the snapshot, which is far
     # cheaper amortised across many changes than calling it per change.
     node_id_by_change = link_changes_to_graph(snapshot_to)
 
@@ -264,7 +264,7 @@ def persist_summaries_for_pair(
     # this set of change_ids first to make the operation idempotent
     # under non-skip_existing usage. The ``IN (...)`` clause is chunked
     # for the same SQLite-variable-limit reason as ``filter_uncomputed``.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         if not skip_existing:
             for chunk in _chunked(target_ids):
                 session.execute(

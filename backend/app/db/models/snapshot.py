@@ -7,7 +7,7 @@ from typing import List
 
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,6 +36,23 @@ class Snapshot(Base):
     # Validation pass result: list of {type, severity, message, object_name?} dicts.
     # NULL = not yet validated or zero issues.
     validation_warnings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # §2.13 Manifest-Derived Timestamps (v2.09.00)
+    # UTC time from the extractor's own clock, parsed from extract_run_id prefix.
+    # NULL for parser-import and demo snapshots (no extract_run_id).
+    extract_timestamp: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    # §2.2 Incremental Loading (v2.08.00)
+    # NULL for baselines; points to the day-zero baseline for incremental snapshots.
+    baseline_snapshot_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("snapshot.snapshot_id"), nullable=True, index=True,
+    )
+    # Count of distinct (schema, table) pairs seen across all snapshots from
+    # the day-zero baseline through this one (NULL until post-ingest step runs).
+    cumulative_object_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # True when this snapshot was designated a new baseline because the time
+    # since the previous extract exceeded SNAPSHOT_GAP_DAYS.
+    gap_detected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     schemas: Mapped[List["SchemaSnapshot"]] = relationship(
         back_populates="snapshot",

@@ -157,7 +157,7 @@ def _resolve_node_for_change(change, snapshot_to: int) -> Optional[int]:
 
     identifier_lower = (change.object_identifier or "").lower()
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         # Stage 1: exact (object_type, object_name) match
         node_id = session.scalar(
             select(GraphNode.node_id).where(
@@ -193,8 +193,11 @@ def _resolve_node_for_change(change, snapshot_to: int) -> Optional[int]:
         return node_id
 
 
-def _get_node_names_for_ids(node_ids: set) -> Dict[int, str]:
-    """Load object_name for only the node_ids actually referenced — avoids full scan."""
+def _get_node_names_for_ids(node_ids: set) -> Dict[int, tuple]:
+    """Load (object_name, object_type) for node_ids — avoids full scan.
+
+    Returns Dict[node_id, (object_name, object_type)].
+    """
     if not node_ids:
         return {}
     from sqlalchemy import select
@@ -202,17 +205,24 @@ def _get_node_names_for_ids(node_ids: set) -> Dict[int, str]:
     from app.db.engine import engine
     from app.graph.graph_models import GraphNode
 
-    with Session(bind=engine) as session:
-        rows = session.execute(
-            select(GraphNode.node_id, GraphNode.object_name)
-            .where(GraphNode.node_id.in_(node_ids))
-        ).all()
-        return {r[0]: r[1] for r in rows}
+    # Chunk into batches of 500 to avoid SQLite's 999-variable limit.
+    result: dict[int, tuple] = {}
+    node_ids_list = list(node_ids)
+    with Session(engine) as session:
+        for i in range(0, len(node_ids_list), 500):
+            chunk = node_ids_list[i:i + 500]
+            rows = session.execute(
+                select(GraphNode.node_id, GraphNode.object_name, GraphNode.object_type)
+                .where(GraphNode.node_id.in_(chunk))
+            ).all()
+            for r in rows:
+                result[r[0]] = (r[1], r[2])
+    return result
 
 
 @router.post(
     "/batch",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
     response_model=BatchImpactResponse,
 )
 def execute_batch_impact(request: BatchImpactRequest) -> Dict[str, Any]:
@@ -237,7 +247,7 @@ def execute_batch_impact(request: BatchImpactRequest) -> Dict[str, Any]:
 
 @router.post(
     "/{change_id}",
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
     response_model=ImpactResponse,
 )
 def execute_impact(change_id: int) -> ImpactResponse:
@@ -259,7 +269,7 @@ def execute_impact(change_id: int) -> ImpactResponse:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Graph/impact engine is stopped or not ready.")
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         change = session.execute(
             select(ChangeEvent).where(ChangeEvent.change_id == change_id)
         ).scalar_one_or_none()
@@ -317,11 +327,10 @@ def execute_impact(change_id: int) -> ImpactResponse:
     indirect_items: list[ImpactItem] = []
     for item in downstream:
         nid = item["node_id"]
-        name = node_names.get(nid, f"node:{nid}")
-        obj_type = "TABLE" if "." in name else "SCHEMA"
+        node_info = node_names.get(nid, (f"node:{nid}", "TABLE"))
         indirect_items.append(ImpactItem(
-            object_type=obj_type,
-            object_name=name,
+            object_type=node_info[1] or "TABLE",
+            object_name=node_info[0],
             impact_type="DOWNSTREAM",
             description=f"Downstream dependency at depth {item['depth']}",
             depth=item["depth"],
@@ -330,11 +339,10 @@ def execute_impact(change_id: int) -> ImpactResponse:
 
     for item in upstream:
         nid = item["node_id"]
-        name = node_names.get(nid, f"node:{nid}")
-        obj_type = "TABLE" if "." in name else "SCHEMA"
+        node_info = node_names.get(nid, (f"node:{nid}", "TABLE"))
         indirect_items.append(ImpactItem(
-            object_type=obj_type,
-            object_name=name,
+            object_type=node_info[1] or "TABLE",
+            object_name=node_info[0],
             impact_type="UPSTREAM",
             description=f"Upstream dependency at depth {item['depth']}",
             depth=item["depth"],

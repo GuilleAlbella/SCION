@@ -7,7 +7,7 @@ Structural metrics: object counts, growth rate, volatility, structural hash.
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.snapshot.snapshot_metrics import (
@@ -28,7 +28,7 @@ class SnapshotMetricsResponse(BaseModel):
     view_count: int
     column_count: int
     total_objects: int
-    structural_hash: str
+    structural_hash: Optional[str]
 
 
 class GrowthResponse(BaseModel):
@@ -54,7 +54,10 @@ class VolatilityResponse(BaseModel):
     status_code=status.HTTP_200_OK,
     response_model=SnapshotMetricsResponse,
 )
-def get_snapshot_metrics(snapshot_id: int) -> Dict[str, Any]:
+def get_snapshot_metrics(
+    snapshot_id: int,
+    background_tasks: BackgroundTasks,
+) -> Dict[str, Any]:
     """Object counts and structural hash for a single snapshot.
 
     Reads the persisted ``Snapshot.structural_hash`` from the DB
@@ -66,8 +69,8 @@ def get_snapshot_metrics(snapshot_id: int) -> Dict[str, Any]:
     metrics for every snapshot in series, so one ~30s recompute
     blocked all the skeletons behind it.
 
-    Falls back to recomputing only when the persisted value is
-    missing (legacy snapshots ingested before the column existed).
+    For legacy snapshots (NULL hash), we return null immediately and
+    kick off the recompute in the background so the next call is fast.
     """
 
     from sqlalchemy import select
@@ -85,15 +88,19 @@ def get_snapshot_metrics(snapshot_id: int) -> Dict[str, Any]:
         )
 
     # Lazy backfill: legacy snapshots ingested before the column was
-    # populated will have NULL here. Compute on demand and persist so
-    # the next call is fast.
+    # populated will have NULL here. Kick off the recompute in the
+    # background so this request returns immediately — the next call
+    # will find the hash already persisted.
     if not sha:
-        sha = compute_structural_hash(snapshot_id)
-        with Session(engine) as session:
-            row = session.get(Snapshot, snapshot_id)
-            if row is not None:
-                row.structural_hash = sha
-                session.commit()
+        def _backfill(sid: int) -> None:
+            h = compute_structural_hash(sid)
+            with Session(engine) as s:
+                row = s.get(Snapshot, sid)
+                if row is not None:
+                    row.structural_hash = h
+                    s.commit()
+
+        background_tasks.add_task(_backfill, snapshot_id)
 
     return {
         **metrics.to_dict(),
@@ -129,7 +136,7 @@ def get_volatility() -> Dict[str, Any]:
     from app.db.engine import engine
     from app.db.models.snapshot import Snapshot
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         ids = list(session.scalars(
             select(Snapshot.snapshot_id).order_by(Snapshot.snapshot_time)
         ).all())

@@ -1,9 +1,9 @@
-"""§2.10 Reference Data — query endpoints.
+﻿"""Â§2.10 Reference Data â€” query endpoints.
 
-GET /reference/teams           — org hierarchy (teams + department)
-GET /reference/applications    — business applications with mapping counts
-GET /reference/usage-by-team   — usage stats grouped by team/department
-GET /reference/usage-by-app    — usage stats grouped by application
+GET /reference/teams           â€” org hierarchy (teams + department)
+GET /reference/applications    â€” business applications with mapping counts
+GET /reference/usage-by-team   â€” usage stats grouped by team/department
+GET /reference/usage-by-app    â€” usage stats grouped by application
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from app.usage.usage_models import UsageEvent
 router = APIRouter(prefix="/reference", tags=["reference"])
 
 
-# ── response schemas ──────────────────────────────────────────────────
+# â”€â”€ response schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TeamRow(BaseModel):
@@ -86,13 +86,13 @@ class AppUsageResponse(BaseModel):
     unmapped_query_count: int
 
 
-# ── endpoints ─────────────────────────────────────────────────────────
+# â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @router.get("/teams", response_model=TeamsResponse)
 def get_teams() -> TeamsResponse:
     """List all teams with department name and user count."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = (
             session.execute(
                 select(
@@ -127,7 +127,7 @@ def get_teams() -> TeamsResponse:
 @router.get("/applications", response_model=ApplicationsResponse)
 def get_applications() -> ApplicationsResponse:
     """List all applications with owner team and mapping counts."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = (
             session.execute(
                 select(
@@ -180,7 +180,7 @@ def get_usage_by_team(
     Requires PDCR extractor to provide per-user rows (username column).
     Returns empty teams list with a note when username data is absent.
     """
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         if snapshot_id is None:
             snapshot_id = session.execute(
                 select(Snapshot.snapshot_id).order_by(desc(Snapshot.snapshot_id)).limit(1)
@@ -221,7 +221,7 @@ def get_usage_by_team(
                 ),
             )
 
-        # Join usage_event → user_entity → team_entity → department_entity
+        # Join usage_event â†’ user_entity â†’ team_entity â†’ department_entity
         rows = session.execute(
             select(
                 TeamEntity.team_name,
@@ -272,7 +272,7 @@ def get_usage_by_app(
     snapshot_id: int | None = Query(None, description="Default: latest snapshot"),
 ) -> AppUsageResponse:
     """Usage statistics grouped by business application via schema/table mappings."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         if snapshot_id is None:
             snapshot_id = session.execute(
                 select(Snapshot.snapshot_id).order_by(desc(Snapshot.snapshot_id)).limit(1)
@@ -321,13 +321,18 @@ def get_usage_by_app(
         # Aggregate usage per application in Python (avoids complex SQL)
         agg: dict[str, dict] = {}
 
+        # Pre-aggregate in SQL so the Python loop sees one row per (schema, object)
+        # instead of one row per individual usage fact. Without GROUP BY, a large
+        # snapshot (500k+ rows) materialises the full set into the FastAPI worker.
         usage_rows = session.execute(
             select(
                 UsageEvent.schema_name,
                 UsageEvent.object_name,
-                UsageEvent.query_count,
-                UsageEvent.user_count,
-            ).where(UsageEvent.snapshot_id == snapshot_id)
+                func.sum(UsageEvent.query_count).label("query_count"),
+                func.sum(UsageEvent.user_count).label("user_count"),
+            )
+            .where(UsageEvent.snapshot_id == snapshot_id)
+            .group_by(UsageEvent.schema_name, UsageEvent.object_name)
         ).all()
 
         mapped_qc = 0
@@ -337,7 +342,8 @@ def get_usage_by_app(
             qc = row.query_count or 0
             uc = row.user_count or 0
 
-            apps_for_row: list[str] = table_map.get(obj) or schema_map.get(schema) or []
+            fq = f"{schema}.{obj}"
+            apps_for_row: list[str] = table_map.get(fq) or schema_map.get(schema) or []
             if not apps_for_row:
                 continue
 

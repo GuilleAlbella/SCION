@@ -1,6 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-"""Schema Tree API — returns hierarchical schema/table/column structure for a snapshot."""
+"""Schema Tree API â€” returns hierarchical schema/table/column structure for a snapshot."""
 
 from typing import Any, Dict, List
 
@@ -47,7 +47,7 @@ def get_schema_tree(snapshot_id: int) -> Dict[str, Any]:
     # Three-level nested loop walks schemas -> tables -> columns. Acceptable
     # for tree rendering in the UI; if snapshots ever grow beyond a few
     # thousand columns, replace with a single flat query and group in memory.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         schemas = session.query(SchemaSnapshot).filter(
             SchemaSnapshot.snapshot_id == snapshot_id
         ).all()

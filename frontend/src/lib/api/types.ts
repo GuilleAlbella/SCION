@@ -14,6 +14,16 @@ export interface Snapshot {
   description: string;
   /** §2.16 Staging Layer: pending | staged | committed | failed */
   import_status?: string;
+  /** §2.13 Manifest Timestamps: when the extractor ran on the client (UTC ISO string, NULL for parser/demo) */
+  extract_timestamp?: string | null;
+  /** §2.2 Incremental Loading: true for day-zero baselines and gap resets */
+  is_baseline?: boolean;
+  /** §2.2 Incremental Loading: snapshot_id of the day-zero baseline (null for baselines) */
+  baseline_snapshot_id?: number | null;
+  /** §2.2 Incremental Loading: true when a gap in extracts triggered a new baseline */
+  gap_detected?: boolean;
+  /** §2.2 Incremental Loading: distinct objects across baseline ∪ this snapshot */
+  cumulative_object_count?: number | null;
 }
 
 export interface SnapshotsResponse {
@@ -372,7 +382,7 @@ export interface SnapshotMetricsResponse {
   view_count: number;
   column_count: number;
   total_objects: number;
-  structural_hash: string;
+  structural_hash: string | null;
 }
 
 export interface GrowthResponse {

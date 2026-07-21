@@ -25,6 +25,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models.snapshot import Snapshot
@@ -115,19 +116,42 @@ def validate_import(snapshot_id: int, session: Session) -> dict[str, Any]:
             )
 
     # ── column type validation ────────────────────────────────────────
-    cols = (
-        session.query(ColumnSnapshot)
-        .join(TableSnapshot, ColumnSnapshot.table_id == TableSnapshot.table_id)
-        .join(SchemaSnapshot, TableSnapshot.schema_id == SchemaSnapshot.schema_id)
-        .filter(SchemaSnapshot.snapshot_id == snapshot_id)
-        .all()
+    # Use two targeted queries instead of materialising all column rows.
+    # At Transcend scale (9.8M columns) a .all() would allocate ~4 GB of
+    # ORM objects; we only need the total count and the set of distinct
+    # data_type values that fail the vocabulary check.
+    schema_id_subq = (
+        select(SchemaSnapshot.schema_id)
+        .where(SchemaSnapshot.snapshot_id == snapshot_id)
+        .scalar_subquery()
     )
-    columns_checked = len(cols)
+    table_id_subq = (
+        select(TableSnapshot.table_id)
+        .where(TableSnapshot.schema_id.in_(schema_id_subq))
+        .scalar_subquery()
+    )
+
+    columns_checked = (
+        session.execute(
+            select(func.count(ColumnSnapshot.column_id))
+            .where(ColumnSnapshot.table_id.in_(table_id_subq))
+        ).scalar()
+        or 0
+    )
+
+    distinct_types = session.execute(
+        select(ColumnSnapshot.data_type)
+        .where(
+            ColumnSnapshot.table_id.in_(table_id_subq),
+            ColumnSnapshot.data_type.isnot(None),
+        )
+        .distinct()
+    ).scalars().all()
 
     unknown_types: set[str] = set()
-    for col in cols:
-        if col.data_type and not _is_known_type(col.data_type):
-            unknown_types.add(col.data_type)
+    for dt in distinct_types:
+        if not _is_known_type(dt):
+            unknown_types.add(dt)
 
     for dt in sorted(unknown_types):
         issues.append(

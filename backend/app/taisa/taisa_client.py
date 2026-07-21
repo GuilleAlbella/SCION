@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -21,7 +21,7 @@ from .taisa_prompts import (
 _BREAKING_TYPES = {"TABLE_REMOVED", "COLUMN_REMOVED", "COLUMN_TYPE_CHANGED",
                    "SCHEMA_REMOVED", "TABLE_TYPE_CHANGED"}
 
-# ── §2.12 PII heuristics ──────────────────────────────────────────────────────
+# â”€â”€ Â§2.12 PII heuristics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Each tuple: (substrings_to_match_in_UPPERCASE_column_name, pii_label, confidence)
 # First match wins; NONE returned when nothing matches.
 _PII_KEYWORD_MAP: list[tuple[list[str], str, float]] = [
@@ -57,35 +57,35 @@ class PiiClassificationResult:
     confidence: float
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Algorithm knowledge base — explains the logic behind every score and
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Algorithm knowledge base â€” explains the logic behind every score and
 # classification SCION produces. Injected into every Q&A prompt so TAISA can
 # explain WHY something is HIGH/MEDIUM/LOW / BREAKING / critical, not just
 # recite the value. This is a replacement for giving TAISA access to the
 # actual source code (which would be unsafe and token-expensive).
-# ──────────────────────────────────────────────────────────────────────────
-SCION_ALGORITHM_KNOWLEDGE = """SCION ALGORITHM KNOWLEDGE — How metrics are computed:
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+SCION_ALGORITHM_KNOWLEDGE = """SCION ALGORITHM KNOWLEDGE â€” How metrics are computed:
 
-[Severity — HIGH/MEDIUM/LOW]
+[Severity â€” HIGH/MEDIUM/LOW]
 Assigned per change_type:
   HIGH: TABLE_REMOVED, SCHEMA_REMOVED, COLUMN_REMOVED, TABLE_TYPE_CHANGED
   MEDIUM: COLUMN_TYPE_CHANGED, COLUMN_NULLABILITY_CHANGED
   LOW: TABLE_ADDED, SCHEMA_ADDED, COLUMN_ADDED, COLUMN_POSITION_CHANGED
 
-[Breaking — yes/no]
+[Breaking â€” yes/no]
 A change is BREAKING when it can disrupt dependent consumers (queries, views, ETLs).
 Breaking change_types: TABLE_REMOVED, COLUMN_REMOVED, COLUMN_TYPE_CHANGED,
                        SCHEMA_REMOVED, TABLE_TYPE_CHANGED.
 Note: Severity and Breaking are INDEPENDENT criteria. A change can be
 BREAKING with MEDIUM severity (e.g. COLUMN_TYPE_CHANGED) or HIGH severity
-but non-breaking (not common — HIGH types are generally breaking).
+but non-breaking (not common â€” HIGH types are generally breaking).
 
 [Impact Score per change]
 Formula: direct_count * 1.0 + indirect_count * 0.5 + severity_bonus
   severity_bonus: HIGH=+2.0, MEDIUM=+1.0, LOW=+0.0
   breaking_bonus: +3.0 if is_breaking else 0
 
-[Blast Radius — weighted_score (overall risk number)]
+[Blast Radius â€” weighted_score (overall risk number)]
 Formula: sum(impact_score per change) + breaking_count * 2.0
 Used to decide overall_risk:
   HIGH risk if weighted_score >= 15 OR breaking_count >= 3
@@ -102,7 +102,7 @@ mostly consumes data from elsewhere, so upstream changes break it easily.
 
 [Hub node]
 A node is a "hub" if in_degree + out_degree >= 5 (many connections).
-Hub nodes are architecturally important — changes to them ripple further.
+Hub nodes are architecturally important â€” changes to them ripple further.
 
 [Usage Score per object]
 Normalized 0-1 score based on how often the object is queried:
@@ -119,9 +119,9 @@ Level mapping:
   MEDIUM if combined_score >= 0.30
   LOW otherwise
 Rationale: objects that are heavily used AND heavily connected are the most
-critical — if they break, they cause the most damage.
+critical â€” if they break, they cause the most damage.
 
-[Domain (database) risk_score — per schema/database]
+[Domain (database) risk_score â€” per schema/database]
 Formula: (breaking_count * 3 + high_severity_count * 2 + medium_count * 1
           + high_criticality_objects * 2) / (total_changes * 3)
 Capped at 1.0. Level mapping:
@@ -149,7 +149,7 @@ refer to these formulas with specific numbers from the user's data above.
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
     """Try to extract a JSON object from LLM response text."""
-    # LLMs often wrap JSON in prose or markdown fences — try three strategies
+    # LLMs often wrap JSON in prose or markdown fences â€” try three strategies
     # in order of cleanliness before giving up.
     # Strategy 1: the whole response is already valid JSON.
     try:
@@ -240,7 +240,7 @@ class TaisaClient:
     ) -> TaisaAnalysisResult:
         """Analyze a single change with real LLM reasoning or heuristic fallback."""
 
-        # ──── 1. Validate inputs (fail-fast before any LLM cost) ────
+        # â”€â”€â”€â”€ 1. Validate inputs (fail-fast before any LLM cost) â”€â”€â”€â”€
         if change_event is None:
             raise ValueError("change_event is required")
         if impacts is None:
@@ -248,7 +248,7 @@ class TaisaClient:
         if context is None:
             raise ValueError("context is required")
 
-        # ──── 2. Build the typed request wrapper used for auditing ────
+        # â”€â”€â”€â”€ 2. Build the typed request wrapper used for auditing â”€â”€â”€â”€
         request = TaisaAnalysisRequest.from_raw(
             prompt_version=self._config.prompt_version,
             change_event=change_event,
@@ -261,8 +261,8 @@ class TaisaClient:
         change_type = change_event.get("change_type", "")
         impacted_objects = [imp.get("object", "") for imp in impacts]
 
-        # ──── 3. Render the single-change prompt (only first 10 impacted
-        # objects to keep token usage bounded regardless of blast radius) ────
+        # â”€â”€â”€â”€ 3. Render the single-change prompt (only first 10 impacted
+        # objects to keep token usage bounded regardless of blast radius) â”€â”€â”€â”€
         prompt = SINGLE_CHANGE_PROMPT.format(
             change_type=change_type,
             object_identifier=change_event.get("object_identifier", ""),
@@ -276,7 +276,7 @@ class TaisaClient:
             snapshot_time=context.get("snapshot_time", "unknown"),
         )
 
-        # ──── 4. Dispatch to LLM or deterministic heuristic based on mode ────
+        # â”€â”€â”€â”€ 4. Dispatch to LLM or deterministic heuristic based on mode â”€â”€â”€â”€
         # "real" mode uses the configured LLM provider; "mock" mode uses
         # deterministic rules so tests and offline demos stay reproducible.
         if SCION_TAISA_MODE == "real":
@@ -339,7 +339,7 @@ class TaisaClient:
         high_count = sum(1 for c in changes if c.get("severity") == "HIGH")
 
         if SCION_TAISA_MODE == "real":
-            # Pick the most common change_type as the "dominant" one — used
+            # Pick the most common change_type as the "dominant" one â€” used
             # only for the heuristic fallback inside _call_llm if parsing fails.
             dominant = max(
                 set(c.get("change_type", "") for c in changes),
@@ -392,12 +392,12 @@ class TaisaClient:
         try:
             provider = get_llm_provider()
             raw = provider.generate(prompt)
-            # LLM may return JSON wrapped in prose — _extract_json handles that.
+            # LLM may return JSON wrapped in prose â€” _extract_json handles that.
             parsed = _extract_json(raw)
 
             if parsed:
                 # Each field falls back to a heuristic if the LLM omitted or
-                # malformed it — we never trust the LLM to be 100% compliant.
+                # malformed it â€” we never trust the LLM to be 100% compliant.
                 classification = parsed.get("classification", _heuristic_classification(change_type))
                 risk_level = parsed.get("risk_level", _heuristic_risk(change_type, impact_count))
                 recs = parsed.get("recommendations", [])
@@ -409,11 +409,11 @@ class TaisaClient:
             return (
                 _heuristic_classification(change_type),
                 _heuristic_risk(change_type, impact_count),
-                ["Review the change manually — automated classification was inconclusive."],
+                ["Review the change manually â€” automated classification was inconclusive."],
                 raw,
             )
         except Exception as exc:
-            # Network / auth / rate-limit errors must NOT crash the request —
+            # Network / auth / rate-limit errors must NOT crash the request â€”
             # always degrade gracefully to heuristics so the endpoint stays up.
             return (
                 _heuristic_classification(change_type),
@@ -451,7 +451,7 @@ class TaisaClient:
             f"{n} downstream impact(s) detected but structurally compatible."
         )
 
-    # ── Scalable context builder for Q&A ──
+    # â”€â”€ Scalable context builder for Q&A â”€â”€
 
     def _build_scion_context(self, question: str) -> str:
         """Build a smart, bounded context from SCION data.
@@ -486,9 +486,9 @@ class TaisaClient:
         # pull detailed rows matching what the user actually asked about.
         keywords = [w.strip("?,.'\"!") for w in question.split() if len(w) > 2]
 
-        with Session(bind=engine) as session:
+        with Session(engine) as session:
 
-            # ── 1. Snapshots (always lightweight — just a count + list) ──
+            # â”€â”€ 1. Snapshots (always lightweight â€” just a count + list) â”€â”€
             snapshots = session.execute(
                 select(Snapshot).order_by(Snapshot.snapshot_id)
             ).scalars().all()
@@ -504,7 +504,7 @@ class TaisaClient:
             else:
                 latest_snap = None
 
-            # ── 2. Inventory summary (always — schemas + table counts) ──
+            # â”€â”€ 2. Inventory summary (always â€” schemas + table counts) â”€â”€
             #
             # Even the "lightweight" path here was unbounded: at Transcend
             # scale there are 10 716 schemas, each emitting one line, for
@@ -539,7 +539,7 @@ class TaisaClient:
                     if rest:
                         rest_total = sum(c for _, c in rest)
                         inv_lines.append(
-                            f"  …and {len(rest)} smaller schemas with "
+                            f"  â€¦and {len(rest)} smaller schemas with "
                             f"{rest_total} tables/views in total"
                         )
                     sections.append(
@@ -549,18 +549,18 @@ class TaisaClient:
                     )
 
                 # Only emit the expensive full-table listing when the question
-                # actually concerns inventory — keyword gate keeps token usage
+                # actually concerns inventory â€” keyword gate keeps token usage
                 # low for other topics (e.g. questions about risk/impact).
                 #
                 # Hard caps protect against context overrun on Transcend-class
-                # data (10 716 schemas × ~22 tables/schema ≈ 240k rows). Before
+                # data (10 716 schemas Ã— ~22 tables/schema â‰ˆ 240k rows). Before
                 # the caps, any question containing "what" or "list" pulled
                 # every table name into the prompt and broke the LLM call
                 # (timeout + "no response" symptom).
                 inventory_words = {"table", "tables", "schema", "schemas", "inventory",
                                    "view", "views", "column", "columns", "object", "objects",
                                    "list"}
-                # `what` / `which` / `how many` removed — they fire on too many
+                # `what` / `which` / `how many` removed â€” they fire on too many
                 # questions that aren't actually inventory-shaped. Real
                 # inventory questions almost always include one of the nouns
                 # above.
@@ -590,7 +590,7 @@ class TaisaClient:
                         if tables:
                             tbl_names = [f"{t.table_name} ({t.object_type})" for t in tables]
                             tail = (
-                                f", …and {total_tables - len(tables)} more"
+                                f", â€¦and {total_tables - len(tables)} more"
                                 if total_tables > len(tables)
                                 else ""
                             )
@@ -601,12 +601,12 @@ class TaisaClient:
                     if rest:
                         rest_total = sum(c for _, c in rest)
                         sections.append(
-                            f"  …and {len(rest)} smaller schemas with {rest_total} tables total "
+                            f"  â€¦and {len(rest)} smaller schemas with {rest_total} tables total "
                             f"(omitted to keep context size manageable; "
                             f"ask about a specific schema by name to see its tables)"
                         )
 
-            # ── 3. Changes — aggregate summary always, detail if relevant ──
+            # â”€â”€ 3. Changes â€” aggregate summary always, detail if relevant â”€â”€
             total_changes = session.execute(
                 select(func.count()).select_from(ChangeEvent)
             ).scalar() or 0
@@ -623,7 +623,7 @@ class TaisaClient:
                 f"CHANGES SUMMARY: {total_changes} total, {breaking_total} breaking, {high_total} HIGH severity"
             )
 
-            # ── Pass 1: keyword-targeted rows (ALWAYS included, no shared cap).
+            # â”€â”€ Pass 1: keyword-targeted rows (ALWAYS included, no shared cap).
             # Running a separate query per keyword guarantees that changes for
             # the specific object the user asked about are present in the
             # context even when there are thousands of high-signal (breaking /
@@ -645,7 +645,7 @@ class TaisaClient:
                         detail_changes.append(row)
                         seen_ids.add(row.change_id)
 
-            # ── Pass 2: high-signal changes fill the remaining slots.
+            # â”€â”€ Pass 2: high-signal changes fill the remaining slots.
             signal_changes = session.execute(
                 select(ChangeEvent)
                 .where(or_(
@@ -660,7 +660,7 @@ class TaisaClient:
                     detail_changes.append(c)
                     seen_ids.add(c.change_id)
 
-            # ── Pass 3: panoramic escape hatch for broad questions.
+            # â”€â”€ Pass 3: panoramic escape hatch for broad questions.
             broad_words = {"all", "every", "changes", "changed", "change", "diff"}
             if broad_words & set(q_lower.split()):
                 all_changes = session.execute(
@@ -683,13 +683,13 @@ class TaisaClient:
                     )
                 sections.append(f"CHANGE DETAILS ({len(detail_changes)} shown):\n" + "\n".join(ch_lines))
 
-            # ── 4. Impact — aggregate + detail for keyword-matching ──
+            # â”€â”€ 4. Impact â€” aggregate + detail for keyword-matching â”€â”€
             impact_total = session.execute(
                 select(func.count()).select_from(ImpactEvent)
             ).scalar() or 0
 
             if impact_total:
-                # Node ids alone are meaningless to an LLM — resolve them to
+                # Node ids alone are meaningless to an LLM â€” resolve them to
                 # schema.object human names once and reuse the map.
                 node_names: Dict[int, str] = {}
                 if latest_snap:
@@ -716,7 +716,7 @@ class TaisaClient:
                             )
                         sections.append(f"IMPACT DETAILS ({len(imp_rows)} shown):\n" + "\n".join(imp_lines))
 
-            # ── 5. Graph — always aggregate ──
+            # â”€â”€ 5. Graph â€” always aggregate â”€â”€
             if latest_snap:
                 node_count = session.execute(
                     select(func.count()).select_from(GraphNode).where(GraphNode.snapshot_id == latest_snap)
@@ -735,7 +735,7 @@ class TaisaClient:
                     hub_text = f"  Hubs: {', '.join(hub_nodes)}" if hub_nodes else ""
                     sections.append(f"GRAPH: {node_count} nodes, {edge_count} edges{hub_text}")
 
-            # ── 6. Usage — top 10 always ──
+            # â”€â”€ 6. Usage â€” top 10 always â”€â”€
             usage_rows = session.execute(
                 select(UsageEvent).order_by(desc(UsageEvent.query_count)).limit(10)
             ).scalars().all()
@@ -746,7 +746,7 @@ class TaisaClient:
                 ]
                 sections.append(f"TOP USAGE:\n" + "\n".join(usage_lines))
 
-            # ── 7. Criticality — HIGH/MEDIUM only ──
+            # â”€â”€ 7. Criticality â€” HIGH/MEDIUM only â”€â”€
             crit_rows = session.execute(
                 select(ObjectCriticality)
                 .where(ObjectCriticality.criticality_level.in_(["HIGH", "MEDIUM"]))
@@ -760,7 +760,7 @@ class TaisaClient:
                 ]
                 sections.append(f"HIGH/MEDIUM CRITICALITY:\n" + "\n".join(crit_lines))
 
-            # ── 8. Latest reasoning ──
+            # â”€â”€ 8. Latest reasoning â”€â”€
             reasoning_rows = session.execute(
                 select(ReasoningEvent).order_by(desc(ReasoningEvent.reasoning_id)).limit(3)
             ).scalars().all()
@@ -773,7 +773,7 @@ class TaisaClient:
                     )
                 sections.append(f"LATEST TAISA REASONING:\n" + "\n".join(reas_lines))
 
-        # ── 9. Algorithm knowledge base (static — explains HOW SCION computes things) ──
+        # â”€â”€ 9. Algorithm knowledge base (static â€” explains HOW SCION computes things) â”€â”€
         sections.append(SCION_ALGORITHM_KNOWLEDGE)
 
         return "\n\n".join(sections) if sections else "No data in SCION yet."
@@ -798,10 +798,10 @@ class TaisaClient:
 
         # Defensive cap on the assembled SCION context. Per-section caps
         # already keep things bounded, but if a future section is added
-        # without proper limits — or if one of the existing caps is
-        # accidentally widened — this guards the LLM call from a runaway
+        # without proper limits â€” or if one of the existing caps is
+        # accidentally widened â€” this guards the LLM call from a runaway
         # prompt that times out or overflows the model context window.
-        # 80 000 chars ≈ 20k-25k tokens for English/SQL-shaped text,
+        # 80 000 chars â‰ˆ 20k-25k tokens for English/SQL-shaped text,
         # which leaves plenty of headroom in llama-4-scout's 131k window
         # for the question + history + system prompt + the model's reply.
         _MAX_CONTEXT_CHARS = 80_000
@@ -848,7 +848,7 @@ class TaisaClient:
 
         return provider.generate(qa_prompt)
 
-    # ── §2.12 PII classification ──────────────────────────────────────────────
+    # â”€â”€ Â§2.12 PII classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def classify_column_pii_batch(
         self,
@@ -896,7 +896,7 @@ class TaisaClient:
         for i in range(0, len(columns), BATCH):
             batch = columns[i : i + BATCH]
             cols_list = "\n".join(
-                f"- {c['column_name']} · {c['data_type']}" for c in batch
+                f"- {c['column_name']} Â· {c['data_type']}" for c in batch
             )
             prompt = (
                 PII_SYSTEM_PROMPT

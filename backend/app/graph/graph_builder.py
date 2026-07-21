@@ -161,18 +161,23 @@ def _build_graph_for_snapshot_in_session(
         schema_keys_to_create.append(key)
 
     # ──── Step 4: Plan TABLE / VIEW nodes ────
-    # Build a parallel index `all_table_names` (lower-cased) so Step 6
+    # Build a parallel index `all_table_names` (lower-cased) so Step 7
     # can resolve `_id` columns into target tables in O(1).
+    # Value is a list so multi-schema warehouses (e.g. SALES_EU.CUSTOMERS and
+    # SALES_US.CUSTOMERS) don't silently overwrite each other — we only emit a
+    # FEEDS edge when exactly one table with that name exists (unambiguous).
     table_node_inserts: List[dict] = []
     table_uid_by_qname: Dict[Tuple[str, str], str] = {}
     table_keys_to_create: List[Tuple[str, str, int, Tuple[str, str]]] = []
-    all_table_names: Dict[str, Tuple[str, str]] = {}
+    all_table_names: Dict[str, List[Tuple[str, str]]] = {}
 
     for schema_name, table in table_rows:
         object_type = table.object_type
         object_name = f"{schema_name}.{table.table_name}"
         key = (object_type, object_name, snapshot_id)
-        all_table_names[table.table_name.lower()] = (schema_name, table.table_name)
+        all_table_names.setdefault(table.table_name.lower(), []).append(
+            (schema_name, table.table_name)
+        )
 
         if key in existing_nodes_by_key:
             table_uid_by_qname[(schema_name, table.table_name)] = existing_node_uids[existing_nodes_by_key[key]]
@@ -299,9 +304,15 @@ def _build_graph_for_snapshot_in_session(
         fk_holder_uid = table_uid_by_qname.get((schema_name, table_name), "")
 
         for candidate in candidates:
-            ref = all_table_names.get(candidate)
-            if ref is None:
+            matches = all_table_names.get(candidate)
+            if not matches:
                 continue
+            # Only emit an edge when the name is unambiguous across schemas.
+            # Two schemas both having CUSTOMERS would create a wrong cross-schema
+            # FEEDS edge, so we skip the heuristic in that case.
+            if len(matches) != 1:
+                continue
+            ref = matches[0]
             ref_node_id = table_node_ids.get(ref)
             if ref_node_id is None or ref_node_id == fk_holder_node_id:
                 # Skip self-referencing tables — a table whose own

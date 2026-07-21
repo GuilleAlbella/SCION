@@ -11,6 +11,10 @@ const API_BASE_URL =
 const client = axios.create({
   baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
+  // 60 s covers all normal endpoints. Long-running operations (diff run,
+  // parser import, impact pre-compute) should override per-call via
+  // config.timeout = 0 if they intentionally block for minutes.
+  timeout: 60_000,
 });
 
 // Inject the API key on every request. Kept as an interceptor (not set on

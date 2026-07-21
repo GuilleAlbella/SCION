@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """DDL Generation API (v1).
 
@@ -51,10 +51,10 @@ def get_ddl(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
     """
     from app.db.models.snapshot import Snapshot
 
-    # Same cumulative-pairs walk as the diff endpoint — DDL must cover every
+    # Same cumulative-pairs walk as the diff endpoint â€” DDL must cover every
     # intermediate step, not just the endpoints, otherwise migrations would
     # skip changes applied in between.
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         all_snaps = session.execute(
             select(Snapshot.snapshot_id)
             .where(
@@ -72,7 +72,7 @@ def get_ddl(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
         pairs = [(snapshot_from, snapshot_to)]
 
     # Load change events
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         rows = []
         for sf, st in pairs:
             pair_rows = (
@@ -104,7 +104,7 @@ def get_ddl(snapshot_from: int, snapshot_to: int) -> Dict[str, Any]:
             after_state=row.after_state,
         )
 
-        # Only invoke TAISA for breaking changes — non-breaking DDL rarely
+        # Only invoke TAISA for breaking changes â€” non-breaking DDL rarely
         # warrants AI review and each call has real LLM cost/latency.
         warnings: List[str] = []
         if row.is_breaking:

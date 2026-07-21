@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Snapshots API (v1).
 
@@ -85,19 +85,32 @@ def list_snapshots() -> dict[str, list[dict[str, str]]]:
     from app.db.engine import engine
     from app.db.models.snapshot import Snapshot
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         stmt = select(Snapshot).order_by(Snapshot.snapshot_time.desc())
         rows = session.execute(stmt).scalars().all()
 
     snapshots = [
         {
             "snapshot_id": str(row.snapshot_id),
-            "created_at": row.snapshot_time.isoformat(),
+            "created_at": row.snapshot_time.isoformat() + (
+                "" if row.snapshot_time.tzinfo is not None else "+00:00"
+            ),
             "source_system": row.source_system,
             "description": row.description or "",
-            # §2.16 Staging Layer (v2.03.00): import lifecycle status.
+            # Â§2.16 Staging Layer (v2.03.00): import lifecycle status.
             # Pre-staging rows return "committed" (migration server_default).
             "import_status": getattr(row, "import_status", "committed"),
+            # Â§2.13 Manifest-Derived Timestamps (v2.09.00)
+            "extract_timestamp": (
+                getattr(row, "extract_timestamp", None).isoformat()
+                if getattr(row, "extract_timestamp", None) is not None
+                else None
+            ),
+            # Â§2.2 Incremental Loading (v2.08.00)
+            "is_baseline": getattr(row, "is_baseline", False),
+            "baseline_snapshot_id": getattr(row, "baseline_snapshot_id", None),
+            "gap_detected": getattr(row, "gap_detected", False),
+            "cumulative_object_count": getattr(row, "cumulative_object_count", None),
         }
         for row in rows
     ]
@@ -110,7 +123,7 @@ def get_snapshot_detail(snapshot_id: int) -> dict[str, Any]:
     """Return object counts for a single snapshot.
 
     Provides a quick breakdown of what's inside a snapshot without
-    materialising the rows themselves — useful for the expand panel
+    materialising the rows themselves â€” useful for the expand panel
     in the Snapshots UI. All counts are returned as integers (0 when
     the category was not imported or doesn't apply to this snapshot).
     """
@@ -128,7 +141,7 @@ def get_snapshot_detail(snapshot_id: int) -> dict[str, Any]:
     from app.graph.graph_models import GraphEdge, GraphNode
     from app.usage.usage_models import UsageEvent
 
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         target = session.execute(
             select(Snapshot).where(Snapshot.snapshot_id == snapshot_id)
         ).scalar_one_or_none()
@@ -263,7 +276,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
     from app.graph.impact_models import ChangeImpactSummary, ImpactEvent
     from app.usage.usage_models import ObjectCriticality, UsageEvent
 
-    # Optional dependents — present in some checkouts only. We import
+    # Optional dependents â€” present in some checkouts only. We import
     # defensively so an older branch that hasn't migrated the parser
     # tables still serves the delete endpoint.
     try:
@@ -285,8 +298,8 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             detail="confirm_id must match snapshot_id (repeat the ID to confirm deletion).",
         )
 
-    with Session(bind=engine) as session:
-        # ──── 1. Verify the snapshot exists at all ────
+    with Session(engine) as session:
+        # â”€â”€â”€â”€ 1. Verify the snapshot exists at all â”€â”€â”€â”€
         target = session.execute(
             select(Snapshot).where(Snapshot.snapshot_id == snapshot_id)
         ).scalar_one_or_none()
@@ -297,7 +310,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
                 detail=f"Snapshot #{snapshot_id} does not exist.",
             )
 
-        # ──── 2. Enforce "only the latest can be deleted" invariant ────
+        # â”€â”€â”€â”€ 2. Enforce "only the latest can be deleted" invariant â”€â”€â”€â”€
         # Deleting an older snapshot would orphan diffs, impact events
         # and reasoning events anchored on higher snapshot_ids, silently
         # corrupting history. Forcing LIFO deletion keeps the timeline
@@ -316,7 +329,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
                 ),
             )
 
-        # ──── 3. Build cascade subqueries (server-side, never materialised) ────
+        # â”€â”€â”€â”€ 3. Build cascade subqueries (server-side, never materialised) â”€â”€â”€â”€
         # `schema_id_subq` and `table_id_subq` are SQLAlchemy `select()`
         # expressions, not Python lists. SQLite re-evaluates them at the
         # moment each DELETE runs, so as long as we delete children
@@ -329,7 +342,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             TableSnapshot.schema_id.in_(schema_id_subq)
         )
 
-        # ──── 4. Aggregate counts up front (single SQL each) ────
+        # â”€â”€â”€â”€ 4. Aggregate counts up front (single SQL each) â”€â”€â”€â”€
         # We compute counts before the deletes so the response can
         # report them without a second pass. `func.count()` runs
         # entirely server-side; no row materialisation in Python.
@@ -373,7 +386,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
             "usage_events": 0,
         }
 
-        # ──── 5. Cascade DELETE in reverse-dependency order ────
+        # â”€â”€â”€â”€ 5. Cascade DELETE in reverse-dependency order â”€â”€â”€â”€
         # Children of TableSnapshot first (every table-keyed sub-table),
         # then TableSnapshot, then SchemaSnapshot, then everything
         # keyed directly off snapshot_id. Each statement uses the
@@ -401,7 +414,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         )
 
         # ChangeImpactSummary has a change_id FK to ChangeEvent but no
-        # DB-level ON DELETE CASCADE (see the model docstring) — it was
+        # DB-level ON DELETE CASCADE (see the model docstring) â€” it was
         # never actually wired into this cascade, so deleting a snapshot
         # left its impact summaries orphaned (still readable by change_id,
         # pointing at nothing). Must run BEFORE the ChangeEvent delete
@@ -437,14 +450,14 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         ).rowcount or 0
 
         # Criticality scores keyed by snapshot_id (no FK declared, so
-        # the DB wouldn't cascade them — we have to do it explicitly).
+        # the DB wouldn't cascade them â€” we have to do it explicitly).
         counts["criticality"] = session.execute(
             delete(ObjectCriticality).where(
                 ObjectCriticality.snapshot_id == snapshot_id
             )
         ).rowcount or 0
 
-        # Usage events keyed by snapshot_id (added v1.21.54 — previously
+        # Usage events keyed by snapshot_id (added v1.21.54 â€” previously
         # this table had no snapshot linkage at all, so deleting a
         # snapshot silently left its usage rows behind, and a later
         # re-import of the same PDCR file would double-count them). Rows
@@ -475,9 +488,9 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         session.execute(delete(Snapshot).where(Snapshot.snapshot_id == snapshot_id))
         session.commit()
 
-    # ──── 6. VACUUM to physically reclaim freed pages ────
+    # â”€â”€â”€â”€ 6. VACUUM to physically reclaim freed pages â”€â”€â”€â”€
     # SQLite default `auto_vacuum = NONE` keeps deleted pages as free
-    # space inside the file — disk usage doesn't change after a DELETE.
+    # space inside the file â€” disk usage doesn't change after a DELETE.
     # Running VACUUM rebuilds the file without the free pages, returning
     # the bytes to the filesystem. For a 240k-table cascade this typically
     # frees several GB.
@@ -487,7 +500,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
     # `connect()`, which would otherwise wrap the VACUUM in a BEGIN and
     # SQLite would reject it with "cannot VACUUM from within a
     # transaction"). The VACUUM holds an exclusive lock on the DB while
-    # it runs — for our 800 MB-class file that's typically 5-15 s,
+    # it runs â€” for our 800 MB-class file that's typically 5-15 s,
     # during which other API calls would 503. Acceptable for a
     # demo/dev workload; production would either skip it or queue
     # deletes for off-hours.
@@ -499,10 +512,15 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         "skipped_reason": None,
     }
 
-    db_path = engine.url.database
-    if not db_path or db_path == ":memory:":
-        # Engine isn't backed by a real file (e.g. in-memory test DB).
-        # Nothing to reclaim; report and move on.
+    # VACUUM reclaims disk space only for SQLite (default auto_vacuum=NONE).
+    # For Postgres the server manages storage automatically; running VACUUM
+    # there would work but gives no size feedback and is not needed here.
+    is_sqlite = engine.url.get_dialect().name == "sqlite"
+    db_path = engine.url.database if is_sqlite else None
+
+    if not is_sqlite:
+        vacuum_info["skipped_reason"] = "not applicable for Postgres"
+    elif not db_path or db_path == ":memory:":
         vacuum_info["skipped_reason"] = "non-file engine"
     else:
         try:
@@ -533,7 +551,7 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
                     "[delete] could not stat DB after VACUUM: %s", e,
                 )
             _delete_logger.info(
-                "[delete] VACUUM done in %.2fs — before=%s after=%s freed=%s",
+                "[delete] VACUUM done in %.2fs â€” before=%s after=%s freed=%s",
                 vacuum_info["elapsed_seconds"],
                 vacuum_info["bytes_before"],
                 vacuum_info["bytes_after"],

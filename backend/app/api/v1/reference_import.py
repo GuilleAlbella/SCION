@@ -1,4 +1,4 @@
-"""§2.10 Reference Data — import endpoints.
+﻿"""Â§2.10 Reference Data â€” import endpoints.
 
 POST /reference-import/users
     Upload Excel (.xlsx) or CSV with org hierarchy (username / team / department).
@@ -31,7 +31,7 @@ from app.pipelines.reference_importer import import_applications, import_users
 router = APIRouter(prefix="/reference-import", tags=["reference"])
 
 
-# ── response schemas ──────────────────────────────────────────────────
+# â”€â”€ response schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class UserImportResponse(BaseModel):
@@ -57,7 +57,7 @@ class ReferenceStatus(BaseModel):
     table_mappings: int
 
 
-# ── endpoints ─────────────────────────────────────────────────────────
+# â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @router.post("/users", response_model=UserImportResponse)
@@ -99,7 +99,7 @@ async def upload_applications(file: UploadFile = File(...)) -> AppImportResponse
 @router.get("/status", response_model=ReferenceStatus)
 def get_reference_status() -> ReferenceStatus:
     """Return counts of all imported reference entities."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         return ReferenceStatus(
             departments=session.execute(
                 select(func.count(DepartmentEntity.department_id))

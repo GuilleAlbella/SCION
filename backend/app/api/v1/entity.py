@@ -1,4 +1,4 @@
-"""§2.9 Integration Model — entity API endpoints.
+﻿"""Â§2.9 Integration Model â€” entity API endpoints.
 
 GET /entity/resolve?name=SCHEMA.TABLE&type=TABLE
     Look up a persistent entity by natural key.
@@ -31,7 +31,7 @@ from app.diff.diff_models import ChangeEvent
 router = APIRouter(prefix="/entity", tags=["entity"])
 
 
-# ── response schemas ─────────────────────────────────────────────────
+# â”€â”€ response schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class EntityResponse(BaseModel):
@@ -80,7 +80,7 @@ class EntityListResponse(BaseModel):
     has_more: bool
 
 
-# ── helpers ──────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _get_entity_or_404(entity_id: int, session: Session) -> ObjectEntity:
@@ -90,7 +90,7 @@ def _get_entity_or_404(entity_id: int, session: Session) -> ObjectEntity:
     return entity
 
 
-# ── endpoints ────────────────────────────────────────────────────────
+# â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 @router.get("/resolve", response_model=EntityResponse)
@@ -99,7 +99,7 @@ def resolve_entity(
     type: str = Query("TABLE", description="Entity type: TABLE | VIEW | SCHEMA | COLUMN"),
 ) -> EntityResponse:
     """Look up a persistent entity by its natural key (type + FQ name)."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         entity = session.execute(
             select(ObjectEntity).where(
                 ObjectEntity.entity_type == type.upper(),
@@ -135,7 +135,7 @@ def resolve_entity(
 
 @router.get("/{entity_id}", response_model=EntityResponse)
 def get_entity(entity_id: int) -> EntityResponse:
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         entity = _get_entity_or_404(entity_id, session)
         return EntityResponse(
             entity_id=entity.entity_id,
@@ -152,10 +152,10 @@ def get_entity(entity_id: int) -> EntityResponse:
 @router.get("/{entity_id}/history", response_model=EntityHistoryResponse)
 def get_entity_history(entity_id: int) -> EntityHistoryResponse:
     """Return full criticality + usage + change history across snapshots for an entity."""
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         entity = _get_entity_or_404(entity_id, session)
 
-        # Criticality history — join snapshot for timestamps
+        # Criticality history â€” join snapshot for timestamps
         crit_rows = session.execute(
             select(
                 ObjectCriticality.snapshot_id,
@@ -235,7 +235,7 @@ def list_entities(
     limit: int = Query(100, le=500),
     offset: int = Query(0, ge=0),
 ) -> EntityListResponse:
-    with Session(bind=engine) as session:
+    with Session(engine) as session:
         q = select(ObjectEntity)
         if active_only:
             q = q.where(ObjectEntity.is_active == True)  # noqa: E712

@@ -77,7 +77,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={(e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(text);
+        navigator.clipboard?.writeText(text).catch(() => {});
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
@@ -353,6 +353,7 @@ export default function ChangesPage() {
   // the diff (visible regression vs the pre-pagination version, which
   // simply used the cached value as-is).
   const skipNextAutoRefetchRef = useRef(false);
+  const fetchIdRef = useRef(0);
 
   // Restore from SelectionContext when arriving from another page. Only
   // hydrates the *first* page of items, not the entire previously-loaded
@@ -439,12 +440,14 @@ export default function ChangesPage() {
       mode: "replace" | "append",
       currentFilters: Omit<DiffDetailsParams, "limit" | "offset">,
     ): Promise<DiffDetailResponse | null> => {
+      const myFetchId = ++fetchIdRef.current;
       try {
         const data = await getDiffDetails(from, to, {
           limit: PAGE_SIZE,
           offset,
           ...currentFilters,
         });
+        if (myFetchId !== fetchIdRef.current) return null;
         setPageOffset(offset);
         setPageHasMore(data.has_more);
         setPageTotal(data.summary.total);
@@ -469,6 +472,7 @@ export default function ChangesPage() {
         }
         return data;
       } catch (e: unknown) {
+        if (myFetchId !== fetchIdRef.current) return null;
         setError(e instanceof Error ? e.message : "Failed to load diff details");
         return null;
       }
@@ -651,8 +655,8 @@ export default function ChangesPage() {
       setTimeout(() => {
         document.getElementById("ddl-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
-    } catch {
-      // silently fail DDL generation
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : "DDL generation failed", "error");
     } finally {
       setDdlLoading(false);
     }
