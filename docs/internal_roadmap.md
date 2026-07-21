@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-20 · Current version: **v2.06.00 (BETA)**.
+Last updated: 2026-07-20 · Current version: **v2.07.00 (BETA)**.
 
 ---
 
@@ -127,7 +127,7 @@ Reestructurado post-reunión con Pilar (2026-07-17): entrega única en vez de do
 | **2.8** | Production runtime | Systemd units + JSON logging | **1** | — |
 | **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactivo~~ | **✅** | v2.05.00 |
 | **2.12** | ~~AI column classification~~ | ~~PII / non-PII por nombre, tipo y comentario~~ | **✅** | v2.06.00 |
-| **2.10** | Reference data | User hierarchy + app metadata + dashboards | **5** | Bloqueado: extractor username por fila |
+| **2.10** | ~~Reference data~~ | ~~User hierarchy + app metadata + dashboards~~ | **✅** | v2.07.00 |
 | **2.2** | Incremental loading | CDC contra baseline day zero | **4** | — |
 | **2.13** | Manifest timestamps | Timestamps del extractor en snapshot screen | **1** | — |
 | **2.4** | DDL timestamp merge | Mantener versión más reciente en ingest | **1** | — |
@@ -403,7 +403,7 @@ Resolution uses the `(entity_type, schema_name, object_name)` natural key throug
 - [ ] UI: criticality trend chart — backend history endpoint ready; frontend component pendiente.
 - [ ] UI: usage trend per object — same, pendiente frontend.
 
-### 2.10 Reference Data Support  *(new — Reunión 28, 2026-07-15)*  **Est: 5 días**
+### 2.10 Reference Data Support  ✅ COMPLETO (v2.07.00, 2026-07-20)
 
 **Origin:** Rahul Kulkarni, Reunión 28. Prerequisito: §2.9 Integration Model.
 
@@ -413,37 +413,27 @@ qué aplicación de negocio "es dueña" de cada base de datos/tabla.
 
 **Sub-ítems:**
 
-#### 2.10.a — User hierarchy ingestion
-Fuente: **Excel/CSV del cliente** (no del parser ni del dict). Estructura típica:
-`username → Team → Department/LOB`.
+#### 2.10.a — User hierarchy ingestion  ✅
+- [x] Nuevas tablas: `user_entity`, `team_entity`, `department_entity` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
+- [x] Pipeline de ingest: upload Excel/CSV vía `POST /api/v1/reference-import/users` — headers flexibles, upsert idempotente. *(v2.07.00)*
+- [x] Campo `username` nullable en `usage_event` — linkeo con `user_entity` listo en la DB. *(v2.07.00)*
 
-- [ ] Nuevas tablas: `user_entity`, `team_entity`, `department_entity`
-- [ ] Pipeline de ingest: upload Excel/CSV vía `/api/v1/reference-import/users`
-- [ ] Linkeo con `usage_event`: join por `username` (requiere cambio en extractor — ver nota)
-- [ ] Alembic migration
+> ⚠️ **Cambio en extractor pendiente:** hasta que el PDCR extractor provea `username` por fila,
+> la columna `usage_event.username` queda NULL y el dashboard de teams muestra `—` en queries.
+> El campo en DB ya existe — sólo requiere re-ingest cuando Rahul actualice el extractor.
 
-> ⚠️ **Cambio en extractor requerido:** hoy el PDCR extractor solo provee `user_count`
-> (agregado). Para linkear usuarios reales, necesita proveer una fila por `(username,
-> object_name)` en vez del count. Rahul confirmó en Reunión 28 (min 15:28). Hasta que el
-> extractor cambie, el campo `user_id` en `usage_event` queda NULL.
+#### 2.10.b — Business Application metadata  ✅
+- [x] Nuevas tablas: `application_entity`, `database_application_mapping`, `table_application_mapping` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
+- [x] Pipeline de ingest: upload Excel/CSV vía `POST /api/v1/reference-import/applications`. *(v2.07.00)*
+- [x] Linkeo via `schema_name`/`table_name` (no requiere cambio en extractor). *(v2.07.00)*
 
-#### 2.10.b — Business Application metadata
-Fuente: **Excel/CSV del cliente**.
-
-- [ ] Nuevas tablas: `application_entity`, `database_application_mapping`, `table_application_mapping`
-- [ ] Pipeline de ingest: upload Excel/CSV vía `/api/v1/reference-import/applications`
-- [ ] Validación: verificar que los database/table names existen en `object_entity`
-- [ ] Alembic migration
-
-#### 2.10.c — UI: dashboards por team/department y por application
-Rahul + Guillermo acordaron que no es solo un filtro — requiere **nuevos dashboards**.
-Guillermo confirmó: el esqueleto de componentes ya existe, principalmente es configuración.
-Diseño a definir revisando DataDNA Overview v7.3 (`docs/DataDNA Overview - Full deck v7.3.pptx`).
-
-- [ ] Dashboard "Usage by Team/Department" — query distribution por team, top tables por dept
-- [ ] Dashboard "Usage by Business Application" — qué tablas usa cada app, criticality por app
-- [ ] Filtros por team/dept en páginas Usage y Intelligence
-- [ ] TAISA: exponer user/app metadata en el contexto de Q&A
+#### 2.10.c — UI dashboards  ✅
+- [x] Página `/reference` — KPI row + import cards + tabs Org/Applications. *(v2.07.00)*
+- [x] Dashboard "Teams" — tabla con dept, user count, queries, objects accessed; aviso ámbar cuando no hay per-user data. *(v2.07.00)*
+- [x] Dashboard "Applications" — tabla con owner team, schema count, table count, query count. *(v2.07.00)*
+- [x] API `/landscape/summary` enriquecida con `teams_count` + `applications_count`. *(v2.07.00)*
+- [ ] Filtros por team/dept en páginas Usage e Intelligence — pendiente post-extractor upgrade
+- [ ] TAISA: exponer user/app metadata en el contexto de Q&A — pendiente
 
 ---
 

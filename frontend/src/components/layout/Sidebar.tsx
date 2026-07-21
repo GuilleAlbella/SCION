@@ -23,6 +23,7 @@ import {
   Bell,
   FlaskConical,
   Globe2,
+  Building2,
 } from "lucide-react";
 
 // Top-level navigation. Order reflects the intended user flow:
@@ -42,6 +43,8 @@ const NAV_ITEMS = [
   { href: "/intelligence", label: "Intelligence", icon: ShieldCheck },
   // §2.15 Access Layer (Phase 2): business-friendly portfolio view
   { href: "/landscape", label: "Landscape", icon: Globe2 },
+  // §2.10 Reference Data (Phase 2): org hierarchy + business application metadata
+  { href: "/reference", label: "Reference", icon: Building2 },
   { href: "/timeline", label: "Timeline", icon: Clock },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/control", label: "Control", icon: Settings },

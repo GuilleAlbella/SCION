@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db.engine import engine
 from app.db.models.entity import ObjectEntity
+from app.db.models.reference import ApplicationEntity, TeamEntity
 from app.db.models.snapshot import Snapshot
 from app.usage.usage_models import ObjectCriticality
 from app.diff.diff_models import ChangeEvent
@@ -43,6 +44,9 @@ class LandscapeSummary(BaseModel):
     high_risk_count: int
     recent_changes_count: int
     top_risk_objects: list[RiskObject]
+    # §2.10 Reference Data context
+    teams_count: int = 0
+    applications_count: int = 0
 
 
 class RiskDistribution(BaseModel):
@@ -128,6 +132,11 @@ def get_landscape_summary(top_n: int = Query(10, le=50)) -> LandscapeSummary:
             for r in top_rows
         ]
 
+        teams_count = session.execute(select(func.count(TeamEntity.team_id))).scalar() or 0
+        apps_count = (
+            session.execute(select(func.count(ApplicationEntity.application_id))).scalar() or 0
+        )
+
         return LandscapeSummary(
             latest_snapshot_id=snap_id,
             latest_snapshot_time=snap_time,
@@ -136,6 +145,8 @@ def get_landscape_summary(top_n: int = Query(10, le=50)) -> LandscapeSummary:
             high_risk_count=high_risk_count,
             recent_changes_count=recent_changes,
             top_risk_objects=top_risk,
+            teams_count=teams_count,
+            applications_count=apps_count,
         )
 
 

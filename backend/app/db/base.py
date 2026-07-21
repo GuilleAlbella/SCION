@@ -37,3 +37,5 @@ import app.usage.dbql_models  # noqa: F401
 import app.db.models.staging  # noqa: F401
 # §2.9 Integration Model (v2.04.00): persistent cross-snapshot entity IDs.
 import app.db.models.entity  # noqa: F401
+# §2.10 Reference Data (v2.07.00): org hierarchy + business application metadata.
+import app.db.models.reference  # noqa: F401

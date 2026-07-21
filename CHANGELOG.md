@@ -8,6 +8,35 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.07.00 (2026-07-20) — feat(reference): §2.10 Reference Data — org hierarchy + business application metadata
+
+**Reference Data — Phase 2 §2.10**
+
+- **Alembic migrations**:
+  - `d4e5f6a7b8c9` — movida a `alembic/versions/` (estaba en `backend/migrations/versions/`); revisa `c3d4e5f6a7b8`.
+  - `e5f6a7b8c9d0` — crea 6 nuevas tablas: `department_entity`, `team_entity`, `user_entity`, `application_entity`, `database_application_mapping`, `table_application_mapping`; añade `username TEXT` nullable a `usage_event` (con índice); revisa `d4e5f6a7b8c9`.
+- **ORM models** — `backend/app/db/models/reference.py`: 6 modelos SQLAlchemy 2.0 con relaciones bidireccionales.
+- **Import pipeline** — `backend/app/pipelines/reference_importer.py`: parsea Excel (.xlsx) y CSV con headers flexibles (case-insensitive, aliases múltiples); semántica upsert idempotente para users y applications.
+- **Backend endpoints** (`backend/app/api/v1/reference_import.py` + `reference_data.py`):
+  - `POST /api/v1/reference-import/users` — upload Excel/CSV con jerarquía org (username / team / department).
+  - `POST /api/v1/reference-import/applications` — upload Excel/CSV con app metadata (application / schema / table).
+  - `GET /api/v1/reference-import/status` — conteos de entidades importadas.
+  - `GET /api/v1/reference/teams` — teams con department name y user count.
+  - `GET /api/v1/reference/applications` — apps con owner team y mapping counts.
+  - `GET /api/v1/reference/usage-by-team` — usage agrupado por team/dept; degradación graceful cuando no hay username en PDCR (muestra nota explicativa).
+  - `GET /api/v1/reference/usage-by-app` — usage agrupado por app via schema/table mappings; Python aggregation para evitar SQL complejo.
+- **Landscape summary** — `GET /landscape/summary` ahora incluye `teams_count` y `applications_count`.
+- **UsageEvent** — campo `username` nullable añadido al modelo y a la migración para linkeo futuro con `user_entity`.
+- **Frontend** — nueva página `/reference` con:
+  - KPI row: departments, teams, users, applications, schema maps, table maps.
+  - 2 import cards (upload .xlsx/.csv) con feedback inline de resultado/error.
+  - Tabs "Organisation" y "Applications" con tablas y empty states.
+  - Columna "Queries" en tabla de teams (muestra `—` cuando no hay datos per-user aún).
+  - Aviso ámbar cuando el extractor no provee per-user rows.
+- **Sidebar** — nuevo ítem "Reference" con `Building2` icon entre Landscape y Timeline.
+
+---
+
 ### v2.06.00 (2026-07-20) — feat(intelligence): AI Column PII Classification — badges, filter, classify endpoint (§2.12)
 
 **AI Column Classification — PII tagging (Phase 2 §2.12)**

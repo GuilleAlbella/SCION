@@ -33,6 +33,9 @@ class UsageEvent(Base):
     schema_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     query_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     user_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # §2.10 — populated once the PDCR extractor provides per-user rows.
+    # NULL until then; the org-hierarchy dashboards degrade gracefully.
+    username: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     last_accessed: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

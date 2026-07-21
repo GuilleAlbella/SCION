@@ -629,6 +629,85 @@ export interface SimulationRequest {
   new_value?: string;
 }
 
+// §2.10 Reference Data
+export interface ReferenceStatus {
+  departments: number;
+  teams: number;
+  users: number;
+  applications: number;
+  schema_mappings: number;
+  table_mappings: number;
+}
+
+export interface UserImportResponse {
+  departments_upserted: number;
+  teams_upserted: number;
+  users_upserted: number;
+  warnings: string[];
+}
+
+export interface AppImportResponse {
+  applications_upserted: number;
+  schema_mappings_upserted: number;
+  table_mappings_upserted: number;
+  warnings: string[];
+}
+
+export interface TeamRow {
+  team_id: number;
+  team_name: string;
+  department_name: string | null;
+  user_count: number;
+}
+
+export interface TeamsResponse {
+  teams: TeamRow[];
+  total: number;
+}
+
+export interface AppRow {
+  application_id: number;
+  application_name: string;
+  description: string | null;
+  owner_team: string | null;
+  schema_count: number;
+  table_count: number;
+}
+
+export interface ApplicationsResponse {
+  applications: AppRow[];
+  total: number;
+}
+
+export interface TeamUsageRow {
+  team_name: string;
+  department_name: string | null;
+  query_count: number;
+  user_count: number;
+  object_count: number;
+}
+
+export interface TeamUsageResponse {
+  snapshot_id: number | null;
+  teams: TeamUsageRow[];
+  unmapped_query_count: number;
+  note: string | null;
+}
+
+export interface AppUsageRow {
+  application_name: string;
+  schema_count: number;
+  table_count: number;
+  query_count: number;
+  user_count: number;
+}
+
+export interface AppUsageResponse {
+  snapshot_id: number | null;
+  applications: AppUsageRow[];
+  unmapped_query_count: number;
+}
+
 export interface SimulationResponse {
   object_identifier: string;
   change_type: string;
