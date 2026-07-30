@@ -312,9 +312,12 @@ def get_diff_details(
     if is_breaking is not None:
         filters.append(ChangeEvent.is_breaking == is_breaking)
     if object_q is not None and object_q.strip():
-        filters.append(
-            ChangeEvent.object_identifier.ilike(f"%{object_q.strip()}%")
-        )
+        q_stripped = object_q.strip()
+        name_filter = ChangeEvent.object_identifier.ilike(f"%{q_stripped}%")
+        if q_stripped.isdigit():
+            filters.append(or_(name_filter, ChangeEvent.change_id == int(q_stripped)))
+        else:
+            filters.append(name_filter)
 
     where_clause = and_(*filters)
 

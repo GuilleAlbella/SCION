@@ -610,7 +610,10 @@ function LineagePage() {
 
     const nodeMap = new Map(focusData.nodes.map((n) => [n.node_id, n]));
     const selectedNode = focusData.nodes.find(
-      (n) => n.object_name === selectedObject || `${n.schema_name}.${n.object_name}` === selectedObject,
+      (n) => {
+        const sel = selectedObject?.toUpperCase() ?? "";
+        return n.object_name?.toUpperCase() === sel || `${n.schema_name}.${n.object_name}`.toUpperCase() === sel;
+      },
     );
     if (!selectedNode)
       return {

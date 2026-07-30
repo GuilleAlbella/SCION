@@ -116,7 +116,7 @@ def _build_graph_for_snapshot_in_session(
             GraphNode.node_uid,
         ).where(GraphNode.snapshot_id == snapshot_id)
     ).all():
-        existing_nodes_by_key[(otype, oname, sid)] = node_id
+        existing_nodes_by_key[(otype, oname.upper() if oname else oname, sid)] = node_id
         existing_node_uids[node_id] = uid or ""
 
     # Set of edge identity tuples already in the DB. We only need the
