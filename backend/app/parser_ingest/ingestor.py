@@ -168,9 +168,9 @@ def ingest(
                 # cross-referencing with edges (which also use natural keys).
                 node = GraphNode(
                     object_type=object_type,
-                    object_name=d.dataset_natural_key,
+                    object_name=d.dataset_natural_key.upper(),
                     snapshot_id=snap.snapshot_id,
-                    schema_name=d.container_natural_key,
+                    schema_name=d.container_natural_key.upper() if d.container_natural_key else d.container_natural_key,
                     node_uid=d.dataset_natural_key,
                 )
                 session.add(node)

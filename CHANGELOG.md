@@ -8,6 +8,40 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.09.08 (2026-07-30) — fix(prod): case normalization + change-ID search (Rahul round-3 bugs)
+
+**4 fixes from Rahul Kulkarni observations (emails 2026-07-30)**
+
+- **Mixed-case duplicate nodes** (`backend/app/parser_ingest/ingestor.py`): El parser ingestor
+  almacenaba `object_name` con el case del SQL parseado (mixedCase), mientras que el dict importer
+  (graph_builder) usaba UPPERCASE del catálogo Teradata. Resultado: el mismo objeto físico
+  aparecía como dos nodos distintos en el grafo (e.g. `UAT_RAW_...` y `UAT_raw_...`).
+  Fix: `object_name` y `schema_name` se normalizan a `.upper()` al crear el nodo. `node_uid`
+  conserva el natural key original para cross-referencing de edges.
+
+- **Dedup seed normalizado** (`backend/app/graph/graph_builder.py`): La semilla de idempotencia
+  `existing_nodes_by_key` usaba `oname` sin normalizar como clave, por lo que un nodo mixedCase
+  creado por el ingestor no era detectado por el graph_builder. Fix: clave indexada como
+  `oname.upper()`.
+
+- **"No lineage recorded" para objetos fuente** (`frontend/src/app/lineage/page.tsx`): El `find()`
+  sobre `focusData.nodes` era case-sensitive (`===`), pero el backend `_resolve_root` usa
+  `func.lower()`. Si `selectedObject` no coincidía en case con el `object_name` almacenado,
+  `selectedNodeData` quedaba null y se mostraba el warning ámbar aunque hubiera datos.
+  Fix: comparación normalizada a `.toUpperCase()` en ambos lados.
+
+- **Búsqueda por change ID en "What next?"** (`backend/app/api/v1/diff.py`): `object_q` filtraba
+  solo contra `object_identifier` (nombre de objeto). Cuando Rahul buscaba `"659"` (un ID
+  numérico), no encontraba nada. Fix: cuando `object_q` es puramente numérico, el filtro hace
+  `OR ChangeEvent.change_id == int(q)` además del ILIKE por nombre.
+
+- **Impact usage lookup case-insensitive** (`backend/app/graph/blast_radius.py`): `usage_map`
+  se indexaba con el `object_name` tal como venía de la DB (mixedCase). El lookup posterior
+  usaba el `object_identifier` del change event (potencialmente diferente en case).
+  Fix: claves normalizadas a `.upper()` en construcción y en lookup.
+
+---
+
 ### v2.09.07 (2026-07-21) — fix(ci): staging model CURRENT_TIMESTAMP for SQLite compatibility
 
 **CI fix**

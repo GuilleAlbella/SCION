@@ -341,9 +341,10 @@ def compute_batch_impact(
             for u in session.query(UsageEvent).all():
                 qc = u.query_count or 0
                 uc = u.user_count or 0
-                usage_map[u.object_name] = (qc, uc)
-                short = u.object_name.split(".")[-1] if "." in u.object_name else u.object_name
-                if short not in usage_map:
+                key = u.object_name.upper() if u.object_name else u.object_name
+                usage_map[key] = (qc, uc)
+                short = key.split(".")[-1] if key and "." in key else key
+                if short and short not in usage_map:
                     usage_map[short] = (qc, uc)
     except Exception:
         pass
@@ -388,7 +389,7 @@ def compute_batch_impact(
             result.breaking_count += 1
 
         # Usage hierarchy unchanged from the v1.17 implementation.
-        obj_id = change["object_identifier"]
+        obj_id = (change["object_identifier"] or "").upper()
         qc, uc = 0, 0
         if obj_id in usage_map:
             qc, uc = usage_map[obj_id]

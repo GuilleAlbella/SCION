@@ -565,6 +565,33 @@ Vista de alto nivel para stakeholders no técnicos:
 - [ ] Criticality trend chart — `/entity/{id}/history` endpoint listo; pendiente frontend chart component.
 - [ ] Business name / alias: campo opcional en `object_entity` — pendiente.
 
+#### 2.15.d — Progressive Disclosure UI (Reunión 29, 2026-07-30)  🔴 PENDIENTE
+**Origen:** Reunión 29 (2026-07-30) — Kindy Flyvholm confirmó que la propuesta de valor real
+de SCION es lo que ningún DBA puede hacer hoy: análisis aggregado por departamento/aplicación,
+no la vista técnica de tablas y columnas. Chris Pilon: "it's not a race... but we are going to
+try and drive each other to the best possible thing."
+
+**El problema:** La UI actual es completamente técnica — el usuario debe conocer qué es un
+snapshot, un graph_node, un schema. Esto bloquea la adopción por parte de consultores, sales
+(Lydia's team), y stakeholders de negocio.
+
+**Propuesta:** Profundidad progresiva sin switch de "modo". Las páginas hablan en lenguaje
+de negocio por defecto; el detalle técnico aparece naturalmente al hacer drill-down. No es
+una segunda UI ni un toggle — es una jerarquía de información donde la capa superior es
+business-friendly y el DBA llega al nivel técnico haciendo click.
+
+**Diferencia con §2.15.a/b/c:** Esos ítems añaden _datos_ de negocio. Este ítem cambia
+el _lenguaje y la estructura de navegación_ de toda la UI para que una persona no técnica
+pueda orientarse sin ayuda. Empieza por Landscape (ya tiene la infraestructura de criticality
+y risk) y se extiende al resto si funciona como demo.
+
+- [ ] **Rediseño Landscape como piloto** — home page habla en términos de "X objetos críticos
+      en el esquema FINANCE — 3 cambiaron esta semana", no en "snapshot #12 · 847 objects".
+      El DBA que hace click llega al SQL name, columnas, query count, lineage graph.
+- [ ] **Validar con Chris/Ripley** — una demo de Landscape rediseñado como prueba de concepto
+      antes de extender al resto de páginas.
+- [ ] **Extender al resto de páginas** si la demo funciona — Changes, Intelligence, Timeline.
+
 **Nota sobre terminología:** Jon usa "Access Layer" en sentido de data warehousing clásico
 (Staging → Integration → Access = "data mart consumible"). En SCION lo implementamos como
 capas de UI sobre el Integration Model, sin crear tablas separadas de "access" — la vista
@@ -692,6 +719,7 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
 | 2026-07-20 | §2.11 Col-lineage navigation completo en v2.05.00 | Traverse BFS endpoint + nav state (colNavStack/colNavHighlight) + breadcrumb + ←/→ buttons + graph ring highlight. Navigate buttons usan el endpoint existente `getColumnLineage`; `traverse` endpoint disponible para features futuras (highlight multi-hop). `focusOn()` limpia el stack. | v2.05.00 |
 | 2026-07-20 | §2.8 Production runtime completo en v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` paso 7 escribe unit al instalar. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrado a lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
+| 2026-07-30 | Progressive Disclosure UI añadida como §2.15.d — pendiente | Reunión 29 confirmó que el valor real es el análisis que ningún DBA puede hacer hoy (aggregado por dept/app). Kindy: "We never sell lineage — customers are always disappointed because it didn't solve anything." La UI debe hablar en lenguaje de negocio por defecto, con detalle técnico accesible via drill-down natural (sin switch de modo). Empieza como piloto en Landscape. | Reunión 29 (2026-07-30) |
 | 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
 
 ---
