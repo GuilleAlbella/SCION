@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Brain, Send, X, Minimize2, User, Bot, Sparkles } from "lucide-react";
+import { Brain, Send, X, Minimize2, User, Bot, Sparkles, RotateCcw } from "lucide-react";
 import { askQuestion } from "@/lib/api/reasoning";
 import { useSelection } from "@/lib/SelectionContext";
 
@@ -24,7 +24,7 @@ export default function TaisaWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
   // We piggyback on the globally-selected diff to give TAISA a change_id
   // context — if the user is looking at a diff, questions target that change.
-  const { cachedDiffDetails } = useSelection();
+  const { cachedDiffDetails, activeChangeId } = useSelection();
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -48,9 +48,9 @@ export default function TaisaWidget() {
     // assistant reply comes in a later setState once the API resolves.
     setChatHistory((prev) => [...prev, { role: "user", text: userMsg }]);
 
-    // Default change_id fallback of 1 when there's no active diff context —
-    // the backend accepts any change and will answer generically.
-    const cid = cachedDiffDetails?.changes?.[0]?.change_id ?? 1;
+    // Prefer the change the user scoped via "What next?" typeahead; fall back
+    // to the first change in the cached diff, then to 1 as a generic anchor.
+    const cid = activeChangeId ?? cachedDiffDetails?.changes?.[0]?.change_id ?? 1;
     setAsking(true);
     try {
       const data = await askQuestion(cid, userMsg, chatHistory);
@@ -119,6 +119,13 @@ export default function TaisaWidget() {
             <span className="text-[10px] text-green-400">Online — Ask anything about SCION</span>
           </div>
         </div>
+        <button
+          onClick={() => { setChatHistory([]); setQuestion(""); }}
+          title="New session"
+          className="text-white/50 hover:text-white p-1"
+        >
+          <RotateCcw size={14} />
+        </button>
         <button onClick={() => setMinimized(true)} className="text-white/50 hover:text-white p-1">
           <Minimize2 size={14} />
         </button>
