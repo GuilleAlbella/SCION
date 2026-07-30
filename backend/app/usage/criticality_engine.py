@@ -11,6 +11,12 @@ from typing import Any, Dict, List
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import (
+    CRITICALITY_USAGE_WEIGHT,
+    CRITICALITY_GRAPH_WEIGHT,
+    CRITICALITY_HIGH_THRESHOLD,
+    CRITICALITY_MED_THRESHOLD,
+)
 from app.db.engine import engine
 from app.graph.graph_models import GraphNode
 from app.usage.usage_models import ObjectCriticality, UsageEvent
@@ -180,13 +186,13 @@ def compute_criticality(
         usage_score = round(queries / max_queries, 4) if max_queries > 0 else 0.0
         graph_score = round(snapshot_objects.get(obj_name, 0.0), 4)
         if usage_available:
-            combined = round(0.6 * usage_score + 0.4 * graph_score, 4)
+            combined = round(CRITICALITY_USAGE_WEIGHT * usage_score + CRITICALITY_GRAPH_WEIGHT * graph_score, 4)
         else:
             combined = graph_score
 
-        if combined >= 0.6:
+        if combined >= CRITICALITY_HIGH_THRESHOLD:
             level = "HIGH"
-        elif combined >= 0.3:
+        elif combined >= CRITICALITY_MED_THRESHOLD:
             level = "MEDIUM"
         else:
             level = "LOW"

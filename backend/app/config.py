@@ -62,3 +62,19 @@ SCION_TAISA_MODE: str = os.getenv("SCION_TAISA_MODE", "real")
 # available than the latest snapshot. Set to "" to disable the watcher.
 # Default matches the mount point configured on ps-ubuntu-0043.
 SCION_SHARE_MOUNT_PATH: str = os.getenv("SCION_SHARE_MOUNT_PATH", "/mnt/vm1_share")
+
+
+# Criticality scoring -----------------------------------------------------------
+
+# Weight of PDCR usage score in the combined criticality formula.
+# combined = USAGE_WEIGHT * usage_score + GRAPH_WEIGHT * graph_score
+# Must sum to 1.0. Override via env vars for customer-specific tuning.
+CRITICALITY_USAGE_WEIGHT: float = float(os.getenv("CRITICALITY_USAGE_WEIGHT", "0.6"))
+CRITICALITY_GRAPH_WEIGHT: float = float(os.getenv("CRITICALITY_GRAPH_WEIGHT", "0.4"))
+
+# Band thresholds for HIGH / MEDIUM / LOW.
+# combined >= HIGH_THRESHOLD  → "HIGH"
+# combined >= MED_THRESHOLD   → "MEDIUM"
+# combined <  MED_THRESHOLD   → "LOW"
+CRITICALITY_HIGH_THRESHOLD: float = float(os.getenv("CRITICALITY_HIGH_THRESHOLD", "0.6"))
+CRITICALITY_MED_THRESHOLD:  float = float(os.getenv("CRITICALITY_MED_THRESHOLD",  "0.3"))
