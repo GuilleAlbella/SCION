@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-06-26 · Current version: **v1.21.43 (BETA)**.
+Last updated: 2026-08-03 · Current version: **v1.21.75 (BETA) — Phase 1 final**.
 
 ---
 
@@ -84,6 +84,46 @@ Decision gate resolved: SQLite performing within targets on current dataset; Pos
 
 ### 1.4 Internal handover doc for Helton
 - [x] `docs/handover.md` — written and current.
+
+---
+
+## Phase 1 post-v1.0 polish  ✅ DONE (v1.21.44–75)
+
+All items below were shipped after DataDNA Lite v1.0 was declared complete (Reunión 21),
+in response to Rahul's round-2 and round-3 observations and internal testing.
+
+### Performance
+- [x] Instant Visual Diff + infinite scroll in Changes and Impact (v1.21.45–46)
+- [x] Impact engine: eliminate full 337k-node scans on single-change endpoint (v1.21.68)
+- [x] Intelligence page: domain card cap + memoized derived data (v1.21.70)
+- [x] What-if depth capped to prevent runaway BFS (v1.21.71)
+
+### Import & archive
+- [x] Archive import: scan `/mnt/vm1_share/archive`, full progress panel, flat layout detection (v1.21.47–48)
+- [x] Share scan: skip `.manifest.csv` and non-data files (v1.21.48)
+
+### Bug fixes — Rahul round-2
+- [x] Graph node text overflow (v1.21.55)
+- [x] Snapshot comparison: per-category Y-axis scale (v1.21.52 / v1.21.55)
+- [x] TAISA server-side search instead of page-filtered (v1.21.55)
+- [x] Changes page: correct label for views ("View added/removed") (v1.21.55)
+- [x] Graph: "Show database nodes" tooltip added (v1.21.56)
+- [x] Usage and Intelligence filters by object/database (v1.21.56)
+- [x] UNKNOWN nodes classified as TABLE; Depends On hidden when no edges (v1.21.58)
+- [x] TEDW.EVENTS\_V impact was 0 — UNKNOWN type mismatch resolved in graph\_diff\_linker (v1.21.57)
+
+### Bug fixes — Rahul round-3
+- [x] Case normalization: parser ingestor + graph builder + frontend lineage resolver (v1.21.74)
+- [x] Blast radius usage\_map keys normalized to UPPERCASE (v1.21.74)
+- [x] Change-ID search: numeric input matches `change_id` directly (v1.21.74)
+- [x] TAISA: uses `activeChangeId` from SelectionContext (v1.21.75)
+- [x] TAISA: "New session" button clears chat history (v1.21.75)
+- [x] Criticality thresholds moved to env-var overridable config (v1.21.75)
+
+### Metrics cleanup
+- [x] Columns excluded from KPI cards, donut chart, trend charts, total\_objects (v1.21.65–67)
+- [x] Impact count per domain corrected; graph score normalization fixed (v1.21.72)
+- [x] Usage page: dynamic section numbering (v1.21.73)
 
 ---
 
@@ -177,14 +217,14 @@ Ecosystem Decoded is an existing but dormant Teradata service that analyzes CPU 
 
 ### 2.7 Frontend rendering
 - [x] Focus mode for /graph (v1.11.00).
-- [ ] Server-side pagination on /changes if event count crosses 10k.
+- [x] Server-side pagination on /changes (v1.21.50).
+- [x] Infinite scroll in Impact sections (v1.21.45).
 - [ ] Lazy graph fetch — only request the focused subgraph from backend
       instead of the whole snapshot.
 
 ### 2.8 Production runtime
-- [ ] `docker-compose.yml` — backend + frontend (production build) +
-      optional Postgres.
-- [ ] Linux systemd units (no PowerShell in production).
+- [x] `docker-compose.yml` — backend + frontend + nginx, deployed on ps-ubuntu-0043 via GHCR images.
+- [x] Linux deploy — Docker Compose replaces systemd; no PowerShell dependency in production.
 - [ ] Health check endpoints (`/healthz`, `/readyz`).
 - [ ] Structured JSON logging (today: stdout text).
 
