@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const LAB_BACKEND = process.env.DEV_BACKEND_URL ?? "http://localhost:8080";
+const LAB_BACKEND = process.env.DEV_BACKEND_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["172.20.165.226"],
