@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PageShell from "@/components/layout/PageShell";
@@ -60,6 +60,8 @@ function UsagePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [objectFilter, setObjectFilter] = useState<string>("");
+  const [searchItems, setSearchItems] = useState<CriticalityResponse["items"] | null>(null);
+  const filterDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Deep-link support: e.g. /usage?object=dw.sales_fact from a Changes row
   // focuses that object in a dedicated drill-down card (and highlights it
@@ -205,14 +207,26 @@ function UsagePage() {
   // Pretty-print the criticality level with its colour.
   const critColor = (lvl: string) => CRIT_COLORS[lvl] ?? "#7C8185";
 
-  const filteredCritItems = useMemo(() => {
-    if (!criticality) return [];
-    const q = objectFilter.trim().toLowerCase();
-    if (!q) return criticality.items;
-    return criticality.items.filter((item) =>
-      item.object_name.toLowerCase().includes(q)
-    );
-  }, [criticality, objectFilter]);
+  // Server-side search: when the filter changes, re-fetch criticality with
+  // object_q so we search across ALL objects, not just the top 100 loaded.
+  useEffect(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    const q = objectFilter.trim();
+    if (!q || !selectedSnap) {
+      setSearchItems(null);
+      return;
+    }
+    filterDebounceRef.current = setTimeout(() => {
+      getCriticality(Number(selectedSnap), q)
+        .then((d) => setSearchItems(d.items))
+        .catch(() => setSearchItems(null));
+    }, 300);
+    return () => {
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    };
+  }, [objectFilter, selectedSnap]);
+
+  const filteredCritItems = searchItems ?? criticality?.items ?? [];
 
   // Dynamic section numbers: Usage footprint is optional (only when telemetry
   // is available). If hidden, Criticality becomes "1." and Drill-down "2."

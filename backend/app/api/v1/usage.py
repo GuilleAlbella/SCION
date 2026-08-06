@@ -209,6 +209,7 @@ def get_criticality(
     snapshot_id: int,
     force: bool = False,
     limit: int = 100,
+    object_q: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Compute/retrieve criticality scores for a snapshot.
 
@@ -269,12 +270,17 @@ def get_criticality(
 
                 # Top-N items via indexed scan; never materialises more
                 # than ``capped_limit`` rows in Python.
-                top_rows = session.execute(
+                top_stmt = (
                     select(ObjectCriticality)
                     .where(ObjectCriticality.snapshot_id == snapshot_id)
                     .order_by(ObjectCriticality.combined_score.desc())
                     .limit(capped_limit)
-                ).scalars().all()
+                )
+                if object_q:
+                    top_stmt = top_stmt.where(
+                        ObjectCriticality.object_name.ilike(f"%{object_q}%")
+                    )
+                top_rows = session.execute(top_stmt).scalars().all()
 
             # Use SnapshotMetrics total_objects (schema+table+view, no columns)
             # as the canonical object count. ObjectCriticality can have duplicate

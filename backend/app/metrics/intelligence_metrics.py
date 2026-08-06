@@ -16,7 +16,7 @@ from app.db.engine import engine
 from app.db.models.snapshot import Snapshot
 from app.db.models.schema_snapshot import SchemaSnapshot
 from app.diff.diff_models import ChangeEvent
-from app.graph.impact_models import ImpactEvent
+from app.graph.impact_models import ImpactEvent, ChangeImpactSummary
 from app.usage.usage_models import ObjectCriticality
 from app.snapshot.snapshot_metrics import compute_snapshot_metrics, compute_volatility_index
 
@@ -144,14 +144,15 @@ def domain_risk_index(snapshot_id: int) -> List[DomainRisk]:
             r[0]: (r[1], r[2]) for r in change_rows
         }
 
-        # Impact events for this snapshot — aggregate per change_id.
-        impact_count_by_change: Dict[int, int] = {}
-        for imp in session.query(ImpactEvent).filter(
-            ImpactEvent.snapshot_id == snapshot_id
-        ).all():
-            impact_count_by_change[imp.change_id] = (
-                impact_count_by_change.get(imp.change_id, 0) + 1
-            )
+        # Pre-computed impact totals per change_id (post-ingest, always
+        # populated). ImpactEvent only exists when /impact/compute was called
+        # explicitly; ChangeImpactSummary is always available after ingest.
+        impact_count_by_change: Dict[int, int] = {
+            row.change_id: row.direct_count + row.indirect_count
+            for row in session.query(ChangeImpactSummary).filter(
+                ChangeImpactSummary.snapshot_id == snapshot_id
+            ).all()
+        }
 
         # Reverse mapping: schema_name -> list of change_ids, so we can
         # sum impact counts per domain.
@@ -309,11 +310,11 @@ def governance_scorecard(snapshot_id: int) -> GovernanceScorecard:
         total_changes = ce_row.total or 0
         breaking_changes = int(ce_row.breaking or 0)
 
-        total_impacts = session.scalar(
-            select(func.count()).select_from(ImpactEvent).where(
-                ImpactEvent.snapshot_id == snapshot_id
-            )
-        ) or 0
+        total_impacts = int(session.scalar(
+            select(
+                func.sum(ChangeImpactSummary.direct_count + ChangeImpactSummary.indirect_count)
+            ).where(ChangeImpactSummary.snapshot_id == snapshot_id)
+        ) or 0)
 
         high_crit = session.scalar(
             select(func.count()).select_from(ObjectCriticality).where(

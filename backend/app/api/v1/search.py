@@ -57,7 +57,7 @@ def global_search(q: str = Query(..., min_length=1, description="Search query"))
         ).scalars().all()
 
         for n in nodes:
-            key = f"{n.schema_name}.{n.object_name}:{n.snapshot_id}"
+            key = f"{(n.schema_name or '').lower()}.{n.object_name.lower()}:{n.snapshot_id}"
             if key not in seen:
                 seen.add(key)
                 results.append({

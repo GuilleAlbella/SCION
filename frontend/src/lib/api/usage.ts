@@ -22,10 +22,12 @@ export async function getUsageSummary(
 }
 
 export async function getCriticality(
-  snapshotId: number
+  snapshotId: number,
+  objectQ?: string
 ): Promise<CriticalityResponse> {
+  const qs = objectQ ? `?object_q=${encodeURIComponent(objectQ)}` : "";
   const { data } = await client.get<CriticalityResponse>(
-    `/usage/criticality/${snapshotId}`
+    `/usage/criticality/${snapshotId}${qs}`
   );
   return data;
 }
