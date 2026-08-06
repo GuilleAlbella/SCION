@@ -884,10 +884,18 @@ function LineagePage() {
     // The side lists keep their "immediate producers / consumers"
     // meaning: only depth-1 neighbours, no matter how deep the graph
     // now goes.
-    const directNeighbours = (dir: "upstream" | "downstream") =>
-      [...direction.entries()]
+    const directNeighbours = (dir: "upstream" | "downstream") => {
+      const seen = new Set<string>();
+      return [...direction.entries()]
         .filter(([id, d]) => d === dir && depthOf.get(id) === 1)
-        .map(([id]) => nodeMap.get(id)?.object_name ?? id);
+        .map(([id]) => nodeMap.get(id)?.object_name ?? id)
+        .filter((name) => {
+          const k = name.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+    };
 
     return {
       nodes: laidOut,

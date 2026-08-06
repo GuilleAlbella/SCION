@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { globalSearch } from "@/lib/api/search";
 import type { SearchResult } from "@/lib/api/types";
-import { Search, X, Database, Table2, Columns3 } from "lucide-react";
+import { Search, X, Database, Table2, Columns3, Loader2 } from "lucide-react";
 
 const TYPE_ICONS: Record<string, typeof Database> = {
   SCHEMA: Database,
@@ -65,10 +65,12 @@ export default function GlobalSearch() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
+    // Show spinner immediately — before the debounce fires.
+    setLoading(true);
     debounceRef.current = setTimeout(async () => {
-      setLoading(true);
       try {
         const data = await globalSearch(value);
         setResults(data.results);
@@ -131,7 +133,10 @@ export default function GlobalSearch() {
             {/* Results */}
             <div className="max-h-80 overflow-y-auto">
               {loading && (
-                <div className="px-4 py-6 text-center text-sm text-td-gray-dark">Searching...</div>
+                <div className="px-4 py-6 flex items-center justify-center gap-2 text-sm text-td-gray-dark">
+                  <Loader2 size={16} className="animate-spin" />
+                  Searching…
+                </div>
               )}
               {!loading && results.length === 0 && query.length >= 2 && (
                 <div className="px-4 py-6 text-center text-sm text-td-gray-dark">No results found</div>
