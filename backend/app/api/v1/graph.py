@@ -346,6 +346,18 @@ def _resolve_root(session: Session, snapshot_id: int, root: str) -> Optional[Gra
     return session.execute(candidates_q).scalars().first()
 
 
+def _infer_lineage_type(row) -> str:
+    """Infer TABLE vs VIEW for lineage-only UNKNOWN nodes.
+
+    Teradata schemas whose name ends with ``_VW`` or ``_VIEW`` contain views
+    by convention.  Everything else is assumed to be a table.
+    """
+    schema = (row.schema_name or "").upper()
+    if schema.endswith(("_VW", "_VIEW")):
+        return "VIEW"
+    return "TABLE"
+
+
 def _serialize_graph(
     node_rows,
     edge_rows,
@@ -367,10 +379,10 @@ def _serialize_graph(
             # Lineage-imported nodes arrive with object_type='UNKNOWN' and a
             # plain 'SCHEMA.NAME' node_uid (no type prefix, no snapshot suffix).
             # Parser-imported UNKNOWN nodes use 'UNKNOWN:SCHEMA.NAME:snap_id'.
-            # Default lineage UNKNOWN nodes to TABLE since lineage tracks
-            # data-flow between table-like objects; keep parser UNKNOWN as-is.
+            # Infer TABLE vs VIEW from Teradata schema naming convention
+            # (_VW / _VIEW suffix) rather than defaulting everything to TABLE.
             "object_type": (
-                "TABLE"
+                _infer_lineage_type(row)
                 if row.object_type == "UNKNOWN"
                 and ":" not in (row.node_uid or "")
                 else row.object_type

@@ -23,7 +23,7 @@ Two design goals are in tension here and both have to be satisfied:
 
 from typing import Dict, List, Set, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
@@ -170,12 +170,28 @@ def _build_graph_for_snapshot_in_session(
 
     for schema_name, table in table_rows:
         object_type = table.object_type
-        object_name = f"{schema_name}.{table.table_name}"
+        # Normalise to uppercase so this key is consistent with the
+        # existing_nodes_by_key index built above (which also uses .upper()).
+        object_name = f"{schema_name}.{table.table_name}".upper()
         key = (object_type, object_name, snapshot_id)
         all_table_names[table.table_name.lower()] = (schema_name, table.table_name)
 
         if key in existing_nodes_by_key:
             table_uid_by_qname[(schema_name, table.table_name)] = existing_node_uids[existing_nodes_by_key[key]]
+            continue
+
+        # Parser-import path may have already created this node with
+        # object_type='UNKNOWN'.  Detect that and promote the type in-place
+        # instead of inserting a duplicate with the correct type.
+        unknown_key = ("UNKNOWN", object_name, snapshot_id)
+        if unknown_key in existing_nodes_by_key:
+            existing_id = existing_nodes_by_key[unknown_key]
+            session.execute(
+                update(GraphNode)
+                .where(GraphNode.node_id == existing_id)
+                .values(object_type=object_type)
+            )
+            table_uid_by_qname[(schema_name, table.table_name)] = existing_node_uids[existing_id]
             continue
 
         uid = f"{object_type}:{object_name}:{snapshot_id}"

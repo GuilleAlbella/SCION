@@ -1,10 +1,17 @@
-# SCION Changelog
+﻿# SCION Changelog
 
 All notable changes to this project, newest first.
 Format follows the existing convention used in the repository.
 
 This file replaces the in-README changelog as of v1.14.04. The
 `tools/bump_version.ps1` script writes new entries here.
+
+---
+
+### v1.21.77 (2026-08-26) â€” fix(graph): VIEW object type correctly inferred from schema naming; prevent duplicate nodes on mixed-case re-ingest
+
+- **Graph — object type fix**: VIEW nodes whose schema name ends in `_VW` / `_VIEW` (Teradata naming convention) were incorrectly shown as TABLE. Fixed in `_serialize_graph` via `_infer_lineage_type()`: reads schema suffix instead of defaulting all UNKNOWN no-colon nodes to TABLE. No re-ingest required — takes effect immediately on next graph load.
+- **Graph — duplicate node prevention**: dict-import path (`graph_builder.py`) now normalises `object_name` to uppercase to match the parser-import path, and detects when an existing UNKNOWN node (created by the parser) can be promoted to the correct type (VIEW/TABLE) instead of inserting a duplicate. Fixes missing lineage caused by two nodes representing the same object with different case.
 
 ---
 
