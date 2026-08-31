@@ -22,7 +22,6 @@ import {
   Clock,
   Bell,
   FlaskConical,
-  Globe2,
   Building2,
   LayoutGrid,
 } from "lucide-react";
@@ -43,8 +42,6 @@ const NAV_ITEMS = [
   { href: "/metrics", label: "Metrics", icon: BarChart3 },
   { href: "/usage", label: "Usage", icon: Flame },
   { href: "/intelligence", label: "Intelligence", icon: ShieldCheck },
-  // §2.15 Access Layer (Phase 2): business-friendly portfolio view
-  { href: "/landscape", label: "Landscape", icon: Globe2 },
   // §2.10 Reference Data (Phase 2): org hierarchy + business application metadata
   { href: "/reference", label: "Reference", icon: Building2 },
   { href: "/timeline", label: "Timeline", icon: Clock },

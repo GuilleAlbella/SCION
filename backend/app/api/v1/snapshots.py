@@ -66,7 +66,7 @@ def create_snapshot() -> dict[str, str]:
 
 
 @router.get("", summary="List snapshots")
-def list_snapshots() -> dict[str, list[dict[str, str]]]:
+def list_snapshots() -> dict[str, list[dict[str, Any]]]:
     """Return a read-only list of available snapshots.
 
     Behaviour (MVP v8.3.2):
