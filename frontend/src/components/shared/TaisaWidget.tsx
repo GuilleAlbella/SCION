@@ -95,7 +95,7 @@ export default function TaisaWidget() {
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-td-navy text-white px-4 py-2.5 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105"
       >
         <Brain size={16} className="text-td-orange" />
-        <span className="text-xs font-medium">TAISA</span>
+        <span className="text-xs font-medium">AI Assistant</span>
         {chatHistory.length > 0 && (
           <span className="bg-td-orange text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
             {chatHistory.filter(m => m.role === "taisa").length}
@@ -113,7 +113,7 @@ export default function TaisaWidget() {
           <Brain size={16} className="text-td-orange" />
         </div>
         <div className="flex-1">
-          <div className="text-sm font-semibold text-white">TAISA Assistant</div>
+          <div className="text-sm font-semibold text-white">AI Assistant</div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             <span className="text-[10px] text-green-400">Online — Ask anything about SCION</span>
@@ -141,7 +141,7 @@ export default function TaisaWidget() {
             <div className="w-12 h-12 rounded-full bg-td-navy/10 dark:bg-white/5 flex items-center justify-center mx-auto mb-3">
               <Sparkles size={20} className="text-td-orange" />
             </div>
-            <p className="text-xs text-td-gray-dark mb-1">TAISA AI Assistant</p>
+            <p className="text-xs text-td-gray-dark mb-1">AI Assistant</p>
             <p className="text-[11px] text-td-gray-dark/70 mb-4 px-4">
               I have full access to SCION data. Ask me about changes, impact, usage, risk, or anything else.
             </p>
@@ -209,7 +209,7 @@ export default function TaisaWidget() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask TAISA..."
+            placeholder="Ask anything about your data warehouse..."
             className="flex-1 border border-gray-200 dark:border-slate-600 rounded-full px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-td-navy/20 bg-gray-50 dark:bg-slate-800 dark:text-white"
           />
           <button

@@ -1,4 +1,4 @@
-# SCION — Internal Engineering Roadmap
+﻿# SCION — Internal Engineering Roadmap
 
 **Audience:** SCION dev team (Guillermo + Claude Code, anyone joining).
 **Not:** product strategy (`docs/Hoja de Ruta del Producto.txt`), demo script
@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-07-21 · Current version: **v2.09.00 (BETA)**.
+Last updated: 2026-08-31 · Current version: **v2.09.12 (BETA)** (`main`) / **v1.21.78** (`hotfix/rahul-round4` — mergeado en main).
 
 ---
 
@@ -721,6 +721,13 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-20 | §2.8 Production runtime completo en v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` paso 7 escribe unit al instalar. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrado a lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
 | 2026-07-30 | Progressive Disclosure UI añadida como §2.15.d — pendiente | Reunión 29 confirmó que el valor real es el análisis que ningún DBA puede hacer hoy (aggregado por dept/app). Kindy: "We never sell lineage — customers are always disappointed because it didn't solve anything." La UI debe hablar en lenguaje de negocio por defecto, con detalle técnico accesible via drill-down natural (sin switch de modo). Empieza como piloto en Landscape. | Reunión 29 (2026-07-30) |
 | 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
+| 2026-07-21 | Branch `hotfix/rahul-round4` creada desde v1.21.73 para fixes urgentes en producción | Rahul (round 3-4) reportó: case normalization en búsqueda, change-ID search, TAISA active change-ID, criticality thresholds, VIEW object type, duplicate node prevention. Fixes se hacen en rama paralela a la lab (v1.21.74→v1.21.78) para no mezclar con el lab de Phase 2. Pendiente merge. | hotfix/rahul-round4 |
+| 2026-07-21 | Case normalization global + change-ID search (v1.21.74) | Búsqueda case-insensitive en todos los campos; change-ID ahora busca por prefijo además de exact match | v1.21.74 |
+| 2026-07-21 | TAISA active change-ID + clear session + criticality thresholds configurables (v1.21.75) | TAISA scope automático al change_id activo en pantalla; configuración de umbrales de criticality vía env vars | v1.21.75 |
+| 2026-07-21 | 5 fixes Rahul round-4: UI/API polish (v1.21.76) | Fixes de UI/API reportados por Rahul en round 4 de testing | v1.21.76 |
+| 2026-07-21 | VIEW object type + duplicate node prevention en graph (v1.21.77) | Parser emite VIEW nodes; graph builder deduplicaba nodos con el mismo key | v1.21.77 |
+| 2026-07-21 | Parser adapters Phase 2 + authoritative object_type desde TablesV (v1.21.78) | `object_type` resuelto desde `TablesV` en vez de inferencia; base parsers de Informatica y OpenLineage añadidos como stubs | v1.21.78 |
+| 2026-08-31 | Reuniones 32-33: scope Phase 2 ampliado con GROUP 4-5 (Affinity, Duplicates, col-impact, what-if, rollup) | Rahul Kulkarni email 2026-08-07 agrega affinity analysis (ED-09) y duplicate detection (ED-05). Reunión 31 (2026-08-14) agrega items 16-20 (col-level impact, what-if, rollup, usage hierarchy, proactive alerts) como "Y?" pending scope confirm | Reuniones 31-33 / Excel `SCION_Phase2_Estimate 2.xlsx` |
 
 ---
 

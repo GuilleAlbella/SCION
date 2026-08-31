@@ -9,7 +9,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { getTimeline } from "@/lib/api/timeline";
 import type { TimelineResponse, TimelineEvent } from "@/lib/api/types";
-import { Clock, ChevronRight, ShieldAlert, Loader2 } from "lucide-react";
+import { Clock, ChevronRight, ShieldAlert, Loader2, Info } from "lucide-react";
 import { changeTypeLabel } from "@/lib/terminology";
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -107,11 +107,14 @@ function TimelinePage() {
 
   return (
     <PageShell title="Timeline / History" subtitle="Object evolution across snapshots">
-      {/* Object selector — server-backed autocomplete. Replaces the legacy
-          two-input search-then-pick flow that loaded every distinct
-          identifier into a native <select>. The component itself debounces
-          and pages results, so picking an object on a 240k-extract is
-          instant. */}
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Search for any table or view to see its complete change history across all snapshots. Each entry shows <strong>what changed</strong> (column added, type modified, etc.), <strong>when</strong> it was detected, and whether the change was <strong>breaking</strong> — meaning it could affect objects that depend on this one.
+        </p>
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-3 mb-3">
           <Clock size={18} className="text-td-navy" />
@@ -200,14 +203,14 @@ function TimelineCard({ event, isLast }: { event: TimelineEvent; isLast: boolean
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-td-gray-dark font-mono">
-                Snapshot #{event.snapshot_from} → #{event.snapshot_to}
-              </span>
-              {event.snapshot_time && (
-                <span className="text-xs text-td-gray-dark">
-                  {new Date(event.snapshot_time).toLocaleDateString()}
+              {event.snapshot_time ? (
+                <span className="text-xs font-medium text-td-navy">
+                  {new Date(event.snapshot_time).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                 </span>
-              )}
+              ) : null}
+              <span className="text-[10px] text-td-gray-dark">
+                snapshot #{event.snapshot_to}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <span
@@ -223,9 +226,12 @@ function TimelineCard({ event, isLast }: { event: TimelineEvent; isLast: boolean
                 {event.severity}
               </span>
               {event.is_breaking && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+                  title="Breaking change — this modification may break objects that depend on this one"
+                >
                   <ShieldAlert size={10} />
-                  BREAKING
+                  Breaking
                 </span>
               )}
             </div>
@@ -237,19 +243,25 @@ function TimelineCard({ event, isLast }: { event: TimelineEvent; isLast: boolean
         </div>
 
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <span className="font-semibold text-red-600 block mb-1">Before</span>
-              <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-32 border border-gray-200">
-                {event.before_state ? JSON.stringify(event.before_state, null, 2) : "null"}
-              </pre>
-            </div>
-            <div>
-              <span className="font-semibold text-green-600 block mb-1">After</span>
-              <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-32 border border-gray-200">
-                {event.after_state ? JSON.stringify(event.after_state, null, 2) : "null"}
-              </pre>
-            </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 text-xs">
+            {(event.before_state || event.after_state) ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="font-semibold text-red-600 block mb-1">Before the change</span>
+                  <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-32 border border-gray-200 text-[10px]">
+                    {event.before_state ? JSON.stringify(event.before_state, null, 2) : "—"}
+                  </pre>
+                </div>
+                <div>
+                  <span className="font-semibold text-green-600 block mb-1">After the change</span>
+                  <pre className="bg-gray-50 rounded p-2 overflow-auto max-h-32 border border-gray-200 text-[10px]">
+                    {event.after_state ? JSON.stringify(event.after_state, null, 2) : "—"}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <p className="text-td-gray-dark">No detailed state recorded for this change.</p>
+            )}
           </div>
         )}
       </div>

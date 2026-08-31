@@ -254,7 +254,6 @@ def get_focused_graph(
 
     # ──── Step 4: serialize, dedupe edges, filter dangling ────
     nodes, edges = _serialize_graph(node_rows, edges_collected, restrict_to_ids=visited_ids, type_lookup=type_lookup)
->>>>>>> 2eddebb (fix(graph): authoritative object_type from TablesV + Phase 2 parser adapters — v1.21.78)
 
     return {
         "snapshot_id": snapshot_id,

@@ -171,6 +171,14 @@ export default function IntelligencePage() {
 
   return (
     <PageShell title="Governance Report" subtitle="How stable is your data warehouse structure?">
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          This report gives a structural health overview of your warehouse for a given snapshot. <strong>Volatility</strong> measures how often the structure changes — high volatility means frequent modifications across tables and columns. <strong>Co-change patterns</strong> shows pairs of objects that tend to be modified together, which can reveal hidden dependencies. Select a snapshot below to generate the report.
+        </p>
+      </div>
+
       {/* Selector */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex items-center gap-3">
@@ -317,7 +325,7 @@ export default function IntelligencePage() {
                 <VolIcon size={20} style={{ color: vol.color }} />
               </div>
               <div className="flex-1">
-                <div className="text-xs text-td-gray-dark uppercase tracking-wider">Schema Churn Rate</div>
+                <div className="text-xs text-td-gray-dark uppercase tracking-wider">Change Frequency</div>
                 <div className="text-sm font-medium" style={{ color: vol.color }}>{vol.text}</div>
               </div>
               <div className="text-right">
@@ -515,7 +523,7 @@ export default function IntelligencePage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[10px] text-td-gray-dark uppercase tracking-wider">
-                              Volatility trend ({vt.window}-snap rolling)
+                              Change rate over last {vt.window} snapshots
                             </div>
                             <div className="flex items-center gap-1 text-[11px]">
                               <span className="font-mono text-td-navy">{(vt.current_volatility * 100).toFixed(0)}%</span>
@@ -562,19 +570,14 @@ export default function IntelligencePage() {
               icon={Link2}
               intro={
                 <>
-                  Market-basket analysis over the full change history (Apriori pairwise).
-                  If table A and table B have changed in the same release N times, we score the
-                  coupling with <strong>confidence</strong> (P(B changes | A changes)) and{" "}
-                  <strong>lift</strong> (how much more often than random chance). Lift ≥ 2 means
-                  real coupling; ≥ 3 is strong. Useful for catching shared-team ownership,
-                  DEV/UAT/PROD triplets, or business-domain conventions that aren&apos;t SQL-lineage.
+                  Objects that tend to be modified together across releases — even if they have no direct SQL dependency. <strong>When changed together %</strong> is how often B changes in the same release as A. <strong>Coupling strength</strong> measures how much more often they co-change than you would expect by random chance — higher means a stronger hidden link. Useful for detecting shared team ownership or objects that represent a business concept spanning multiple tables.
                 </>
               }
             >
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] text-td-gray-dark">
-                  Thresholds: lift ≥ {coChange.min_lift}, min pair support {coChange.min_pair_support}
+                  Minimum coupling strength: {coChange.min_lift}× · at least {coChange.min_pair_support} co-occurrences required
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
                   {coChange.total} rules
@@ -587,9 +590,9 @@ export default function IntelligencePage() {
                     <tr className="text-left text-[10px] uppercase tracking-wider text-td-gray-dark border-b">
                       <th className="py-2 pr-2">When this changes…</th>
                       <th className="py-2 pr-2">…this also changes</th>
-                      <th className="py-2 px-2 text-right" title="P(B | A) = co_occurrences / occurrences_a">Confidence</th>
-                      <th className="py-2 px-2 text-right" title="confidence / P(B) — > 1 means coupled beyond chance">Lift</th>
-                      <th className="py-2 pl-2 text-right">Co-occurred</th>
+                      <th className="py-2 px-2 text-right" title="How often B changes when A changes (%)">When together %</th>
+                      <th className="py-2 px-2 text-right" title="How much more often than random chance — higher = stronger hidden link">Coupling strength</th>
+                      <th className="py-2 pl-2 text-right">Times together</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -606,7 +609,7 @@ export default function IntelligencePage() {
                             {(p.confidence * 100).toFixed(0)}%
                           </td>
                           <td className="py-2 px-2 text-right font-mono font-bold" style={{ color: liftColor }}>
-                            ×{p.lift.toFixed(2)}
+                            {p.lift.toFixed(1)}×
                           </td>
                           <td className="py-2 pl-2 text-right text-td-gray-dark">
                             {p.co_occurrences} / {p.total_deltas}
@@ -620,7 +623,7 @@ export default function IntelligencePage() {
 
               {coChange.pairs.length > 15 && (
                 <div className="text-[10px] text-td-gray-dark mt-2">
-                  Showing top 15 of {coChange.pairs.length} rules by lift.
+                  Showing top 15 of {coChange.pairs.length} pairs by coupling strength.
                 </div>
               )}
             </div>

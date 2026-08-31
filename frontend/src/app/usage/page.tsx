@@ -14,7 +14,7 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { getUsageSummary, getCriticality, getObjectUsageDetail } from "@/lib/api/usage";
 import type { ObjectUsageDetail } from "@/lib/api/usage";
 import type { CriticalityResponse, UsageSummaryItem } from "@/lib/api/types";
-import { Shield, Flame, Download, ListTree, GitBranch, X } from "lucide-react";
+import { Shield, Flame, Download, ListTree, GitBranch, X, Info } from "lucide-react";
 import RiskHeatmap from "@/components/shared/RiskHeatmap";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -239,6 +239,14 @@ function UsagePage() {
 
   return (
     <PageShell title="Usage & Criticality" subtitle="Object usage frequency and business criticality">
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          This page answers: <strong>which objects are actually being used?</strong> Usage data comes from query logs — the more queries hit an object, the higher its usage score. <strong>Criticality</strong> combines usage frequency with graph position (how many other objects depend on it). High-criticality objects require extra care before any structural change.
+        </p>
+      </div>
+
       {/* Per-object drill-down card. Shown when an object is focused via
           the ?object= deep-link (from a Changes row) or by clicking a row
           in the tables below. Resolves ANY object, even one outside the
@@ -593,7 +601,7 @@ function UsagePage() {
       )}
 
       {!usage && !criticality && !loading && (
-        <EmptyState message="No usage data ingested yet. Use POST /api/v1/usage/ingest to load data." />
+        <EmptyState message="No query usage data available yet. Ask your SCION administrator to run the usage ingestion to populate this view." />
       )}
     </PageShell>
   );

@@ -11,7 +11,7 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { runBatchImpact } from "@/lib/api/impact";
 import type { BatchChangeImpact, BatchImpactResponse } from "@/lib/api/types";
 import { IMPACT_COLORS } from "@/lib/constants";
-import { Play, Zap, Shield, Layers, FileText, Download, GitBranch, Database, ListTree, Boxes, Loader2, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { Play, Zap, Shield, Layers, FileText, Download, GitBranch, Database, ListTree, Boxes, Loader2, ChevronDown, ChevronRight, Search, Info } from "lucide-react";
 import { useToast } from "@/components/shared/ToastProvider";
 import Confetti from "@/components/shared/Confetti";
 import InfoTooltip from "@/components/shared/InfoTooltip";
@@ -363,6 +363,14 @@ export default function ImpactPage() {
       subtitle="Full-diff impact assessment — how far each change ripples"
     >
       <Confetti active={showConfetti} />
+
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Select two snapshots to see the full impact of all structural changes between them. <strong>Direct impact</strong> means objects immediately affected by a change. <strong>Indirect impact</strong> means objects that depend on those, and so on down the lineage chain. Use this before a release to understand the blast radius of your changes.
+        </p>
+      </div>
 
       {/* ──── Selector ──── Either shows the active diff pair (coming from
           Changes page via context) or a manual snapshot picker. */}

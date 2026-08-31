@@ -36,8 +36,8 @@ const ENGINE_META = [
   { key: "database", label: "Metadata API", icon: Database, color: "#2563EB" },
   { key: "snapshot", label: "Snapshot Engine", icon: Camera, color: "#16A34A" },
   { key: "diff", label: "Diff Engine", icon: GitCompareArrows, color: "#F37440" },
-  { key: "graph", label: "Impact / Graph", icon: Network, color: "#0D7377" },
-  { key: "taisa", label: "TAISA Reasoning", icon: Brain, color: "#7C3AED" },
+  { key: "graph", label: "Impact & Graph Engine", icon: Network, color: "#0D7377" },
+  { key: "taisa", label: "AI Reasoning Engine", icon: Brain, color: "#7C3AED" },
 ] as const;
 
 const QUICK_ACTIONS = [
@@ -135,7 +135,7 @@ export default function DashboardPage() {
             <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
               <Brain size={16} className="text-purple-600" />
             </div>
-            <span className="text-xs text-td-gray-dark uppercase tracking-wider">TAISA</span>
+            <span className="text-xs text-td-gray-dark uppercase tracking-wider">AI Engine</span>
           </div>
           <div className="text-xl font-bold text-td-navy"><StatusBadge status={health.taisa} /></div>
         </div>
@@ -216,7 +216,7 @@ export default function DashboardPage() {
                   </span>
                   <span className="font-mono text-td-gray-dark truncate max-w-[150px]">{c.object_name.split(".").pop()}</span>
                   <span className="text-[10px] text-td-gray-dark/50 shrink-0">
-                    #{c.snapshot_from}→#{c.snapshot_to}
+                    {new Date(c.created_at).toLocaleDateString()}
                   </span>
                 </div>
               ))}
@@ -276,7 +276,7 @@ export default function DashboardPage() {
               {
                 key: "snapshot" as const,
                 label: "Snapshot",
-                desc: "EDW state capture & hashing",
+                desc: "Point-in-time structure capture",
                 icon: Camera,
                 color: "#16A34A",
                 step: 2,
@@ -284,7 +284,7 @@ export default function DashboardPage() {
               {
                 key: "diff" as const,
                 label: "Diff",
-                desc: "10 change types, severity scoring",
+                desc: "Detect structural changes between snapshots",
                 icon: GitCompareArrows,
                 color: "#F37440",
                 step: 3,
@@ -299,7 +299,7 @@ export default function DashboardPage() {
               },
               {
                 key: "taisa" as const,
-                label: "TAISA",
+                label: "AI Engine",
                 desc: "AI risk classification",
                 icon: Brain,
                 color: "#A855F7",

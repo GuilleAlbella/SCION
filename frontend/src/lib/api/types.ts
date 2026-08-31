@@ -53,6 +53,8 @@ export interface ChangeItem {
   severity: string | null;
   is_breaking: boolean | null;
   created_at: string;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
 }
 
 export interface DiffDetailItem {

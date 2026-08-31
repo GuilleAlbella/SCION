@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { mutate } from "swr";
 import PageShell from "@/components/layout/PageShell";
 import KpiCard from "@/components/shared/KpiCard";
@@ -236,7 +237,7 @@ function ExpandableRow({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Code size={14} className="text-td-navy" />
-                    <span className="font-semibold text-td-navy text-xs">Suggested DDL</span>
+                    <span className="font-semibold text-td-navy text-xs">SQL Migration Script</span>
                   </div>
                   <CopyButton text={ddlItem.ddl_combined} />
                 </div>
@@ -247,7 +248,7 @@ function ExpandableRow({
                   <div className="mt-2 bg-orange-50 border border-orange-200 rounded p-2">
                     <div className="flex items-center gap-1 text-orange-700 text-xs font-semibold mb-1">
                       <AlertTriangle size={12} />
-                      TAISA Risk Warnings
+                      AI Risk Warnings
                     </div>
                     <ul className="text-xs text-orange-800 space-y-0.5">
                       {ddlItem.taisa_warnings.map((w, i) => (
@@ -275,7 +276,16 @@ const PAGE_SIZE = 100;
 // number that doesn't fire on every letter typed.
 const OBJECT_FILTER_DEBOUNCE_MS = 300;
 
-export default function ChangesPage() {
+export default function ChangesPageWrapper() {
+  return (
+    <Suspense fallback={<PageShell title="Changes"><LoadingSpinner /></PageShell>}>
+      <ChangesPage />
+    </Suspense>
+  );
+}
+
+function ChangesPage() {
+  const searchParams = useSearchParams();
   const { data: snapData } = useSnapshots();
   // SelectionContext survives client-side navigation, so a diff run here stays
   // loaded when the user comes back from /impact, /lineage, etc.
@@ -300,6 +310,8 @@ export default function ChangesPage() {
   const [pageHasMore, setPageHasMore] = useState(false);
   const [pageTotal, setPageTotal] = useState(0); // total over the *filtered* set
   const [loadingMore, setLoadingMore] = useState(false);
+  // Pre-filter from URL ?q= param (e.g. arriving from Alerts "View in Changes").
+  const initialQ = searchParams.get("q") ?? "";
   // Snapshot pair currently displayed. Distinct from the diff-runner form
   // (`diffFrom`/`diffTo`) which represents what the user is *about* to load.
   const [activePair, setActivePair] = useState<{ from: number; to: number } | null>(null);
@@ -315,7 +327,7 @@ export default function ChangesPage() {
   // Filter state. Severity & breaking are quick-toggle; object is free-text.
   const [filterSeverity, setFilterSeverity] = useState<string>("ALL");
   const [filterBreaking, setFilterBreaking] = useState<string>("ALL");
-  const [filterObject, setFilterObject] = useState<string>("");
+  const [filterObject, setFilterObject] = useState<string>(initialQ);
   // Debounced mirror of `filterObject`. Decoupling these means the input
   // stays responsive (every keystroke re-renders only the input) while the
   // expensive part (refetch with the new filter) only fires once typing
@@ -706,10 +718,7 @@ export default function ChangesPage() {
       <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
         <ShieldAlert size={12} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-[11px] text-td-gray-dark leading-relaxed">
-          Pick two snapshots, run the diff, and SCION enumerates every structural change between them —
-          tables added/removed, columns moved/renamed/retyped, nullability changes. The summary KPIs,
-          filter-driven drill-down table, DDL generator and visual side-by-side all live below once
-          a diff is loaded.
+          Pick two snapshots and compare them — SCION lists every structural change detected: tables added or removed, columns renamed, data types changed, nullability flipped. Below you will find a summary, a filterable table of changes, a SQL migration script generator, and a side-by-side visual comparison.
         </p>
       </div>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
@@ -959,10 +968,10 @@ export default function ChangesPage() {
               {ddlLoading
                 ? "Generating..."
                 : ddlData
-                  ? "Regenerate DDL"
+                  ? "Regenerate SQL"
                   : selectedChangeIds.size > 0
-                    ? `Generate DDL (${selectedChangeIds.size})`
-                    : "Generate DDL (All)"}
+                    ? `Generate SQL (${selectedChangeIds.size})`
+                    : "Generate SQL (All)"}
             </button>
             {activePair && (
               <a
@@ -1065,7 +1074,7 @@ export default function ChangesPage() {
                 <div className="flex items-center gap-2">
                   <Code size={16} className="text-green-400" />
                   <span className="text-sm font-bold text-green-400">
-                    Generated DDL — {ddlDisplayItems.length} of {ddlData.total} statement(s)
+                    SQL Migration Scripts — {ddlDisplayItems.length} of {ddlData.total} statement(s)
                     {selectedChangeIds.size > 0 && (
                       <span className="text-slate-400 font-normal ml-1">(filtered)</span>
                     )}
@@ -1115,7 +1124,7 @@ export default function ChangesPage() {
                       <div className="mt-2 bg-orange-500/10 border border-orange-500/30 rounded p-2">
                         <div className="flex items-center gap-1 text-orange-400 text-xs font-semibold mb-1">
                           <AlertTriangle size={11} />
-                          TAISA Warnings
+                          AI Risk Warnings
                         </div>
                         <ul className="text-xs text-orange-300 space-y-0.5">
                           {item.taisa_warnings.map((w, i) => (
@@ -1144,9 +1153,8 @@ export default function ChangesPage() {
               <>
                 The diff pair <strong>#{activePair?.from} → #{activePair?.to}</strong>{" "}
                 is selected and shared across the app. Click over to <strong>Impact Analysis</strong>{" "}
-                for the full propagation report, or summon <strong>TAISA</strong> (bottom-right)
-                to reason over all {baseSummary.total} changes at once. If only one change is
-                weird, scope TAISA to it via the selector below.
+                for the full propagation report, or use the <strong>AI Analysis</strong> button (bottom-right)
+                to get an AI explanation of all {baseSummary.total} changes at once. To scope the AI to a single change, use the selector below.
               </>
             }
           >

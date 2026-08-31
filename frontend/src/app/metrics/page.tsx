@@ -15,6 +15,7 @@ import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { useSelection } from "@/lib/SelectionContext";
 import { getSnapshotMetrics, getGrowthRate, getVolatility } from "@/lib/api/metrics";
 import type { SnapshotMetricsResponse, GrowthResponse, VolatilityResponse } from "@/lib/api/types";
+import Link from "next/link";
 import { Activity, TrendingUp, GitCompareArrows, ArrowRight, PieChart, ShieldCheck } from "lucide-react";
 import { GuidedSection } from "@/components/shared/GuidedSection";
 
@@ -263,10 +264,7 @@ export default function MetricsPage() {
               <strong>Left:</strong> the object-type mix of the most recent snapshot —
               a quick read on whether the warehouse leans view-heavy (reporting-
               oriented) or table-heavy (raw data).{" "}
-              <strong>Right:</strong> SCION hashes each snapshot&apos;s full structure
-              (SHA-256 over names, types, nullability, ordinal positions). Red dots mark
-              snapshots where the fingerprint differs from the previous one —
-              a fast “did anything change?” check that avoids loading the full diff.
+              <strong>Right:</strong> SCION generates a fingerprint of the entire warehouse structure at each snapshot. Red dots mark snapshots where the fingerprint changed vs. the previous one — a fast way to see “did anything change at all?” without loading the full diff.
             </>
           }
         >
@@ -435,7 +433,12 @@ export default function MetricsPage() {
       </GuidedSection>
 
       {allMetrics.length === 0 && !loading && (
-        <EmptyState message="No snapshots available. Create snapshots to see structural metrics." />
+        <div className="text-center py-12">
+          <p className="text-sm text-td-gray-dark mb-3">No snapshots available yet. Take your first snapshot to start seeing structural metrics.</p>
+          <Link href="/snapshots" className="inline-block bg-td-navy text-white text-xs font-medium px-4 py-2 rounded hover:bg-td-navy-light transition-colors">
+            Go to Snapshots →
+          </Link>
+        </div>
       )}
     </PageShell>
   );

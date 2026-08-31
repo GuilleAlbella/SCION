@@ -22,6 +22,7 @@ import {
   Activity,
   Settings,
   BarChart3,
+  Info,
 } from "lucide-react";
 import { GuidedSection } from "@/components/shared/GuidedSection";
 
@@ -100,22 +101,25 @@ export default function SimulationPage() {
       title="What-If Simulation"
       subtitle="Preview the impact of a change BEFORE applying it"
     >
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Run a hypothetical scenario: <em>"What happens if I drop this column?"</em> SCION traces the dependency graph and shows you how many objects break, which queries are affected, and what the risk level would be — <strong>without touching the actual database</strong>. Use this before a migration to understand the blast radius and plan communications.
+        </p>
+      </div>
+
       {/* ═══════════════════════════════════════════════════════════
           SECTION 1 · Configure the hypothetical change
           ═══════════════════════════════════════════════════════════ */}
       <GuidedSection
         title="1. Configure the hypothetical change"
-        subtitle="Read-only — nothing touches the actual database"
+        subtitle="Read-only — nothing is changed in the database"
         icon={Settings}
         intro={
           <>
-            Pick an object and a hypothetical change. SCION walks the dependency graph
-            to compute impact spread, counts affected queries and users (from usage
-            telemetry, if loaded), and returns a risk-based recommendation.{" "}
-            <strong>No DDL is issued, no catalog is touched</strong> — this is the
-            differentiator vs. the Changes/Impact flow, which operates on real diffs
-            between snapshots. Use it to scope migration windows and plan release
-            communications before committing to a change.
+            Pick a table or view and choose the type of change you want to simulate. SCION traces the full dependency graph to compute how many objects would break, and counts affected queries and users from usage history (when available).{" "}
+            <strong>Nothing is modified in the database</strong> — this is purely a preview to help you plan.
           </>
         }
       >

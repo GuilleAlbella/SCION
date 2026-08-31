@@ -7,7 +7,69 @@ import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
 import { getAlerts, getAnomalies } from "@/lib/api/alerts";
 import type { AlertsResponse, AnomaliesResponse } from "@/lib/api/types";
-import { Bell, ShieldAlert, AlertTriangle, Brain, RefreshCw, Unlink, AlertCircle, Network, Activity, TrendingUp, TrendingDown } from "lucide-react";
+import Link from "next/link";
+import { Bell, ShieldAlert, AlertTriangle, Brain, RefreshCw, Unlink, AlertCircle, Network, Activity, TrendingUp, TrendingDown, Info, ChevronDown, ChevronRight } from "lucide-react";
+import type { AnomalyRecord } from "@/lib/api/types";
+
+function AnomalyCard({
+  a, sevColor, Icon, plain,
+}: {
+  a: AnomalyRecord;
+  sevColor: string;
+  Icon: typeof TrendingUp;
+  plain: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div
+      className="border rounded-lg overflow-hidden cursor-pointer hover:shadow-sm transition-shadow"
+      style={{ borderColor: `${sevColor}40` }}
+      onClick={() => setExpanded((v) => !v)}
+    >
+      <div className="p-3 flex items-start gap-3">
+        <Icon size={16} style={{ color: sevColor }} className="mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-xs font-semibold text-td-navy font-mono">{a.schema_name}</span>
+            <span className="text-[10px] text-td-gray-dark">snapshot #{a.snapshot_id}</span>
+            <span
+              className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
+              style={{ backgroundColor: sevColor }}
+            >
+              {a.z_score > 0 ? "+" : ""}{a.z_score}× normal
+            </span>
+          </div>
+          <p className="text-[11px] text-td-gray-dark">{plain}</p>
+        </div>
+        <span className="shrink-0 text-td-gray-dark mt-0.5">
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </span>
+      </div>
+      {expanded && (
+        <div className="border-t px-3 py-2.5 bg-gray-50/60 space-y-2" style={{ borderColor: `${sevColor}20` }}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+            <div><span className="text-td-gray-dark">Observed changes:</span> <strong className="text-td-navy">{a.observed}</strong></div>
+            <div><span className="text-td-gray-dark">Expected (avg):</span> <strong className="text-td-navy">~{a.expected}</strong></div>
+            <div><span className="text-td-gray-dark">Typical variation:</span> <strong className="text-td-navy">±{a.std_dev}</strong></div>
+            <div><span className="text-td-gray-dark">Based on:</span> <strong className="text-td-navy">{a.baseline_size} prior snapshot{a.baseline_size !== 1 ? "s" : ""}</strong></div>
+          </div>
+          <p className="text-[11px] text-td-gray-dark">
+            {a.z_score > 0
+              ? `This schema changed more than usual in this snapshot. It may reflect a planned release, a migration, or an unintended bulk modification. Investigate the Changes page for details.`
+              : `This schema changed less than usual. Could indicate a paused pipeline or a quiet deployment window.`}
+          </p>
+          <Link
+            href={`/changes?q=${encodeURIComponent(a.schema_name)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-block text-[11px] font-medium text-td-navy hover:text-td-orange transition-colors"
+          >
+            View changes for {a.schema_name} →
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Six alert types the backend can emit. The record keys MUST match the
 // `alert_type` strings returned by /alerts — any unknown type falls back
@@ -61,6 +123,14 @@ export default function AlertsPage() {
 
   return (
     <PageShell title="Notifications & Alerts" subtitle="Recent breaking changes, high-severity events, and risk warnings">
+      {/* Page intro */}
+      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-5 flex items-start gap-2">
+        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[11px] text-td-gray-dark leading-relaxed">
+          Alerts are generated automatically each time SCION compares two snapshots. <strong>Breaking changes</strong> are structural modifications that could break downstream objects (e.g. a column dropped or renamed). <strong>High severity</strong> alerts cover other significant structural events. <strong>AI Risk Warnings</strong> are produced by the AI engine after reviewing the change in context. Use the filters below to focus on what matters to you.
+        </p>
+      </div>
+
       {/* Stats bar */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
@@ -69,7 +139,7 @@ export default function AlertsPage() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-red-600">{breakingCount}</div>
-          <div className="text-[10px] text-td-gray-dark uppercase tracking-wider">Breaking</div>
+          <div className="text-[10px] text-td-gray-dark uppercase tracking-wider">Breaking Changes</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-amber-600">{highSevCount}</div>
@@ -77,7 +147,7 @@ export default function AlertsPage() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 text-center">
           <div className="text-2xl font-bold text-orange-900">{reasoningCount}</div>
-          <div className="text-[10px] text-td-gray-dark uppercase tracking-wider">TAISA Risk</div>
+          <div className="text-[10px] text-td-gray-dark uppercase tracking-wider">AI Risk Warnings</div>
         </div>
       </div>
 
@@ -93,8 +163,7 @@ export default function AlertsPage() {
             <div>
               <h3 className="text-sm font-bold text-td-navy">Statistical Anomalies</h3>
               <p className="text-[11px] text-td-gray-dark">
-                Volume spikes flagged by z-score &ge; {anomalies.z_threshold}σ against each schema&apos;s own history.
-                No fixed rules — pure statistical process control.
+                Unusual spikes in change volume — flagged when a schema shows {anomalies.z_threshold}× or more standard deviations above its own historical average. No fixed thresholds; each schema is measured against its own baseline.
               </p>
             </div>
             <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">
@@ -106,27 +175,18 @@ export default function AlertsPage() {
               const sevColor = a.severity === "HIGH" ? "#DC2626" : a.severity === "MEDIUM" ? "#F59E0B" : "#16A34A";
               const up = a.z_score > 0;
               const Icon = up ? TrendingUp : TrendingDown;
+              const pctAbove = Math.round(Math.abs(a.z_score) * 100);
+              const plain = up
+                ? `${a.schema_name} had ${a.observed} change${a.observed !== 1 ? "s" : ""} in this snapshot — about ${pctAbove}% more than its historical average of ~${a.expected}.`
+                : `${a.schema_name} had fewer changes than usual in this snapshot.`;
               return (
-                <div key={i} className="border rounded-lg p-3 flex items-start gap-3" style={{ borderColor: `${sevColor}40` }}>
-                  <Icon size={16} style={{ color: sevColor }} className="mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-semibold text-td-navy font-mono">{a.schema_name}</span>
-                      <span className="text-[10px] text-td-gray-dark">snapshot #{a.snapshot_id}</span>
-                      <span
-                        className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
-                        style={{ backgroundColor: sevColor }}
-                      >
-                        z = {a.z_score > 0 ? "+" : ""}{a.z_score}σ
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-td-gray-dark">
-                      Observed <strong className="text-td-navy">{a.observed}</strong> change(s) —
-                      expected <strong className="text-td-navy">~{a.expected}</strong> (±{a.std_dev})
-                      based on {a.baseline_size} prior snapshot(s).
-                    </div>
-                  </div>
-                </div>
+                <AnomalyCard
+                  key={i}
+                  a={a}
+                  sevColor={sevColor}
+                  Icon={Icon}
+                  plain={plain}
+                />
               );
             })}
           </div>
@@ -150,7 +210,7 @@ export default function AlertsPage() {
             { key: "HIGH_RISK_REASONING", label: "TAISA Risk" },
             { key: "BROKEN_LINEAGE", label: "Broken Lineage" },
             { key: "ORPHAN_OBJECT", label: "Orphans" },
-            { key: "HUB_CHANGED", label: "Hub Changes" },
+            { key: "HUB_CHANGED", label: "Central Object Changes" },
           ].map((f) => (
             <button
               key={f.key}
@@ -203,15 +263,22 @@ export default function AlertsPage() {
                     >
                       {config.label}
                     </span>
-                    <span className="text-[10px] text-td-gray-dark">{alert.source}</span>
                   </div>
                   <p className="text-sm text-td-navy">{alert.message}</p>
-                  <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-3 mt-1.5">
                     <span className="text-xs font-mono text-td-gray-dark">{alert.object_identifier}</span>
                     {alert.timestamp && (
                       <span className="text-[10px] text-td-gray-dark">
                         {new Date(alert.timestamp).toLocaleString()}
                       </span>
+                    )}
+                    {alert.alert_type === "BREAKING_CHANGE" && (
+                      <Link
+                        href={`/changes?q=${encodeURIComponent(alert.object_identifier)}`}
+                        className="ml-auto text-[11px] font-medium text-td-navy hover:text-td-orange transition-colors flex items-center gap-0.5"
+                      >
+                        View in Changes →
+                      </Link>
                     )}
                   </div>
                 </div>

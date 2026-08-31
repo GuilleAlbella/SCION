@@ -24,14 +24,16 @@ import {
   FlaskConical,
   Globe2,
   Building2,
+  LayoutGrid,
 } from "lucide-react";
 
 // Top-level navigation. Order reflects the intended user flow:
-// observe (Dashboard, Snapshots) → analyse (Changes, Impact, What-If) →
+// observe (Dashboard, Landscape, Snapshots) → analyse (Changes, Impact, What-If) →
 // explore (Lineage, Graph) → measure (Metrics, Usage, Intelligence) →
 // access (Landscape) → operate (Timeline, Alerts, Control).
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/landscape", label: "Landscape", icon: LayoutGrid },
   { href: "/snapshots", label: "Snapshots", icon: Camera },
   { href: "/changes", label: "Changes", icon: GitCompareArrows },
   { href: "/impact", label: "Impact Analysis", icon: Target },
