@@ -7,6 +7,13 @@ this is the only file that needs updating.
 
 Does NOT persist anything. Does NOT apply the noise filter. Its single
 responsibility is: raw dict-like input → validated `ParsedLineagePayload`.
+
+Phase 2 note:
+    ``TeradataLineageParser`` implements ``BaseLineageParser`` so the ingestion
+    pipeline can accept other source technologies (OpenLineage, Informatica, …)
+    through the same interface without touching the ingestor.  The module-level
+    ``parse()`` function is kept as a backwards-compatible shim — existing
+    callsites need not change.
 """
 
 from __future__ import annotations
@@ -14,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
+from .base_parser import BaseLineageParser, LineageParserError
 from .parser_models import (
     ParsedAttribute,
     ParsedAttributeLineage,
@@ -28,8 +36,35 @@ from .parser_models import (
 )
 
 
-class ParserPayloadError(ValueError):
-    """Raised when the parser JSON is unusable (missing required keys, bad types)."""
+# Keep the old name as an alias so existing ``except teradata_parser.ParserPayloadError``
+# blocks continue to work unchanged.
+class ParserPayloadError(LineageParserError):
+    """Raised when the Teradata/DataDNA parser JSON is unusable."""
+
+
+class TeradataLineageParser(BaseLineageParser):
+    """Adapter for the DataDNA / Teradata parser JSON format.
+
+    This is the production adapter in v1.  It wraps the module-level
+    ``parse()`` function so the caller can treat it as a ``BaseLineageParser``
+    and swap it out for other adapters in Phase 2.
+    """
+
+    @property
+    def technology(self) -> str:
+        return "teradata"
+
+    def validate(self, payload: Any) -> None:
+        if not isinstance(payload, dict):
+            raise ParserPayloadError(
+                f"Teradata parser payload must be a dict, got {type(payload).__name__}"
+            )
+        for key in ("parseRunId", "parseTimestamp", "platform"):
+            if key not in payload:
+                raise ParserPayloadError(f"Missing required top-level key: '{key}'")
+
+    def parse(self, payload: Any) -> ParsedLineagePayload:
+        return parse(payload)
 
 
 def _require(payload: Mapping[str, Any], key: str) -> Any:

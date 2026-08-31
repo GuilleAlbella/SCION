@@ -24,6 +24,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
+from app.db.models.schema_snapshot import SchemaSnapshot
+from app.db.models.table_snapshot import TableSnapshot
 from app.graph.graph_models import GraphEdge, GraphNode
 
 
@@ -244,9 +246,10 @@ def get_focused_graph(
             node_rows = session.execute(
                 select(GraphNode).where(GraphNode.node_id.in_(visited_ids))
             ).scalars().all()
+        type_lookup = _build_type_lookup(session, snapshot_id)
 
     # ──── Step 4: serialize, dedupe edges, filter dangling ────
-    nodes, edges = _serialize_graph(node_rows, edges_collected, restrict_to_ids=visited_ids)
+    nodes, edges = _serialize_graph(node_rows, edges_collected, restrict_to_ids=visited_ids, type_lookup=type_lookup)
 
     return {
         "snapshot_id": snapshot_id,
@@ -300,8 +303,9 @@ def get_graph(snapshot_id: int) -> Dict[str, Any]:
         edge_rows = session.execute(
             select(GraphEdge).where(GraphEdge.snapshot_id == snapshot_id)
         ).scalars().all()
+        type_lookup = _build_type_lookup(session, snapshot_id)
 
-    nodes, edges = _serialize_graph(node_rows, edge_rows)
+    nodes, edges = _serialize_graph(node_rows, edge_rows, type_lookup=type_lookup)
     return {
         "snapshot_id": snapshot_id,
         "nodes": nodes,
@@ -346,12 +350,51 @@ def _resolve_root(session: Session, snapshot_id: int, root: str) -> Optional[Gra
     return session.execute(candidates_q).scalars().first()
 
 
-def _infer_lineage_type(row) -> str:
-    """Infer TABLE vs VIEW for lineage-only UNKNOWN nodes.
+def _build_type_lookup(session: Session, snapshot_id: int) -> Dict[str, str]:
+    """Return a {SCHEMA.TABLE_NAME (upper): object_type} dict from table_snapshot.
 
-    Teradata schemas whose name ends with ``_VW`` or ``_VIEW`` contain views
-    by convention.  Everything else is assumed to be a table.
+    This is the authoritative source — object_type comes from TablesV.TableKind
+    via object_type_from_tablekind() at ingest time.  Used to resolve UNKNOWN
+    graph nodes without relying on naming-convention heuristics.
     """
+    rows = session.execute(
+        select(SchemaSnapshot.schema_name, TableSnapshot.table_name, TableSnapshot.object_type)
+        .join(TableSnapshot, TableSnapshot.schema_id == SchemaSnapshot.schema_id)
+        .where(SchemaSnapshot.snapshot_id == snapshot_id)
+    ).all()
+    return {
+        f"{schema}.{table}".upper(): otype
+        for schema, table, otype in rows
+        if otype and otype != "UNKNOWN"
+    }
+
+
+def _resolve_object_type(row, type_lookup: Dict[str, str]) -> str:
+    """Resolve the display object_type for a GraphNode row.
+
+    Resolution order (most authoritative first):
+      1. The stored object_type if already known (not UNKNOWN).
+      2. TablesV.TableKind via type_lookup (dict-import data).
+      3. Schema-name heuristic (_VW / _VIEW suffix) as last resort.
+
+    The heuristic is only reached for objects that exist in the lineage
+    feed but have no matching entry in the data dictionary — e.g. external
+    references or objects dropped before the dict-import ran.
+    """
+    if row.object_type != "UNKNOWN":
+        return row.object_type
+
+    # Only lineage-only nodes have a plain 'SCHEMA.NAME' uid (no colon).
+    # Parser-imported UNKNOWN nodes ('UNKNOWN:SCHEMA.NAME:snap_id') keep
+    # their UNKNOWN type — they have no dict entry to resolve against.
+    if ":" in (row.node_uid or ""):
+        return row.object_type
+
+    key = (row.object_name or "").upper()
+    if key in type_lookup:
+        return type_lookup[key]
+
+    # Fallback: Teradata naming convention (_VW / _VIEW schema suffix).
     schema = (row.schema_name or "").upper()
     if schema.endswith(("_VW", "_VIEW")):
         return "VIEW"
@@ -361,6 +404,7 @@ def _infer_lineage_type(row) -> str:
 def _serialize_graph(
     node_rows,
     edge_rows,
+    type_lookup: Optional[Dict[str, str]] = None,
     restrict_to_ids: Optional[set[int]] = None,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Project ORM rows into the {node_id, ...} JSON shape used by both endpoints.
@@ -368,7 +412,12 @@ def _serialize_graph(
     ``restrict_to_ids`` is the BFS visited set for the focus path — we
     drop edges whose endpoints didn't make it into the subgraph and
     deduplicate edges that BFS traversed from both directions.
+
+    ``type_lookup`` is a {SCHEMA.TABLE (upper): object_type} dict built from
+    table_snapshot.  When provided, UNKNOWN nodes are resolved against it
+    before falling back to the naming-convention heuristic.
     """
+    _lookup = type_lookup or {}
     uid_by_id: Dict[int, str] = {
         row.node_id: row.node_uid or str(row.node_id) for row in node_rows
     }
@@ -376,17 +425,7 @@ def _serialize_graph(
     nodes: List[Dict[str, Any]] = [
         {
             "node_id": row.node_uid or str(row.node_id),
-            # Lineage-imported nodes arrive with object_type='UNKNOWN' and a
-            # plain 'SCHEMA.NAME' node_uid (no type prefix, no snapshot suffix).
-            # Parser-imported UNKNOWN nodes use 'UNKNOWN:SCHEMA.NAME:snap_id'.
-            # Infer TABLE vs VIEW from Teradata schema naming convention
-            # (_VW / _VIEW suffix) rather than defaulting everything to TABLE.
-            "object_type": (
-                _infer_lineage_type(row)
-                if row.object_type == "UNKNOWN"
-                and ":" not in (row.node_uid or "")
-                else row.object_type
-            ),
+            "object_type": _resolve_object_type(row, _lookup),
             "object_name": row.object_name,
             "schema_name": row.schema_name,
             "metrics": row.node_metadata,
