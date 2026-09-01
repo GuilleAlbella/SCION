@@ -6,9 +6,9 @@ import PageShell from "@/components/layout/PageShell";
 import KpiCard from "@/components/shared/KpiCard";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
-import { useEntity, useEntityHistory } from "@/lib/hooks/useEntity";
+import { useEntity, useEntityHistory, useEntityContext } from "@/lib/hooks/useEntity";
 import type { CriticalityPoint, UsagePoint } from "@/lib/api/types";
-import { Database, CheckCircle, XCircle } from "lucide-react";
+import { Database, CheckCircle, XCircle, Briefcase, Users } from "lucide-react";
 
 // ── inline SVG sparkline ────────────────────────────────────────────────────
 
@@ -181,6 +181,7 @@ export default function EntityDetailPage({
 
   const { data: entity, error: entityErr, isLoading: entityLoading } = useEntity(entityId);
   const { data: history, error: histErr, isLoading: histLoading } = useEntityHistory(entityId);
+  const { data: context } = useEntityContext(entityId);
 
   const loading = entityLoading || histLoading;
   const error = entityErr || histErr;
@@ -282,6 +283,48 @@ export default function EntityDetailPage({
           <UsageTable rows={history?.usage_history ?? []} />
         </div>
       </div>
+
+      {/* Business context panel */}
+      {context && (context.owning_apps.length > 0 || context.using_teams.length > 0) && (
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {context.owning_apps.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Briefcase size={14} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Owned by</h2>
+              </div>
+              <ul className="space-y-2">
+                {context.owning_apps.map((app) => (
+                  <li key={app.application_name} className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-foreground">{app.application_name}</span>
+                    {app.description && (
+                      <span className="text-xs text-td-gray-dark">{app.description}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {context.using_teams.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Users size={14} className="text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Used by</h2>
+              </div>
+              <ul className="space-y-2">
+                {context.using_teams.map((team) => (
+                  <li key={team.team_name} className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-foreground">{team.team_name}</span>
+                    {team.department_name && (
+                      <span className="text-xs text-td-gray-dark">{team.department_name}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* metadata footer */}
       <div className="mt-8 p-4 rounded-lg bg-surface border border-border text-xs text-td-gray-dark flex flex-wrap gap-6">

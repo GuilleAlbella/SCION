@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import PageShell from "@/components/layout/PageShell";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
@@ -16,15 +16,21 @@ import {
   ShieldAlert,
   Layers,
   ExternalLink,
+  Search,
+  Flame,
 } from "lucide-react";
 import {
   getLandscapeSummary,
   getLandscapeSchemas,
+  getLandscapeRiskOverview,
   getSchemaObjects,
   type LandscapeSummary,
+  type LandscapeRiskOverview,
   type SchemaRiskSummary,
   type RiskObject,
 } from "@/lib/api/landscape";
+import { globalSearch } from "@/lib/api/search";
+import type { SearchResponse } from "@/lib/api/types";
 
 // ── helpers ────────────────────────────────────────────────────────
 
@@ -270,23 +276,32 @@ function KpiCard({
 export default function LandscapePage() {
   const [summary, setSummary] = useState<LandscapeSummary | null>(null);
   const [schemas, setSchemas] = useState<SchemaRiskSummary[]>([]);
+  const [riskOverview, setRiskOverview] = useState<LandscapeRiskOverview | null>(null);
   const [selectedSchema, setSelectedSchema] = useState<SchemaRiskSummary | null>(null);
   const [schemaObjects, setSchemaObjects] = useState<RiskObject[]>([]);
   const [loadingMain, setLoadingMain] = useState(true);
   const [loadingObjects, setLoadingObjects] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cross-source search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     async function load() {
       setLoadingMain(true);
       setError(null);
       try {
-        const [sum, schs] = await Promise.all([
+        const [sum, schs, overview] = await Promise.all([
           getLandscapeSummary(10),
           getLandscapeSchemas(),
+          getLandscapeRiskOverview().catch(() => null),
         ]);
         setSummary(sum);
         setSchemas(schs);
+        setRiskOverview(overview);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load landscape");
       } finally {
@@ -295,6 +310,26 @@ export default function LandscapePage() {
     }
     load();
   }, []);
+
+  // Debounced cross-source search
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await globalSearch(searchQuery.trim());
+        setSearchResults(res);
+      } catch {
+        setSearchResults(null);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+  }, [searchQuery]);
 
   const handleSchemaClick = useCallback(
     async (schema: SchemaRiskSummary) => {
@@ -345,6 +380,56 @@ export default function LandscapePage() {
           <div
             className={`space-y-5 transition-all duration-300 ${selectedSchema ? "mr-96" : ""}`}
           >
+            {/* ── §2.15.a: Cross-source search ─────────────────────── */}
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-td-orange focus-within:ring-1 focus-within:ring-td-orange transition-all">
+                <Search size={14} className="text-td-gray-dark shrink-0" />
+                <input
+                  className="flex-1 text-sm outline-none bg-transparent placeholder-td-gray-dark"
+                  placeholder="Search objects across all schemas…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchLoading && (
+                  <span className="text-[10px] text-td-gray-dark animate-pulse">searching…</span>
+                )}
+                {searchQuery && !searchLoading && (
+                  <button
+                    onClick={() => { setSearchQuery(""); setSearchResults(null); }}
+                    className="text-td-gray-dark hover:text-foreground transition-colors"
+                    aria-label="Clear search"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Search results dropdown */}
+              {searchResults && searchResults.results.length > 0 && (
+                <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-72 overflow-y-auto">
+                  {searchResults.results.map((r, i) => (
+                    <Link
+                      key={`${r.object_name}-${i}`}
+                      href={`/changes?object=${encodeURIComponent(r.object_name)}`}
+                      onClick={() => { setSearchQuery(""); setSearchResults(null); }}
+                      className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-xs font-mono text-td-navy truncate block">{r.object_name}</span>
+                        <span className="text-[10px] text-td-gray-dark">{r.schema_name}</span>
+                      </div>
+                      <span className="text-[9px] uppercase font-medium text-td-gray-dark ml-3 shrink-0">{r.object_type}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {searchResults && searchResults.results.length === 0 && searchQuery && (
+                <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-sm mt-1 px-3 py-2.5">
+                  <p className="text-xs text-td-gray-dark">No objects found for &ldquo;{searchQuery}&rdquo;</p>
+                </div>
+              )}
+            </div>
+
             {/* ── Level 0: KPI cards ──────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard
@@ -376,6 +461,41 @@ export default function LandscapePage() {
                 color="text-td-downstream"
               />
             </div>
+
+            {/* ── §2.15.b: Executive spotlight ─────────────────────── */}
+            {riskOverview?.recently_changed_high_risk &&
+              riskOverview.recently_changed_high_risk.length > 0 && (
+                <section className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Flame size={14} className="text-red-600" />
+                    <h2 className="text-sm font-semibold text-red-800">Attention required</h2>
+                    <span className="text-[10px] text-red-600">
+                      {riskOverview.recently_changed_high_risk.length} high-risk object
+                      {riskOverview.recently_changed_high_risk.length > 1 ? "s" : ""} changed this snapshot
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {riskOverview.recently_changed_high_risk.map((obj) => {
+                      const bare = obj.object_name.includes(".")
+                        ? obj.object_name.split(".").slice(1).join(".")
+                        : obj.object_name;
+                      return (
+                        <Link
+                          key={obj.object_name}
+                          href={`/changes?object=${encodeURIComponent(obj.object_name)}`}
+                          className="flex items-center gap-1.5 bg-white border border-red-200 rounded px-2 py-1 text-xs hover:bg-red-50 hover:border-red-400 transition-colors"
+                        >
+                          <span className="font-mono text-td-navy">{bare}</span>
+                          <span className="text-[9px] text-red-600 font-semibold tabular-nums">
+                            {Math.round(obj.combined_score * 100)}%
+                          </span>
+                          <ExternalLink size={10} className="text-red-400" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
             {/* ── Risk distribution bar ────────────────────────────── */}
             {(globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) > 0 && (

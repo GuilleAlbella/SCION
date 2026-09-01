@@ -1,6 +1,6 @@
 import useSWR from "swr";
-import { getEntity, getEntityHistory } from "@/lib/api/entity";
-import type { EntityResponse, EntityHistoryResponse } from "@/lib/api/types";
+import { getEntity, getEntityHistory, getEntityContext } from "@/lib/api/entity";
+import type { EntityResponse, EntityHistoryResponse, EntityContextResponse } from "@/lib/api/types";
 
 export function useEntity(entityId: number | null) {
   return useSWR<EntityResponse>(
@@ -13,5 +13,12 @@ export function useEntityHistory(entityId: number | null) {
   return useSWR<EntityHistoryResponse>(
     entityId != null ? `entity-history-${entityId}` : null,
     () => getEntityHistory(entityId!),
+  );
+}
+
+export function useEntityContext(entityId: number | null) {
+  return useSWR<EntityContextResponse>(
+    entityId != null ? `entity-context-${entityId}` : null,
+    () => getEntityContext(entityId!),
   );
 }

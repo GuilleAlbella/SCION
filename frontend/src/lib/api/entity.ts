@@ -3,6 +3,7 @@ import type {
   EntityResponse,
   EntityHistoryResponse,
   EntityListResponse,
+  EntityContextResponse,
 } from "./types";
 
 export async function getEntity(entityId: number): Promise<EntityResponse> {
@@ -26,6 +27,15 @@ export async function resolveEntity(
   const { data } = await client.get<EntityResponse>("/entity/resolve", {
     params: { name, type },
   });
+  return data;
+}
+
+export async function getEntityContext(
+  entityId: number
+): Promise<EntityContextResponse> {
+  const { data } = await client.get<EntityContextResponse>(
+    `/entity/${entityId}/context`
+  );
   return data;
 }
 

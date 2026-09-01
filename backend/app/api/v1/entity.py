@@ -25,6 +25,14 @@ from sqlalchemy.orm import Session
 from app.db.engine import engine
 from app.db.models.entity import ObjectEntity
 from app.db.models.snapshot import Snapshot
+from app.db.models.reference import (
+    ApplicationEntity,
+    DatabaseApplicationMapping,
+    DepartmentEntity,
+    TableApplicationMapping,
+    TeamEntity,
+    UserEntity,
+)
 from app.usage.usage_models import ObjectCriticality, UsageEvent
 from app.diff.diff_models import ChangeEvent
 
@@ -77,6 +85,22 @@ class EntityListResponse(BaseModel):
     entities: list[EntityResponse]
     total: int
     has_more: bool
+
+
+class AppContext(BaseModel):
+    application_name: str
+    description: Optional[str] = None
+
+
+class TeamContext(BaseModel):
+    team_name: str
+    department_name: Optional[str] = None
+
+
+class EntityContextResponse(BaseModel):
+    entity_id: int
+    owning_apps: list[AppContext]
+    using_teams: list[TeamContext]
 
 
 # â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -233,6 +257,63 @@ def get_entity_history(entity_id: int) -> EntityHistoryResponse:
             usage_history=usage_history,
             change_count=change_count,
             snapshots_seen=seen_count,
+        )
+
+
+@router.get("/{entity_id}/context", response_model=EntityContextResponse)
+def get_entity_context(entity_id: int) -> EntityContextResponse:
+    """Return business context: owning applications and using teams for an entity."""
+    with Session(engine) as session:
+        entity = _get_entity_or_404(entity_id, session)
+
+        # Normalise to bare table name (strip schema prefix if present)
+        bare_table = (
+            entity.object_name.split(".")[-1]
+            if "." in entity.object_name
+            else entity.object_name
+        )
+
+        # Apps that explicitly map to this table
+        app_rows = session.execute(
+            select(ApplicationEntity.application_name, ApplicationEntity.description)
+            .join(
+                TableApplicationMapping,
+                ApplicationEntity.application_id == TableApplicationMapping.application_id,
+            )
+            .where(
+                func.upper(TableApplicationMapping.schema_name) == entity.schema_name.upper(),
+                func.upper(TableApplicationMapping.table_name) == bare_table.upper(),
+            )
+            .distinct()
+        ).all()
+
+        owning_apps = [
+            AppContext(application_name=r.application_name, description=r.description)
+            for r in app_rows
+        ]
+
+        # Teams that have users who queried this entity
+        team_rows = session.execute(
+            select(TeamEntity.team_name, DepartmentEntity.department_name)
+            .join(UserEntity, TeamEntity.team_id == UserEntity.team_id)
+            .join(UsageEvent, UserEntity.username == UsageEvent.username)
+            .outerjoin(
+                DepartmentEntity,
+                TeamEntity.department_id == DepartmentEntity.department_id,
+            )
+            .where(UsageEvent.entity_id == entity_id)
+            .distinct()
+        ).all()
+
+        using_teams = [
+            TeamContext(team_name=r.team_name, department_name=r.department_name)
+            for r in team_rows
+        ]
+
+        return EntityContextResponse(
+            entity_id=entity_id,
+            owning_apps=owning_apps,
+            using_teams=using_teams,
         )
 
 

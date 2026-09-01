@@ -508,6 +508,23 @@ export interface ObjectSearchParams {
   limit?: number;
 }
 
+// Entity context (§2.15.c)
+export interface AppContext {
+  application_name: string;
+  description: string | null;
+}
+
+export interface TeamContext {
+  team_name: string;
+  department_name: string | null;
+}
+
+export interface EntityContextResponse {
+  entity_id: number;
+  owning_apps: AppContext[];
+  using_teams: TeamContext[];
+}
+
 // Global Search
 export interface SearchResult {
   object_name: string;
