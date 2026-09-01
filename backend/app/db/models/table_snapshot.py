@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 
-from typing import Optional
-
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -36,6 +35,13 @@ class TableSnapshot(Base):
         ForeignKey("object_entity.entity_id"),
         nullable=True,
         index=True,
+    )
+    # §2.4 DDL timestamp merge — last-alter time from DBC.TablesV.
+    # Populated by dict import; NULL for parser-import rows (DBQL doesn't
+    # carry the catalog timestamp). Used by the diff engine to distinguish
+    # "object re-captured by a different source" from "DDL actually changed".
+    ddl_alter_timestamp: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
     )
 
     schema: Mapped["SchemaSnapshot"] = relationship(

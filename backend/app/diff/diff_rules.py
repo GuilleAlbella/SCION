@@ -17,7 +17,8 @@ all existing tests and outputs remain unchanged.
 
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Set, Tuple
 
 from app.diff.diff_models import Change
 
@@ -35,6 +36,11 @@ SEVERITY_MAP: Dict[str, str] = {
     "TABLE_TYPE_CHANGED": "HIGH",
     "COLUMN_TYPE_CHANGED": "MEDIUM",
     "COLUMN_NULLABILITY_CHANGED": "MEDIUM",
+    # §2.4 DDL timestamp merge: the object exists in both snapshots but its
+    # DDL definition was modified (last_alter_timestamp advanced). This covers
+    # views, stored procedures, macros, and triggers — objects whose internal
+    # logic can change without affecting the column list.
+    "TABLE_DDL_CHANGED": "MEDIUM",
     "TABLE_ADDED": "LOW",
     "COLUMN_ADDED": "LOW",
     "COLUMN_POSITION_CHANGED": "LOW",
@@ -118,13 +124,26 @@ def diff_schemas(schemas_from: Set[str], schemas_to: Set[str]) -> List[Change]:
 def diff_tables(
     tables_from: Dict[Tuple[str, str], str],
     tables_to: Dict[Tuple[str, str], str],
+    *,
+    timestamps_from: Optional[Dict[Tuple[str, str], Optional[datetime]]] = None,
+    timestamps_to: Optional[Dict[Tuple[str, str], Optional[datetime]]] = None,
 ) -> List[Change]:
     """Compute table-level changes using the natural key ``(schema, table)``.
 
     - Present only in ``tables_to`` → ``TABLE_ADDED``.
     - Present only in ``tables_from`` → ``TABLE_REMOVED``.
     - Present in both with different ``object_type`` → ``TABLE_TYPE_CHANGED``.
+    - Present in both with same ``object_type`` but different non-null
+      ``ddl_alter_timestamp`` → ``TABLE_DDL_CHANGED`` (§2.4).
+
+    The ``timestamps_*`` params are optional dicts of ``ddl_alter_timestamp``
+    keyed by ``(schema_name, table_name)``.  When absent or when either side
+    has a ``None`` timestamp for a given object, the DDL-change check is skipped
+    (NULL means "not known" — we don't infer a change from absence of data).
     """
+
+    ts_from = timestamps_from or {}
+    ts_to = timestamps_to or {}
 
     changes: List[Change] = []
 
@@ -168,9 +187,6 @@ def diff_tables(
                 )
             )
         elif in_from and in_to:
-            # Same natural key on both sides — only emit a change if the
-            # object_type flipped (e.g. TABLE → VIEW). Structural column
-            # differences are handled by diff_columns, not here.
             type_from = tables_from[key]
             type_to = tables_to[key]
             if type_from != type_to:
@@ -183,6 +199,29 @@ def diff_tables(
                         after_state={"object_type": type_to},
                     )
                 )
+            else:
+                # §2.4 DDL timestamp merge: same object type on both sides —
+                # check whether the DDL definition itself changed.  Only fires
+                # when BOTH sides carry a non-null timestamp so we never infer
+                # a change from missing data.
+                ddl_ts_from = ts_from.get(key)
+                ddl_ts_to = ts_to.get(key)
+                if ddl_ts_from and ddl_ts_to and ddl_ts_from != ddl_ts_to:
+                    changes.append(
+                        Change(
+                            object_type="TABLE",
+                            object_identifier=qualified_name,
+                            change_type="TABLE_DDL_CHANGED",
+                            before_state={
+                                "object_type": type_from,
+                                "ddl_alter_timestamp": ddl_ts_from.isoformat(),
+                            },
+                            after_state={
+                                "object_type": type_to,
+                                "ddl_alter_timestamp": ddl_ts_to.isoformat(),
+                            },
+                        )
+                    )
 
     return changes
 

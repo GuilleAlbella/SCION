@@ -112,6 +112,26 @@ def _fmt_time(seconds: float) -> str:
     return f"{m}m {s:05.2f}s"
 
 
+def _parse_td_timestamp(raw: Optional[str]) -> Optional[datetime]:
+    """Parse a Teradata catalog timestamp string to datetime.
+
+    DBC.TablesV / DBC.DatabasesV produce timestamps as:
+      '2026-01-10 14:32:00.000000' (microseconds)
+    or occasionally:
+      '2026-01-10 14:32:00'        (no microseconds)
+    Returns None when raw is absent or unparseable.
+    """
+    if not raw:
+        return None
+    raw = raw.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 # ──── Result type ────
 
 @dataclass(frozen=True)
@@ -276,7 +296,22 @@ def persist_batch(
     t_phase = time.perf_counter()
     table_inserts: list[dict] = []
     skipped_for_orphan_schema = 0
+
+    # §2.4 DDL timestamp merge: deduplicate by (database_name, table_name) keeping
+    # the row with the latest last_alter_timestamp.  The same object can arrive
+    # from both DBQL and dict extracts; we keep whichever version is most recent.
+    deduped: dict[Tuple[str, str], "TableRecord"] = {}
     for t in tables:
+        key = (t.database_name, t.table_name)
+        if key not in deduped:
+            deduped[key] = t
+        else:
+            existing_ts = _parse_td_timestamp(deduped[key].last_alter_timestamp)
+            incoming_ts = _parse_td_timestamp(t.last_alter_timestamp)
+            if incoming_ts and (existing_ts is None or incoming_ts > existing_ts):
+                deduped[key] = t
+
+    for t in deduped.values():
         schema_id = schema_id_by_name.get(t.database_name)
         if schema_id is None:
             # Should not happen given the schema_names superset above,
@@ -289,6 +324,7 @@ def persist_batch(
             "schema_id": schema_id,
             "table_name": t.table_name,
             "object_type": object_type_from_tablekind(t.table_kind),
+            "ddl_alter_timestamp": _parse_td_timestamp(t.last_alter_timestamp),
         })
 
     if table_inserts:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List, Set, Tuple
+from datetime import datetime
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -185,12 +186,17 @@ class DiffEngine:
             # also detect TABLE_TYPE_CHANGED (e.g. a table morphing into a view).
             tables_from: Dict[Tuple[str, str], str] = {}
             tables_to: Dict[Tuple[str, str], str] = {}
+            # §2.4 DDL timestamp merge: track last-alter timestamps per object
+            # so diff_tables can detect DDL changes for views/procs/macros.
+            timestamps_from: Dict[Tuple[str, str], Optional[datetime]] = {}
+            timestamps_to: Dict[Tuple[str, str], Optional[datetime]] = {}
 
             rows_from = session.execute(
                 select(
                     SchemaSnapshot.schema_name,
                     TableSnapshot.table_name,
                     TableSnapshot.object_type,
+                    TableSnapshot.ddl_alter_timestamp,
                 )
                 .join(
                     TableSnapshot,
@@ -199,14 +205,18 @@ class DiffEngine:
                 .where(SchemaSnapshot.snapshot_id == snapshot_from)
             ).all()
 
-            for schema_name, table_name, object_type in rows_from:
-                tables_from[(schema_name, table_name)] = object_type
+            for schema_name, table_name, object_type, ddl_ts in rows_from:
+                key = (schema_name, table_name)
+                tables_from[key] = object_type
+                if ddl_ts is not None:
+                    timestamps_from[key] = ddl_ts
 
             rows_to = session.execute(
                 select(
                     SchemaSnapshot.schema_name,
                     TableSnapshot.table_name,
                     TableSnapshot.object_type,
+                    TableSnapshot.ddl_alter_timestamp,
                 )
                 .join(
                     TableSnapshot,
@@ -215,8 +225,11 @@ class DiffEngine:
                 .where(SchemaSnapshot.snapshot_id == snapshot_to)
             ).all()
 
-            for schema_name, table_name, object_type in rows_to:
-                tables_to[(schema_name, table_name)] = object_type
+            for schema_name, table_name, object_type, ddl_ts in rows_to:
+                key = (schema_name, table_name)
+                tables_to[key] = object_type
+                if ddl_ts is not None:
+                    timestamps_to[key] = ddl_ts
 
             # --- Column-level diff (v5.4) ---
             # Compare columns only for tables that exist in both snapshots.
@@ -316,8 +329,15 @@ class DiffEngine:
         # --- Schema-level changes (v5.2) ---
         changes.extend(diff_schemas(schemas_from, schemas_to))
 
-        # --- Table-level changes (v5.3) ---
-        changes.extend(diff_tables(tables_from, tables_to))
+        # --- Table-level changes (v5.3 + §2.4 DDL timestamp merge) ---
+        changes.extend(
+            diff_tables(
+                tables_from,
+                tables_to,
+                timestamps_from=timestamps_from,
+                timestamps_to=timestamps_to,
+            )
+        )
 
         # --- Column-level changes (v5.4) ---
         changes.extend(
