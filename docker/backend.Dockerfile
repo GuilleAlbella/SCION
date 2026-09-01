@@ -71,8 +71,8 @@ COPY alembic.ini ./alembic.ini
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# /data holds the SQLite file and any future persistent artefacts.
-# Compose mounts a named volume here so DB state survives rebuilds.
+# /data holds persistent artefacts (uploaded files, etc.).
+# DB state lives in the `pgdata` Postgres volume on the scion-postgres container.
 RUN mkdir -p /data && chown -R scion:scion /data /app
 
 USER scion

@@ -8,12 +8,11 @@
 # DB → stamp + upgrade.
 #
 # DATABASE_URL controls the target. In production compose this points
-# to /data/scion.db (volume-backed). For local Postgres dev override
-# it to postgresql://...
+# to the postgres service (postgresql+psycopg://scion:...@postgres:5432/scion).
 set -euo pipefail
 
 echo "[entrypoint] SCION backend starting..."
-echo "[entrypoint] DATABASE_URL=${DATABASE_URL:-<default sqlite>}"
+echo "[entrypoint] DATABASE_URL=${DATABASE_URL:-<not set>}"
 echo "[entrypoint] DATA_REGION=${DATA_REGION:-unset}"
 
 cd /app

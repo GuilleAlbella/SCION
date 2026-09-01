@@ -1,17 +1,20 @@
 # SCION single-VM deploy.
 #
-# Brings up backend (FastAPI/uvicorn), frontend (Next.js standalone),
-# nginx (single public port), and watchtower (auto-pull on new GHCR
-# images, every 6h). SQLite lives on a named volume so rebuilds and
-# image upgrades preserve state.
+# Brings up PostgreSQL, backend (FastAPI/uvicorn), frontend (Next.js
+# standalone), and nginx (single public port). Postgres data lives on
+# a named volume so rebuilds and image upgrades preserve state.
 #
 # Usage on the VM:
-#   cp .env.example .env   &&   $EDITOR .env
+#   cp .env.example .env   &&   $EDITOR .env   # set POSTGRES_PASSWORD
 #   docker compose pull
 #   docker compose up -d
 #
 # To rebuild from source instead of pulling from GHCR:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Data migration from a previous SQLite install:
+#   docker cp kalido_lite.db scion-backend:/tmp/scion_source.db
+#   docker exec scion-backend python backend/tools/migrate_sqlite_to_postgres.py
 #
 # Environment defaults assume the GHCR images are public.
 
@@ -22,12 +25,33 @@
 name: scion
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: scion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scion
+      POSTGRES_DB: scion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scion -d scion"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   backend:
     image: ${SCION_BACKEND_IMAGE:-ghcr.io/guillealbella/scion-backend:latest}
     container_name: scion-backend
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      DATABASE_URL: sqlite:////data/scion.db
+      DATABASE_URL: postgresql+psycopg://scion:${POSTGRES_PASSWORD}@postgres:5432/scion
       SCION_EXECUTION_MODE: docker
       SCION_BACKEND_HOST: 0.0.0.0
       SCION_BACKEND_PORT: "8000"
@@ -82,7 +106,8 @@ services:
   # we no longer need.
 
 volumes:
-  data:
+  pgdata:   # postgres data directory
+  data:     # persistent artefacts (file uploads, etc.)
 
 # `default` network is implicit — Compose creates `scion_default`
 # automatically. No need to declare it explicitly.

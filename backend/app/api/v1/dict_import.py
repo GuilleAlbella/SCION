@@ -221,68 +221,43 @@ def _detect_path(path: Path, filename: str):
 
 
 def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
-    """Switch SQLite to fast-bulk-insert mode for the duration of one ingest.
+    “””Switch SQLite to fast-bulk-insert mode for the duration of one ingest.
 
-    The default `PRAGMA synchronous = FULL` makes SQLite fsync after
-    every commit â€” and `bulk_insert_mappings` commits once per batch.
-    For 9.8M-row workloads that's ~2 000 fsyncs serialised by Windows'
-    write-through layer, and we measured the disk pegged at ~0.7 MB/s
-    even on local NVMe. Relaxing to `synchronous = OFF` removes the
-    per-batch fsync entirely; we've measured 3-5Ã— speedup on the
-    persist phase with no correctness change.
+    SQLite-only: on Postgres this is a no-op (returns empty dict).
+    Postgres handles concurrency and durability natively; no session-level
+    tuning is needed or supported via PRAGMA syntax.
 
-    Why we DON'T also flip `journal_mode = MEMORY` here (we used to,
-    until v1.14.16): switching journal_mode out of WAL on this
-    connection re-enables SQLite's writer-blocks-readers locking. The
-    moment that's enabled, the parallel `/progress` polls and any
-    other reads stall the persist writer instead of running
-    concurrently â€” we measured a 3Ã— regression in persist wall time
-    on the Transcend-DevTest extract once the polling started
-    actually working. WAL (set globally on the engine connect event)
-    is the right journal mode for our mixed read+write workload.
-
-    Trade-off: an OS-level crash mid-ingest can corrupt the WAL file
-    (so the last commit may not be recoverable). We accept that here
-    because:
-      - The endpoint runs the whole import in one logical transaction;
-        a crash means "no snapshot was created" semantically, and the
-        user re-runs.
-      - SCION today is a dev/demo workload on a single laptop; durability
-        becomes the deployment story's problem (Postgres / WAL replication
-        / backups), not SQLite's.
+    For SQLite: relaxing `synchronous = OFF` removes the per-batch fsync,
+    giving 3-5x speedup on 9.8M-row workloads. See git history for full
+    rationale on WAL mode and the journal_mode decision.
 
     Returns a dict of the previous values so callers can restore them
     via `_restore_pragmas` regardless of how the transaction ended.
-    Capturing the originals (instead of hard-coding "NORMAL") means we
-    honour whatever the engine was configured with â€” if a future
-    migration tunes SQLite globally, this helper still round-trips
-    correctly.
-    """
+    An empty dict is returned for non-SQLite dialects.
+    “””
+    from app.db.engine import engine as _engine
+    if _engine.dialect.name != “sqlite”:
+        return {}
     previous = {
-        "synchronous": str(session.execute(text("PRAGMA synchronous")).scalar()),
-        "cache_size": str(session.execute(text("PRAGMA cache_size")).scalar()),
+        “synchronous”: str(session.execute(text(“PRAGMA synchronous”)).scalar()),
+        “cache_size”: str(session.execute(text(“PRAGMA cache_size”)).scalar()),
     }
-    # We don't change journal_mode anymore â€” leaving WAL active is what
-    # lets the parallel `/progress` polls run without blocking the
-    # writer. We *do* still need to be outside any active transaction
-    # to set PRAGMAs reliably on SQLite, so issue a rollback first.
     session.rollback()
-    session.execute(text("PRAGMA synchronous = OFF"))
-    # 64 MB page cache. Default is ~2 MB which is starvingly small for
-    # a 240k-row table-snapshot batch. With 64 MB SQLite can keep the
-    # B-tree fanout pages hot across batches.
-    session.execute(text("PRAGMA cache_size = -65536"))
+    session.execute(text(“PRAGMA synchronous = OFF”))
+    session.execute(text(“PRAGMA cache_size = -65536”))
     return previous
 
 
 def _restore_pragmas(session: Session, previous: Dict[str, str]) -> None:
-    """Best-effort PRAGMA restore. Never raises â€” diagnostic-only."""
+    “””Best-effort PRAGMA restore. SQLite-only; no-op on Postgres (empty dict).”””
+    if not previous:
+        return
     try:
         session.rollback()
-        session.execute(text(f"PRAGMA synchronous = {previous['synchronous']}"))
-        session.execute(text(f"PRAGMA cache_size = {previous['cache_size']}"))
+        session.execute(text(f”PRAGMA synchronous = {previous['synchronous']}”))
+        session.execute(text(f”PRAGMA cache_size = {previous['cache_size']}”))
     except Exception as exc:
-        logger.warning("[ingest] failed to restore PRAGMAs: %s", exc)
+        logger.warning(“[ingest] failed to restore PRAGMAs: %s”, exc)
 
 
 def _content_type_to_category(ct: ContentType) -> Optional[str]:
@@ -717,10 +692,11 @@ def import_dict_batch(
             # connection-pool, if SQLite ever returns one) with relaxed
             # durability bleed-through to subsequent requests.
             previous_pragmas = _apply_bulk_insert_pragmas(session)
-            logger.info(
-                "[ingest] SQLite tuned for bulk insert: "
-                "synchronous=OFF, cache_size=64MB (journal_mode=WAL kept from engine)"
-            )
+            if previous_pragmas:
+                logger.info(
+                    "[ingest] SQLite tuned for bulk insert: "
+                    "synchronous=OFF, cache_size=64MB (journal_mode=WAL kept from engine)"
+                )
             try:
                 result = dict_persister.persist_batch(
                     session=session,
