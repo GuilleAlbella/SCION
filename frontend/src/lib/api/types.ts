@@ -740,3 +740,47 @@ export interface SimulationResponse {
   recommendation: string;
   risk_level: string;
 }
+
+// §2.9 Integration Model — persistent entity identity across snapshots
+export interface EntityResponse {
+  entity_id: number;
+  entity_type: string;
+  schema_name: string;
+  object_name: string;
+  first_seen_snapshot_id: number;
+  last_seen_snapshot_id: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CriticalityPoint {
+  snapshot_id: number;
+  snapshot_time: string;
+  combined_score: number;
+  criticality_level: string;
+  usage_score: number;
+  graph_score: number;
+}
+
+export interface UsagePoint {
+  snapshot_id: number;
+  snapshot_time: string;
+  query_count: number;
+  user_count: number;
+}
+
+export interface EntityHistoryResponse {
+  entity_id: number;
+  object_name: string;
+  entity_type: string;
+  criticality_history: CriticalityPoint[];
+  usage_history: UsagePoint[];
+  change_count: number;
+  snapshots_seen: number;
+}
+
+export interface EntityListResponse {
+  entities: EntityResponse[];
+  total: number;
+  has_more: boolean;
+}
