@@ -46,6 +46,12 @@ class GraphNode(Base):
         Index("ix_graph_node_snapshot", "snapshot_id"),
         Index("ix_graph_node_search", "snapshot_id", "schema_name", "object_name"),
         Index("ix_graph_node_entity", "entity_id"),
+        # §2.6 Graph engine perf: ix_graph_node_search_ci is a functional index on
+        # (snapshot_id, lower(schema_name), lower(object_name)) created by migration
+        # c2d3e4f5a6b7 via raw DDL.  It turns _resolve_root()'s lower()-wrapped
+        # predicates into index seeks instead of full snapshot scans.  SQLAlchemy
+        # can't declare functional indexes in __table_args__ portably, so the
+        # Index() call lives in the migration only.
     )
 
 

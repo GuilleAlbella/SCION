@@ -211,35 +211,64 @@ def get_focused_graph(
             if not frontier or len(visited_ids) >= max_nodes:
                 break
 
-            # Edges touching the current frontier, filtered by direction
-            # and edge type. We split into source-or-target conditions
-            # so the planner can use the (snapshot_id) index on each
-            # branch independently. ``in_(frontier)`` is fine for our
-            # max_nodes range (<=1000).
-            conds = []
-            if direction in ("down", "both"):
-                conds.append(GraphEdge.source_node_id.in_(frontier))
-            if direction in ("up", "both"):
-                conds.append(GraphEdge.target_node_id.in_(frontier))
-            edges_q = (
-                select(GraphEdge)
-                .where(GraphEdge.snapshot_id == snapshot_id)
-                .where(or_(*conds))
-            )
-            if edge_type_set:
-                # ``relationship_type`` is the legacy column; ``edge_type``
-                # is the post-1.04 nullable column. Match either.
-                edges_q = edges_q.where(
-                    or_(
-                        GraphEdge.edge_type.in_(edge_type_set),
-                        GraphEdge.relationship_type.in_(edge_type_set),
-                    )
-                )
+            hop_limit = max_nodes * 10
 
-            # Guard against hub nodes with tens-of-thousands of edges: cap per-hop
-            # edge materialisation to max_nodes*10. The visited-node cap still fires
-            # normally; we just avoid loading the full adjacency list before it does.
-            hop_edges = session.execute(edges_q.limit(max_nodes * 10)).scalars().all()
+            if direction == "both":
+                # §2.6 Graph engine perf: issue two separate queries so the
+                # planner can use ix_graph_edge_snapshot_source for the "down"
+                # leg and ix_graph_edge_snapshot_target for the "up" leg.
+                # A single OR across both columns forces the planner onto the
+                # weaker ix_graph_edge_snapshot index with a post-filter pass.
+                def _edge_q(col_cond):
+                    q = (
+                        select(GraphEdge)
+                        .where(GraphEdge.snapshot_id == snapshot_id)
+                        .where(col_cond)
+                    )
+                    if edge_type_set:
+                        q = q.where(
+                            or_(
+                                GraphEdge.edge_type.in_(edge_type_set),
+                                GraphEdge.relationship_type.in_(edge_type_set),
+                            )
+                        )
+                    return q
+
+                raw_down = session.execute(
+                    _edge_q(GraphEdge.source_node_id.in_(frontier)).limit(hop_limit)
+                ).scalars().all()
+                raw_up = session.execute(
+                    _edge_q(GraphEdge.target_node_id.in_(frontier)).limit(hop_limit)
+                ).scalars().all()
+
+                # Deduplicate: an edge where both endpoints are in the frontier
+                # would appear in both result sets.
+                seen_eids: set[int] = set()
+                hop_edges: list[GraphEdge] = []
+                for e in (*raw_down, *raw_up):
+                    if e.edge_id not in seen_eids:
+                        seen_eids.add(e.edge_id)
+                        hop_edges.append(e)
+            else:
+                # Single-direction: one query, one composite index.
+                col_cond = (
+                    GraphEdge.source_node_id.in_(frontier)
+                    if direction == "down"
+                    else GraphEdge.target_node_id.in_(frontier)
+                )
+                edges_q = (
+                    select(GraphEdge)
+                    .where(GraphEdge.snapshot_id == snapshot_id)
+                    .where(col_cond)
+                )
+                if edge_type_set:
+                    edges_q = edges_q.where(
+                        or_(
+                            GraphEdge.edge_type.in_(edge_type_set),
+                            GraphEdge.relationship_type.in_(edge_type_set),
+                        )
+                    )
+                hop_edges = session.execute(edges_q.limit(hop_limit)).scalars().all()
 
             next_frontier: set[int] = set()
             for edge in hop_edges:
