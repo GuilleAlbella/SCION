@@ -17,14 +17,18 @@ ensuring deterministic readiness.
 
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app.api.v1 import v1_router
 from app.engine_registry import get_engine_states, initialise_engines
 from app.logging_config import configure_logging
+from app.request_context import set_request_id
 
 # Configure logging before any other app code runs so that engine
 # initialisation logs are captured in the right format from the start.
@@ -71,6 +75,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _RequestIdMiddleware(BaseHTTPMiddleware):
+    """§2.8 — Attach a correlation ID to every request.
+
+    Reads X-Request-ID from the incoming headers (so upstream proxies or the
+    frontend can propagate a trace) or generates a short random hex string.
+    The ID is stored in a ContextVar so the JSON logger picks it up for every
+    log line emitted during that request, and echoed back in the response
+    header for client-side correlation.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        rid = request.headers.get("X-Request-ID") or secrets.token_hex(8)
+        set_request_id(rid)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        return response
+
+
+app.add_middleware(_RequestIdMiddleware)
 
 
 @app.get("/")
