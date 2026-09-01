@@ -1,8 +1,14 @@
 import client from "./client";
-import type { ClassifyColumnsResponse, ColumnLineageResponse, ColumnTraverseResponse, FocusedGraphParams, FocusedGraphResponse, GraphResponse, PiiResponse } from "./types";
+import type { ClassifyColumnsResponse, ColumnLineageResponse, ColumnTraverseResponse, FocusedGraphParams, FocusedGraphResponse, GraphMetaResponse, GraphResponse, PiiResponse } from "./types";
 
 export async function getGraph(snapshotId: number): Promise<GraphResponse> {
   const { data } = await client.get<GraphResponse>(`/graph/${snapshotId}`);
+  return data;
+}
+
+/** §2.7 Lazy graph fetch — COUNT-only probe, no node/edge data. */
+export async function getGraphMeta(snapshotId: number): Promise<GraphMetaResponse> {
+  const { data } = await client.get<GraphMetaResponse>(`/graph/${snapshotId}/meta`);
   return data;
 }
 

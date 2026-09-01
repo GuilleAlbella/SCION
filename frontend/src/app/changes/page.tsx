@@ -266,11 +266,11 @@ function ExpandableRow({
   );
 }
 
-// Server-side page size. The backend caps at 1000; 100 is a sweet spot for
-// "feels instant" + "useful chunk to scroll through" + "doesn't choke React's
-// reconciler when filters change". Tweak via PAGE_SIZE if profiling shows we
-// can grow it.
-const PAGE_SIZE = 100;
+// Server-side page size. §2.7 reduced from 100 → 50: halves the initial
+// network payload and the first React reconcile pass on page load. Infinite
+// scroll keeps UX seamless — the smaller chunks load faster and the user
+// reaches the bottom less often before more content appears.
+const PAGE_SIZE = 50;
 // Object-filter input is keystroke-driven; we wait this long after the last
 // keystroke before re-firing the API. 300 ms is the typical "feels live"
 // number that doesn't fire on every letter typed.
@@ -1049,12 +1049,25 @@ function ChangesPage() {
             </table>
             {/* Infinite scroll sentinel + status row */}
             {pageTotal > 0 && (
-              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 flex items-center justify-center gap-2">
-                {loadingMore && <Loader2 size={11} className="animate-spin text-td-navy" />}
+              <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-2 flex items-center justify-between gap-2">
                 <span className="text-[11px] text-td-gray-dark">
                   {pageItems.length.toLocaleString()} / {pageTotal.toLocaleString()} change(s) loaded
                   {!pageHasMore && pageItems.length > 0 && " · all loaded"}
                 </span>
+                {/* §2.7 Explicit "Load more" button — accessibility fallback for
+                    the IntersectionObserver sentinel below. Also useful when the
+                    table is tall and the sentinel is far out of the viewport. */}
+                {pageHasMore && (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="text-[11px] text-td-navy font-medium hover:underline disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {loadingMore
+                      ? <><Loader2 size={10} className="animate-spin" /> Loading…</>
+                      : "Load more"}
+                  </button>
+                )}
               </div>
             )}
             {/* IntersectionObserver target — 400 px below the viewport triggers handleLoadMore */}

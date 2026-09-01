@@ -29,16 +29,19 @@ import EmptyState from "@/components/shared/EmptyState";
 import ObjectAutocomplete from "@/components/shared/ObjectAutocomplete";
 import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
-import { useGraph } from "@/lib/hooks/useGraph";
+import { useGraph, useGraphMeta } from "@/lib/hooks/useGraph";
 import { getFocusedGraph } from "@/lib/api/graph";
 import { INTERNAL_OBJECT_NAMES } from "@/lib/constants";
 import type { FocusedGraphResponse, GraphEdge, GraphNode as GN } from "@/lib/api/types";
-import { Focus, X as CloseIcon, AlertTriangle, ArrowUp, ArrowDown, GitFork, Loader2, Eraser } from "lucide-react";
+import { Focus, X as CloseIcon, AlertTriangle, ArrowUp, ArrowDown, GitFork, Loader2, Eraser, Network } from "lucide-react";
 
 const NODE_WIDTH = 240;
 const NODE_HEIGHT = 70;
 const FOCUS_DEFAULT_HOPS = 2;
 const FOCUS_DEFAULT_MAX_NODES = 200;
+// §2.7 Lazy graph fetch: below this node count the full graph loads
+// automatically; at or above it the user must click "Load Graph".
+const LAZY_GRAPH_THRESHOLD = 500;
 
 const TYPE_STYLES: Record<string, { bg: string; accent: string; text: string; icon: string; label: string }> = {
   SCHEMA:           { bg: "#EFF6FF", accent: "#3B82F6", text: "#1E40AF", icon: "DB", label: "Database" },
@@ -183,11 +186,25 @@ function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
 export default function GraphPage() {
   const { activeSnapshotId, setActiveSnapshotId } = useSelection();
   const { data: snapData } = useSnapshots();
-  const { data: graphData, error: fullGraphError, isLoading: fullGraphLoading } =
-    useGraph(activeSnapshotId);
   const [selectedNode, setSelectedNode] = useState<GN | null>(null);
   const [showSchemas, setShowSchemas] = useState(true);
   const [edgeFilter, setEdgeFilter] = useState<"ALL" | "DEPENDS_ON" | "FEEDS">("ALL");
+
+  // §2.7 Lazy graph fetch: fetch cheap meta (counts only) immediately;
+  // only fetch the full graph when the user explicitly requests it OR
+  // when the snapshot is small enough to load automatically.
+  const { data: graphMeta } = useGraphMeta(activeSnapshotId);
+  const metaNodes = graphMeta?.total_nodes ?? 0;
+  const metaEdges = graphMeta?.total_edges ?? 0;
+  const isLarge = metaNodes >= LAZY_GRAPH_THRESHOLD;
+
+  // Tracks whether the user has clicked "Load Graph" for the current snapshot.
+  // Resets when the snapshot changes so each new selection starts lazy.
+  const [graphLoadRequested, setGraphLoadRequested] = useState(false);
+
+  const graphEnabled = !isLarge || graphLoadRequested;
+  const { data: graphData, error: fullGraphError, isLoading: fullGraphLoading } =
+    useGraph(activeSnapshotId, { enabled: graphEnabled });
 
   // ──── Focus mode ────
   // The full-graph response uses `truncated: true` to signal "this is too
@@ -219,8 +236,7 @@ export default function GraphPage() {
   const [expandLoading, setExpandLoading] = useState(false);
   const [expandError, setExpandError] = useState<string | null>(null);
 
-  // Reset focus state when the snapshot changes — otherwise an anchor
-  // from snapshot 5 could silently 404 against snapshot 7.
+  // Reset focus state and lazy-load flag when the snapshot changes.
   useEffect(() => {
     setFocusObject("");
     setFocusData(null);
@@ -229,6 +245,7 @@ export default function GraphPage() {
     setExpandedEdges([]);
     setExpandedRoots(new Set());
     setExpandError(null);
+    setGraphLoadRequested(false);
   }, [activeSnapshotId]);
 
   // Same reset when the focus anchor itself changes — expansions are
@@ -675,6 +692,35 @@ export default function GraphPage() {
       {fullGraphError && !inFocusMode && <ErrorAlert message="Failed to load graph data" />}
       {focusError && <ErrorAlert message={focusError} />}
       {(fullGraphLoading || focusLoading) && <LoadingSpinner />}
+
+      {/* §2.7 Lazy graph fetch: for large snapshots (≥500 nodes), don't
+          auto-load — show the counts and let the user decide. */}
+      {activeSnapshotId && isLarge && !graphLoadRequested && !inFocusMode && (
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <Network size={40} className="text-td-navy opacity-50" />
+          <div className="text-center">
+            <p className="text-sm font-medium text-td-navy mb-1">
+              This snapshot has <strong>{metaNodes.toLocaleString()}</strong> graph nodes
+              and <strong>{metaEdges.toLocaleString()}</strong> edges.
+            </p>
+            <p className="text-xs text-td-gray-dark mb-4">
+              Auto-load is disabled for large graphs to keep the page responsive.
+              You can load everything at once, or use the <strong>Focus</strong> picker above
+              to explore a bounded neighbourhood.
+            </p>
+          </div>
+          <button
+            onClick={() => setGraphLoadRequested(true)}
+            className="px-5 py-2.5 bg-td-navy text-white rounded-lg text-sm font-medium hover:bg-td-navy/90 transition-colors flex items-center gap-2"
+          >
+            <Network size={16} />
+            Load full graph ({metaNodes.toLocaleString()} nodes)
+          </button>
+          <p className="text-[11px] text-td-gray-dark">
+            Or pick an anchor in the <strong>Focus on object</strong> field above for a faster view.
+          </p>
+        </div>
+      )}
 
       {/* Render the graph when we have something to show */}
       {renderSource && nodes.length > 0 && (

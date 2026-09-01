@@ -154,6 +154,13 @@ export interface GraphResponse {
   total_nodes?: number;
 }
 
+/** §2.7 Lazy graph fetch — COUNT-only probe returned by GET /graph/{id}/meta. */
+export interface GraphMetaResponse {
+  snapshot_id: number;
+  total_nodes: number;
+  total_edges: number;
+}
+
 export interface FocusedGraphParams {
   snapshot_id: number;
   /** "schema.object_name" — the format produced by ObjectAutocomplete
