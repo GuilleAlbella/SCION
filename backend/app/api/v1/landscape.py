@@ -62,6 +62,16 @@ class LandscapeRiskOverview(BaseModel):
     recently_changed_high_risk: list[RiskObject]
 
 
+class SchemaRiskSummary(BaseModel):
+    """§2.15 Level-1 drill-down: per-schema risk aggregation."""
+    schema_name: str
+    total_objects: int
+    high_count: int
+    medium_count: int
+    low_count: int
+    avg_score: float
+
+
 # â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
@@ -225,3 +235,86 @@ def get_risk_overview(
             top_critical=top_critical,
             recently_changed_high_risk=[_to_risk(r) for r in at_risk],
         )
+
+
+@router.get("/schemas", response_model=list[SchemaRiskSummary])
+def get_landscape_schemas(
+    snapshot_id: int | None = Query(None, description="Default: latest snapshot"),
+    top_n: int = Query(100, le=500),
+) -> list[SchemaRiskSummary]:
+    """§2.15 Level-1: schema-level risk aggregation for the schema grid."""
+    with Session(engine) as session:
+        if snapshot_id is None:
+            snapshot_id = session.execute(
+                select(Snapshot.snapshot_id).order_by(desc(Snapshot.snapshot_id)).limit(1)
+            ).scalar_one_or_none()
+
+        if snapshot_id is None:
+            return []
+
+        rows = session.execute(
+            select(ObjectCriticality).where(ObjectCriticality.snapshot_id == snapshot_id)
+        ).scalars().all()
+
+        buckets: dict[str, dict] = {}
+        for r in rows:
+            sname = r.object_name.split(".")[0] if "." in r.object_name else r.object_name
+            if sname not in buckets:
+                buckets[sname] = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "score_sum": 0.0, "total": 0}
+            b = buckets[sname]
+            b["total"] += 1
+            b["score_sum"] += r.combined_score
+            if r.criticality_level in b:
+                b[r.criticality_level] += 1
+
+        result = [
+            SchemaRiskSummary(
+                schema_name=sname,
+                total_objects=b["total"],
+                high_count=b["HIGH"],
+                medium_count=b["MEDIUM"],
+                low_count=b["LOW"],
+                avg_score=round(b["score_sum"] / b["total"], 4),
+            )
+            for sname, b in buckets.items()
+        ]
+        result.sort(key=lambda x: (-x.high_count, -x.avg_score))
+        return result[:top_n]
+
+
+@router.get("/schemas/{schema_name}/objects", response_model=list[RiskObject])
+def get_schema_objects(
+    schema_name: str,
+    snapshot_id: int | None = Query(None, description="Default: latest snapshot"),
+    top_n: int = Query(200, le=500),
+) -> list[RiskObject]:
+    """§2.15 Level-2: objects within a schema, sorted by criticality score."""
+    with Session(engine) as session:
+        if snapshot_id is None:
+            snapshot_id = session.execute(
+                select(Snapshot.snapshot_id).order_by(desc(Snapshot.snapshot_id)).limit(1)
+            ).scalar_one_or_none()
+
+        if snapshot_id is None:
+            return []
+
+        rows = session.execute(
+            select(ObjectCriticality)
+            .where(
+                ObjectCriticality.snapshot_id == snapshot_id,
+                ObjectCriticality.object_name.like(f"{schema_name}.%"),
+            )
+            .order_by(desc(ObjectCriticality.combined_score))
+            .limit(top_n)
+        ).scalars().all()
+
+        return [
+            RiskObject(
+                object_name=r.object_name,
+                schema_name=schema_name,
+                combined_score=round(r.combined_score, 4),
+                criticality_level=r.criticality_level,
+                snapshot_id=r.snapshot_id,
+            )
+            for r in rows
+        ]

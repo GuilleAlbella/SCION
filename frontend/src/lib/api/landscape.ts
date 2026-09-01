@@ -45,3 +45,28 @@ export async function getLandscapeRiskOverview(
   });
   return data;
 }
+
+// §2.15 Progressive Disclosure — schema-level drill-down
+
+export interface SchemaRiskSummary {
+  schema_name: string;
+  total_objects: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  avg_score: number;
+}
+
+export async function getLandscapeSchemas(snapshotId?: number): Promise<SchemaRiskSummary[]> {
+  const { data } = await client.get("/landscape/schemas", {
+    params: { snapshot_id: snapshotId },
+  });
+  return data;
+}
+
+export async function getSchemaObjects(schemaName: string, snapshotId?: number): Promise<RiskObject[]> {
+  const { data } = await client.get(`/landscape/schemas/${encodeURIComponent(schemaName)}/objects`, {
+    params: { snapshot_id: snapshotId },
+  });
+  return data;
+}

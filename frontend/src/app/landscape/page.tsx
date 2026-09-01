@@ -1,242 +1,244 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import PageShell from "@/components/layout/PageShell";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import EmptyState from "@/components/shared/EmptyState";
-import { Globe2, AlertTriangle, Activity, Database, TrendingUp, ShieldAlert, CheckCircle2 } from "lucide-react";
+import {
+  LayoutGrid,
+  Activity,
+  Database,
+  ChevronRight,
+  X,
+  TrendingUp,
+  ShieldAlert,
+  Layers,
+  ExternalLink,
+} from "lucide-react";
 import {
   getLandscapeSummary,
-  getLandscapeRiskOverview,
+  getLandscapeSchemas,
+  getSchemaObjects,
   type LandscapeSummary,
-  type LandscapeRiskOverview,
+  type SchemaRiskSummary,
   type RiskObject,
 } from "@/lib/api/landscape";
 
 // ── helpers ────────────────────────────────────────────────────────
 
-function riskColor(level: string): string {
-  if (level === "HIGH") return "text-red-600";
-  if (level === "MEDIUM") return "text-td-orange";
-  return "text-td-downstream";
-}
-
-function riskBg(level: string): string {
-  if (level === "HIGH") return "bg-red-50 border-red-200";
-  if (level === "MEDIUM") return "bg-orange-50 border-orange-200";
-  return "bg-green-50 border-green-200";
+function riskBadge(level: string): string {
+  if (level === "HIGH") return "bg-red-100 text-red-700 border border-red-200";
+  if (level === "MEDIUM") return "bg-orange-100 text-orange-700 border border-orange-200";
+  return "bg-green-100 text-green-700 border border-green-200";
 }
 
 function ScoreBar({ score }: { score: number }) {
   const pct = Math.round(score * 100);
-  const color = score >= 0.6 ? "bg-red-400" : score >= 0.3 ? "bg-td-orange" : "bg-td-downstream";
+  const color =
+    score >= 0.6 ? "bg-red-400" : score >= 0.3 ? "bg-td-orange" : "bg-td-downstream";
   return (
     <div className="flex items-center gap-2 mt-1">
       <div className="flex-1 bg-gray-200 rounded-full h-1.5">
         <div className={`${color} h-1.5 rounded-full`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[10px] text-td-gray-dark w-8 text-right">{pct}%</span>
+      <span className="text-[10px] text-td-gray-dark w-8 text-right tabular-nums">{pct}%</span>
     </div>
   );
 }
 
-function RiskObjectCard({ obj, rank }: { obj: RiskObject; rank: number }) {
+// ── Level-1: schema card ───────────────────────────────────────────
+
+function SchemaCard({
+  schema,
+  selected,
+  onClick,
+}: {
+  schema: SchemaRiskSummary;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const total = schema.total_objects || 1;
+  const highPct = (schema.high_count / total) * 100;
+  const medPct = (schema.medium_count / total) * 100;
+  const lowPct = (schema.low_count / total) * 100;
+
   return (
-    <li className={`rounded border p-2 ${riskBg(obj.criticality_level)}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-td-gray-dark font-mono w-4">{rank}.</span>
-          <div>
-            <p className="text-xs font-mono font-medium text-td-navy leading-tight">{obj.object_name}</p>
-            {obj.schema_name && (
-              <p className="text-[10px] text-td-gray-dark">{obj.schema_name}</p>
-            )}
-          </div>
+    <button
+      onClick={onClick}
+      className={`w-full text-left rounded-lg border p-3 transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-td-orange ${
+        selected
+          ? "border-td-orange bg-orange-50 ring-1 ring-td-orange"
+          : "border-gray-200 bg-white hover:border-td-orange/50"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Layers
+            size={13}
+            className={selected ? "text-td-orange shrink-0" : "text-td-gray-dark shrink-0"}
+          />
+          <span className="text-xs font-semibold text-td-navy font-mono truncate">
+            {schema.schema_name}
+          </span>
         </div>
-        <span className={`text-[10px] font-bold ${riskColor(obj.criticality_level)}`}>
-          {obj.criticality_level}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0 ml-1">
+          {schema.high_count > 0 && (
+            <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+              {schema.high_count}H
+            </span>
+          )}
+          <ChevronRight
+            size={12}
+            className={`text-td-gray-dark transition-transform duration-200 ${
+              selected ? "rotate-90" : ""
+            }`}
+          />
+        </div>
       </div>
-      <ScoreBar score={obj.combined_score} />
-    </li>
+
+      {/* Mini risk bar */}
+      <div className="h-1.5 rounded-full overflow-hidden flex bg-gray-100">
+        <div className="bg-red-400 transition-all" style={{ width: `${highPct}%` }} />
+        <div className="bg-td-orange transition-all" style={{ width: `${medPct}%` }} />
+        <div className="bg-td-downstream transition-all" style={{ width: `${lowPct}%` }} />
+      </div>
+
+      <p className="text-[10px] text-td-gray-dark mt-1.5 tabular-nums">
+        {schema.total_objects.toLocaleString()} objects
+      </p>
+    </button>
   );
 }
 
-// ── main component ─────────────────────────────────────────────────
+// ── Level-2: schema detail drawer ────────────────────────────────
 
-export default function LandscapePage() {
-  const [summary, setSummary] = useState<LandscapeSummary | null>(null);
-  const [overview, setOverview] = useState<LandscapeRiskOverview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [sum, ov] = await Promise.all([
-          getLandscapeSummary(10),
-          getLandscapeRiskOverview(undefined, 10),
-        ]);
-        setSummary(sum);
-        setOverview(ov);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load landscape");
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+function SchemaDrawer({
+  schema,
+  objects,
+  loading,
+  snapshotId,
+  onClose,
+}: {
+  schema: SchemaRiskSummary | null;
+  objects: RiskObject[];
+  loading: boolean;
+  snapshotId: number | null;
+  onClose: () => void;
+}) {
+  if (!schema) return null;
 
   return (
-    <PageShell
-      title="Landscape"
-      subtitle="Business-friendly portfolio view of your data estate"
-      icon={Globe2}
-    >
-      {loading && <LoadingSpinner />}
-      {error && <ErrorAlert message={error} />}
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-30 bg-black/10"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
-      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 mb-3 flex items-start gap-2">
-        <ShieldAlert size={12} className="text-blue-500 shrink-0 mt-0.5" />
-        <p className="text-[11px] text-td-gray-dark leading-relaxed">
-          Landscape is the business-owner view of the warehouse: every object scored by criticality,
-          ranked by risk, and surfaced as actionable intelligence. Criticality scores are derived from
-          PDCR usage frequency, query-count, and downstream impact depth — the higher the score, the
-          more a breakage in that object would affect the business. Use this page to spot which objects
-          need attention before a diff or deployment, and to track the overall risk posture over time.
-        </p>
-      </div>
-
-      {!loading && !error && summary && overview && (
-        <div className="space-y-6">
-
-          {/* ── KPI cards ──────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard
-              icon={Database}
-              label="Active entities"
-              value={summary.active_entity_count.toLocaleString()}
-              sub={`${summary.entity_count.toLocaleString()} total ever seen`}
-              color="text-td-navy"
-            />
-            <KpiCard
-              icon={ShieldAlert}
-              label="High-risk objects"
-              value={summary.high_risk_count.toLocaleString()}
-              sub="criticality = HIGH in latest snapshot"
-              color="text-red-600"
-            />
-            <KpiCard
-              icon={Activity}
-              label="Recent changes"
-              value={summary.recent_changes_count.toLocaleString()}
-              sub={`in snapshot #${summary.latest_snapshot_id ?? "—"}`}
-              color="text-td-orange"
-            />
-            <KpiCard
-              icon={CheckCircle2}
-              label="Risk distribution"
-              value={`${overview.risk_distribution.HIGH} · ${overview.risk_distribution.MEDIUM} · ${overview.risk_distribution.LOW}`}
-              sub="HIGH · MEDIUM · LOW"
-              color="text-td-downstream"
-            />
+      {/* Drawer panel */}
+      <aside className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-gray-200 flex flex-col z-40">
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-gray-100 bg-td-navy text-white flex items-center justify-between shrink-0">
+          <div>
+            <p className="text-[10px] text-white/50 uppercase tracking-wider">Schema</p>
+            <p className="text-sm font-semibold font-mono">{schema.schema_name}</p>
           </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X size={15} />
+          </button>
+        </div>
 
-          {/* ── risk distribution bar ──────────────────────────────── */}
-          <section className="bg-white rounded-lg border border-gray-200 p-4">
-            <h2 className="text-sm font-semibold text-td-navy mb-3">Risk distribution</h2>
-            {(() => {
-              const { HIGH, MEDIUM, LOW } = overview.risk_distribution;
-              const total = (HIGH + MEDIUM + LOW) || 1;
-              return (
-                <div className="space-y-2">
-                  {(
-                    [
-                      ["HIGH",   HIGH,   "bg-red-400"]   ,
-                      ["MEDIUM", MEDIUM, "bg-td-orange"]  ,
-                      ["LOW",    LOW,    "bg-td-downstream"],
-                    ] as [string, number, string][]
-                  ).map(([level, count, color]) => (
-                    <div key={level} className="flex items-center gap-3">
-                      <span className="w-14 text-xs font-medium text-right text-td-gray-dark">{level}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-3">
-                        <div
-                          className={`${color} h-3 rounded-full transition-all`}
-                          style={{ width: `${(count / total) * 100}%` }}
-                        />
+        {/* Schema risk summary bar */}
+        <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+            <span className="text-[10px] text-td-gray-dark tabular-nums">
+              {schema.high_count} HIGH
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-td-orange shrink-0" />
+            <span className="text-[10px] text-td-gray-dark tabular-nums">
+              {schema.medium_count} MED
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-td-downstream shrink-0" />
+            <span className="text-[10px] text-td-gray-dark tabular-nums">
+              {schema.low_count} LOW
+            </span>
+          </div>
+          <span className="ml-auto text-[10px] text-td-gray-dark tabular-nums">
+            avg {Math.round(schema.avg_score * 100)}%
+          </span>
+        </div>
+
+        {/* Level-2 object list */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner />
+            </div>
+          ) : objects.length === 0 ? (
+            <EmptyState message="No criticality data for this schema." />
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {objects.map((obj) => {
+                const tableName =
+                  obj.object_name.includes(".")
+                    ? obj.object_name.split(".").slice(1).join(".")
+                    : obj.object_name;
+                return (
+                  <li key={obj.object_name} className="px-4 py-2.5 hover:bg-gray-50 group">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-mono text-td-navy truncate">{tableName}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${riskBadge(obj.criticality_level)}`}
+                        >
+                          {obj.criticality_level}
+                        </span>
+                        {/* Level-3: link to Changes page filtered by object */}
+                        <Link
+                          href={`/changes?object=${encodeURIComponent(obj.object_name)}`}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="View changes for this object"
+                        >
+                          <ExternalLink size={11} className="text-td-orange" />
+                        </Link>
                       </div>
-                      <span className="w-24 text-xs text-td-gray-dark">
-                        {count.toLocaleString()} ({Math.round((count / total) * 100)}%)
-                      </span>
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </section>
-
-          {/* ── two-column lower section ───────────────────────────── */}
-          <div className="grid md:grid-cols-2 gap-4">
-
-            {/* Top critical objects */}
-            <section className="bg-white rounded-lg border border-gray-200 p-4">
-              <h2 className="text-sm font-semibold text-td-navy mb-3 flex items-center gap-2">
-                <TrendingUp size={14} className="text-red-500" />
-                Top critical objects
-              </h2>
-              {summary.top_risk_objects.length === 0 ? (
-                <EmptyState message="No criticality data — run a diff + import first." />
-              ) : (
-                <ol className="space-y-2">
-                  {summary.top_risk_objects.map((obj, i) => (
-                    <RiskObjectCard key={obj.object_name} obj={obj} rank={i + 1} />
-                  ))}
-                </ol>
-              )}
-            </section>
-
-            {/* At-risk: changed + high criticality */}
-            <section className="bg-white rounded-lg border border-gray-200 p-4">
-              <h2 className="text-sm font-semibold text-td-navy mb-3 flex items-center gap-2">
-                <AlertTriangle size={14} className="text-td-orange" />
-                High-risk + recently changed
-              </h2>
-              {overview.recently_changed_high_risk.length === 0 ? (
-                <p className="text-xs text-td-gray-dark py-4 text-center">
-                  No high-risk objects with recent changes — good news.
-                </p>
-              ) : (
-                <ol className="space-y-2">
-                  {overview.recently_changed_high_risk.map((obj, i) => (
-                    <RiskObjectCard key={obj.object_name} obj={obj} rank={i + 1} />
-                  ))}
-                </ol>
-              )}
-            </section>
-          </div>
-
-          {/* Latest snapshot footer */}
-          {summary.latest_snapshot_time && (
-            <p className="text-[11px] text-td-gray-dark text-right">
-              Based on snapshot #{summary.latest_snapshot_id} ·{" "}
-              {new Date(summary.latest_snapshot_time).toLocaleString()}
-            </p>
+                    <ScoreBar score={obj.combined_score} />
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
-      )}
 
-      {!loading && !error && !summary && (
-        <EmptyState message="No data available — import at least one snapshot first." />
-      )}
-    </PageShell>
+        {/* Footer — view changes link */}
+        <div className="px-4 py-2.5 border-t border-gray-100 shrink-0">
+          <Link
+            href={`/changes?schema=${encodeURIComponent(schema.schema_name)}`}
+            className="flex items-center gap-1.5 text-xs text-td-orange hover:underline"
+          >
+            <Activity size={12} />
+            View all changes in {schema.schema_name}
+          </Link>
+        </div>
+      </aside>
+    </>
   );
 }
 
-// ── KPI card sub-component ─────────────────────────────────────────
+// ── KPI card ──────────────────────────────────────────────────────
 
 function KpiCard({
   icon: Icon,
@@ -257,8 +259,213 @@ function KpiCard({
         <Icon size={14} className={color} />
         <span className="text-xs text-td-gray-dark">{label}</span>
       </div>
-      <p className={`text-xl font-bold ${color} leading-tight`}>{value}</p>
+      <p className={`text-xl font-bold ${color} leading-tight tabular-nums`}>{value}</p>
       <p className="text-[10px] text-td-gray-dark mt-0.5">{sub}</p>
     </div>
+  );
+}
+
+// ── main page ─────────────────────────────────────────────────────
+
+export default function LandscapePage() {
+  const [summary, setSummary] = useState<LandscapeSummary | null>(null);
+  const [schemas, setSchemas] = useState<SchemaRiskSummary[]>([]);
+  const [selectedSchema, setSelectedSchema] = useState<SchemaRiskSummary | null>(null);
+  const [schemaObjects, setSchemaObjects] = useState<RiskObject[]>([]);
+  const [loadingMain, setLoadingMain] = useState(true);
+  const [loadingObjects, setLoadingObjects] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoadingMain(true);
+      setError(null);
+      try {
+        const [sum, schs] = await Promise.all([
+          getLandscapeSummary(10),
+          getLandscapeSchemas(),
+        ]);
+        setSummary(sum);
+        setSchemas(schs);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load landscape");
+      } finally {
+        setLoadingMain(false);
+      }
+    }
+    load();
+  }, []);
+
+  const handleSchemaClick = useCallback(
+    async (schema: SchemaRiskSummary) => {
+      if (selectedSchema?.schema_name === schema.schema_name) {
+        setSelectedSchema(null);
+        setSchemaObjects([]);
+        return;
+      }
+      setSelectedSchema(schema);
+      setSchemaObjects([]);
+      setLoadingObjects(true);
+      try {
+        const objs = await getSchemaObjects(
+          schema.schema_name,
+          summary?.latest_snapshot_id ?? undefined,
+        );
+        setSchemaObjects(objs);
+      } catch {
+        setSchemaObjects([]);
+      } finally {
+        setLoadingObjects(false);
+      }
+    },
+    [selectedSchema, summary],
+  );
+
+  // Aggregate risk distribution from schemas
+  const globalDist = schemas.reduce(
+    (acc, s) => ({
+      HIGH: acc.HIGH + s.high_count,
+      MEDIUM: acc.MEDIUM + s.medium_count,
+      LOW: acc.LOW + s.low_count,
+    }),
+    { HIGH: 0, MEDIUM: 0, LOW: 0 },
+  );
+
+  return (
+    <>
+      <PageShell
+        title="Landscape"
+        subtitle="Business-friendly portfolio view of your data estate"
+        icon={LayoutGrid}
+      >
+        {loadingMain && <LoadingSpinner />}
+        {error && <ErrorAlert message={error} />}
+
+        {!loadingMain && !error && summary && (
+          <div
+            className={`space-y-5 transition-all duration-300 ${selectedSchema ? "mr-96" : ""}`}
+          >
+            {/* ── Level 0: KPI cards ──────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                icon={Database}
+                label="Active objects"
+                value={summary.active_entity_count.toLocaleString()}
+                sub={`${summary.entity_count.toLocaleString()} total`}
+                color="text-td-navy"
+              />
+              <KpiCard
+                icon={ShieldAlert}
+                label="High-risk"
+                value={summary.high_risk_count.toLocaleString()}
+                sub="latest snapshot"
+                color="text-red-600"
+              />
+              <KpiCard
+                icon={Activity}
+                label="Recent changes"
+                value={summary.recent_changes_count.toLocaleString()}
+                sub={`snapshot #${summary.latest_snapshot_id ?? "—"}`}
+                color="text-td-orange"
+              />
+              <KpiCard
+                icon={Layers}
+                label="Schemas"
+                value={schemas.length.toLocaleString()}
+                sub="in latest snapshot"
+                color="text-td-downstream"
+              />
+            </div>
+
+            {/* ── Risk distribution bar ────────────────────────────── */}
+            {(globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) > 0 && (
+              <section className="bg-white rounded-lg border border-gray-200 p-4">
+                <h2 className="text-sm font-semibold text-td-navy mb-3">Risk distribution</h2>
+                {(() => {
+                  const total =
+                    (globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) || 1;
+                  return (
+                    <div className="space-y-2">
+                      {(
+                        [
+                          ["HIGH",   globalDist.HIGH,   "bg-red-400"]       ,
+                          ["MEDIUM", globalDist.MEDIUM, "bg-td-orange"]      ,
+                          ["LOW",    globalDist.LOW,    "bg-td-downstream"]  ,
+                        ] as [string, number, string][]
+                      ).map(([level, count, color]) => (
+                        <div key={level} className="flex items-center gap-3">
+                          <span className="w-14 text-xs font-medium text-right text-td-gray-dark">
+                            {level}
+                          </span>
+                          <div className="flex-1 bg-gray-100 rounded-full h-3">
+                            <div
+                              className={`${color} h-3 rounded-full transition-all`}
+                              style={{ width: `${(count / total) * 100}%` }}
+                            />
+                          </div>
+                          <span className="w-24 text-xs text-td-gray-dark tabular-nums">
+                            {count.toLocaleString()} ({Math.round((count / total) * 100)}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </section>
+            )}
+
+            {/* ── Level 1: schema grid ─────────────────────────────── */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp size={14} className="text-td-navy" />
+                <h2 className="text-sm font-semibold text-td-navy">Schemas by risk</h2>
+                <span className="text-[10px] text-td-gray-dark">
+                  — click a schema to drill down
+                </span>
+              </div>
+
+              {schemas.length === 0 ? (
+                <EmptyState message="No schema data — import a snapshot with criticality scores first." />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {schemas.map((s) => (
+                    <SchemaCard
+                      key={s.schema_name}
+                      schema={s}
+                      selected={selectedSchema?.schema_name === s.schema_name}
+                      onClick={() => handleSchemaClick(s)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Snapshot footer */}
+            {summary.latest_snapshot_time && (
+              <p className="text-[11px] text-td-gray-dark text-right">
+                Based on snapshot #{summary.latest_snapshot_id} ·{" "}
+                {new Date(summary.latest_snapshot_time).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!loadingMain && !error && !summary && (
+          <EmptyState message="No data available — import at least one snapshot first." />
+        )}
+      </PageShell>
+
+      {/* Level-2 drawer — outside PageShell, covers full viewport height */}
+      <SchemaDrawer
+        schema={selectedSchema}
+        objects={schemaObjects}
+        loading={loadingObjects}
+        snapshotId={summary?.latest_snapshot_id ?? null}
+        onClose={() => {
+          setSelectedSchema(null);
+          setSchemaObjects([]);
+        }}
+      />
+    </>
   );
 }
