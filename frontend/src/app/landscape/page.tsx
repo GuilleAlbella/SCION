@@ -56,19 +56,34 @@ function ScoreBar({ score }: { score: number }) {
 
 // ── Level-1: schema card ───────────────────────────────────────────
 
+function healthStatus(schema: SchemaRiskSummary): {
+  label: string;
+  dotColor: string;
+  textColor: string;
+} {
+  if (schema.high_count > 0)
+    return { label: "Needs attention", dotColor: "bg-red-500", textColor: "text-red-600" };
+  if (schema.medium_count > 0)
+    return { label: "Monitoring", dotColor: "bg-td-orange", textColor: "text-orange-600" };
+  return { label: "Healthy", dotColor: "bg-td-downstream", textColor: "text-green-600" };
+}
+
 function SchemaCard({
   schema,
   selected,
+  hasRecentChange,
   onClick,
 }: {
   schema: SchemaRiskSummary;
   selected: boolean;
+  hasRecentChange: boolean;
   onClick: () => void;
 }) {
   const total = schema.total_objects || 1;
   const highPct = (schema.high_count / total) * 100;
   const medPct = (schema.medium_count / total) * 100;
   const lowPct = (schema.low_count / total) * 100;
+  const health = healthStatus(schema);
 
   return (
     <button
@@ -79,6 +94,7 @@ function SchemaCard({
           : "border-gray-200 bg-white hover:border-td-orange/50"
       }`}
     >
+      {/* Schema name row */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <Layers
@@ -89,19 +105,23 @@ function SchemaCard({
             {schema.schema_name}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 ml-1">
-          {schema.high_count > 0 && (
-            <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
-              {schema.high_count}H
-            </span>
-          )}
-          <ChevronRight
-            size={12}
-            className={`text-td-gray-dark transition-transform duration-200 ${
-              selected ? "rotate-90" : ""
-            }`}
-          />
-        </div>
+        <ChevronRight
+          size={12}
+          className={`text-td-gray-dark transition-transform duration-200 shrink-0 ml-1 ${
+            selected ? "rotate-90" : ""
+          }`}
+        />
+      </div>
+
+      {/* Health status row */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${health.dotColor}`} />
+        <span className={`text-[10px] font-medium ${health.textColor}`}>{health.label}</span>
+        {hasRecentChange && (
+          <span className="ml-auto text-[9px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded">
+            changed
+          </span>
+        )}
       </div>
 
       {/* Mini risk bar */}
@@ -111,8 +131,14 @@ function SchemaCard({
         <div className="bg-td-downstream transition-all" style={{ width: `${lowPct}%` }} />
       </div>
 
+      {/* Object count */}
       <p className="text-[10px] text-td-gray-dark mt-1.5 tabular-nums">
-        {schema.total_objects.toLocaleString()} objects
+        {schema.total_objects.toLocaleString()} object{schema.total_objects !== 1 ? "s" : ""}
+        {schema.high_count > 0 && (
+          <span className="text-red-600 font-medium">
+            {" · "}{schema.high_count} critical
+          </span>
+        )}
       </p>
     </button>
   );
@@ -366,6 +392,22 @@ export default function LandscapePage() {
     { HIGH: 0, MEDIUM: 0, LOW: 0 },
   );
 
+  // Schemas that have recently changed high-risk objects
+  const recentlyChangedSchemas = new Set(
+    (riskOverview?.recently_changed_high_risk ?? []).map((o) => o.schema_name),
+  );
+
+  // Sort schemas by business impact: HIGH desc → MEDIUM desc → total desc
+  const sortedSchemas = [...schemas].sort(
+    (a, b) =>
+      b.high_count - a.high_count ||
+      b.medium_count - a.medium_count ||
+      b.total_objects - a.total_objects,
+  );
+
+  const needAttentionCount = schemas.filter((s) => s.high_count > 0).length;
+  const recentChangeCount = recentlyChangedSchemas.size;
+
   return (
     <>
       <PageShell
@@ -536,23 +578,37 @@ export default function LandscapePage() {
 
             {/* ── Level 1: schema grid ─────────────────────────────── */}
             <section>
-              <div className="flex items-center gap-2 mb-3">
-                <TrendingUp size={14} className="text-td-navy" />
-                <h2 className="text-sm font-semibold text-td-navy">Schemas by risk</h2>
-                <span className="text-[10px] text-td-gray-dark">
-                  — click a schema to drill down
-                </span>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={14} className="text-td-navy" />
+                  <h2 className="text-sm font-semibold text-td-navy">Your data estate</h2>
+                </div>
+                <p className="text-[10px] text-td-gray-dark">
+                  {schemas.length} schema{schemas.length !== 1 ? "s" : ""}
+                  {needAttentionCount > 0 && (
+                    <span className="text-red-600 font-medium">
+                      {" · "}{needAttentionCount} need{needAttentionCount === 1 ? "s" : ""} attention
+                    </span>
+                  )}
+                  {recentChangeCount > 0 && (
+                    <span className="text-orange-600 font-medium">
+                      {" · "}{recentChangeCount} changed recently
+                    </span>
+                  )}
+                  <span className="text-td-gray-dark"> — click to drill down</span>
+                </p>
               </div>
 
               {schemas.length === 0 ? (
                 <EmptyState message="No schema data — import a snapshot with criticality scores first." />
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {schemas.map((s) => (
+                  {sortedSchemas.map((s) => (
                     <SchemaCard
                       key={s.schema_name}
                       schema={s}
                       selected={selectedSchema?.schema_name === s.schema_name}
+                      hasRecentChange={recentlyChangedSchemas.has(s.schema_name)}
                       onClick={() => handleSchemaClick(s)}
                     />
                   ))}
