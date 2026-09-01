@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 """Changes API (v1).
 
@@ -17,7 +17,7 @@ Non-responsibilities:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel
@@ -44,6 +44,8 @@ class ChangeItem(BaseModel):
     severity: str | None = None
     is_breaking: bool | None = None
     created_at: datetime
+    before_state: Optional[Dict[str, Any]] = None
+    after_state: Optional[Dict[str, Any]] = None
 
 
 class ChangesResponse(BaseModel):
@@ -63,7 +65,7 @@ def list_changes() -> Dict[str, Any]:  # pragma: no cover - thin HTTP wrapper
     - When no changes exist, return {"changes": []}.
     """
 
-    with Session(engine) as session:
+    with Session(bind=engine) as session:
         stmt = (
             select(ChangeEvent)
             .order_by(desc(ChangeEvent.detected_at))
@@ -85,6 +87,8 @@ def list_changes() -> Dict[str, Any]:  # pragma: no cover - thin HTTP wrapper
                 "severity": row.severity,
                 "is_breaking": row.is_breaking,
                 "created_at": row.detected_at,
+                "before_state": row.before_state,
+                "after_state": row.after_state,
             }
         )
 

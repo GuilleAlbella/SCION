@@ -36,6 +36,8 @@ class Snapshot(Base):
     # Validation pass result: list of {type, severity, message, object_name?} dicts.
     # NULL = not yet validated or zero issues.
     validation_warnings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # §2.2 Incremental Loading — "FULL" | "INCREMENTAL" | NULL (treated as FULL for legacy rows)
+    snapshot_type: Mapped[Optional[str]] = mapped_column(String, nullable=True, default="FULL")
     # §2.13 Manifest-Derived Timestamps (v2.09.00)
     # UTC time from the extractor's own clock, parsed from extract_run_id prefix.
     # NULL for parser-import and demo snapshots (no extract_run_id).

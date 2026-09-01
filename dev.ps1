@@ -108,27 +108,21 @@ if (-not (Test-Path $dbFile)) {
     Write-Ok "Database schema at HEAD"
 }
 
-# Port availability: if either port is busy, kill the occupant and
-# continue rather than bailing out. This handles the common case where
-# a previous dev session left a stale Next.js or uvicorn process running.
-function Clear-Port {
-    param([int]$Port, [string]$Label)
-    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if (-not $conns) { return }
-    $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
-    foreach ($pid in $pids) {
-        try {
-            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-            $name = if ($proc) { $proc.ProcessName } else { "unknown" }
-            Write-Warn "Port $Port busy ($name PID $pid) -- killing stale process"
-            & taskkill /PID $pid /T /F 2>$null | Out-Null
-        } catch { }
-    }
-    Start-Sleep -Milliseconds 300
+# Port availability: if either is busy we bail early instead of letting
+# the child process fail with a confusing stack trace further downstream.
+function Test-PortFree {
+    param([int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    return -not $conn
 }
-Clear-Port 8000 "backend"
-Clear-Port 3000 "frontend"
-Clear-Port 3001 "frontend (alt)"   # Next.js 16 fallback port — also used by preview servers
+if (-not (Test-PortFree 8000)) {
+    Write-Fail "Port 8000 is already in use -- stop whatever is holding it and retry"
+    exit 1
+}
+if (-not (Test-PortFree 3000)) {
+    Write-Fail "Port 3000 is already in use -- stop whatever is holding it and retry"
+    exit 1
+}
 Write-Ok "Ports 8000 and 3000 free"
 Write-Host ""
 
@@ -148,8 +142,14 @@ $backend = Start-Process -NoNewWindow -PassThru -FilePath $venvPython `
   -WorkingDirectory $backendDir
 
 Write-Info "Starting frontend (Next.js dev, port 3000)..."
-$frontend = Start-Process -NoNewWindow -PassThru -FilePath "cmd.exe" `
-  -ArgumentList "/c","npm run dev" `
+# Run node directly with the Next.js JS entry point, bypassing both
+# cmd.exe and the bash-shebang wrapper in node_modules\.bin\next.
+# cmd.exe would print "Terminate batch job?" on Ctrl+C, capturing stdin
+# and leaving the shell unresponsive after shutdown.
+$nextJS = Join-Path $frontendDir "node_modules\next\dist\bin\next"
+$frontend = Start-Process -NoNewWindow -PassThru `
+  -FilePath "node" `
+  -ArgumentList "`"$nextJS`"","dev","--port","3000" `
   -WorkingDirectory $frontendDir
 
 Start-Sleep -Seconds 1

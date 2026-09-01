@@ -84,6 +84,15 @@ def import_lineage(
             "of creating a new one. Use after a dict import to produce a unified snapshot."
         ),
     ),
+    is_full_dump: bool = Query(
+        default=True,
+        description=(
+            "True (default): payload contains the complete EDW state — stored as a FULL snapshot. "
+            "False: payload contains only changed objects — stored as INCREMENTAL and back-filled "
+            "from the most recent FULL snapshot for the same source_system. "
+            "A 400 is returned if no prior FULL snapshot exists."
+        ),
+    ),
 ) -> Dict[str, Any]:
     """Ingest a parser lineage payload into SCION.
 
@@ -115,11 +124,18 @@ def import_lineage(
     if dry_run_mode:
         report = dry_run.analyze(parsed)
     else:
-        report = ingestor.ingest(
-            parsed,
-            source_system=source_system,
-            description=description,
-            attach_to_snapshot_id=attach_to_snapshot_id,
-        )
+        try:
+            report = ingestor.ingest(
+                parsed,
+                source_system=source_system,
+                description=description,
+                attach_to_snapshot_id=attach_to_snapshot_id,
+                is_full_dump=is_full_dump,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            )
 
     return _report_to_response(report)

@@ -1,4 +1,4 @@
-﻿"""Persist a `ParsedLineagePayload` into SCION's database tables.
+"""Persist a `ParsedLineagePayload` into SCION's database tables.
 
 Produces:
 
@@ -14,12 +14,12 @@ Produces:
 
 Stubs used until parser v2 lands:
 
-- ``table_snapshot.object_type`` â†’ ``"UNKNOWN"`` if parser didn't send
+- ``table_snapshot.object_type`` → ``"UNKNOWN"`` if parser didn't send
   ``datasetType``. Will switch to the real value automatically when Rahul
   adds it.
-- ``column_snapshot.data_type`` â†’ ``"UNKNOWN"``. Same story.
-- ``column_snapshot.nullable`` â†’ ``True`` (permissive default).
-- ``column_snapshot.ordinal_position`` â†’ deterministic index within table.
+- ``column_snapshot.data_type`` → ``"UNKNOWN"``. Same story.
+- ``column_snapshot.nullable`` → ``True`` (permissive default).
+- ``column_snapshot.ordinal_position`` → deterministic index within table.
 """
 
 from __future__ import annotations
@@ -29,9 +29,9 @@ from typing import Dict, List, Optional, Tuple
 from .parser_models import IngestionReport, ParsedLineagePayload
 
 # NOTE: All SQLAlchemy model imports are done LAZILY inside `ingest()`.
-# The project uses `app.db.base` as the eager-import aggregator â€” importing
+# The project uses `app.db.base` as the eager-import aggregator — importing
 # any model at module load here creates a circular import chain through
-# base.py â†’ diff_models â†’ column_snapshot â†’ â€¦ while base.py is still
+# base.py → diff_models → column_snapshot → … while base.py is still
 # initializing. Late imports avoid the cycle and match the pattern used by
 # the rest of `app/api/v1/` endpoints.
 
@@ -42,10 +42,11 @@ def ingest(
     source_system: Optional[str] = None,
     description: Optional[str] = None,
     attach_to_snapshot_id: Optional[int] = None,
+    is_full_dump: bool = True,
 ) -> IngestionReport:
     """Persist `payload` into SCION and return an ingestion report.
 
-    All inserts happen within a single transaction â€” if any row fails,
+    All inserts happen within a single transaction — if any row fails,
     the whole snapshot is rolled back. Caller gets the surrogate snapshot_id.
 
     Args:
@@ -56,6 +57,14 @@ def ingest(
         attach_to_snapshot_id: If given, lineage data is attached to this
             existing snapshot instead of creating a new one. Useful for
             unified imports where dict data was already ingested first.
+        is_full_dump: When True (default) the payload contains the complete
+            EDW state and a new FULL snapshot is created.  When False the
+            payload is treated as incremental: objects *not* present in the
+            payload are copied from the most recent FULL snapshot for the
+            same source_system so every persisted snapshot is always a
+            complete picture that the diff engine can compare without
+            special-casing.  Raises ValueError if no prior FULL snapshot
+            exists for the source_system.
 
     Returns:
         `IngestionReport` with snapshot_id, input counts, and persisted counts.
@@ -65,7 +74,7 @@ def ingest(
     # predictable order before we pull in individual ORM classes. This works
     # around a cold-start circular-import that otherwise fires when the very
     # first model resolution in a process is `ColumnSnapshot`.
-    import app.db.base  # noqa: F401 â€” side-effect eager load
+    import app.db.base  # noqa: F401 — side-effect eager load
 
     from sqlalchemy.orm import Session
     from app.db.engine import engine
@@ -93,11 +102,14 @@ def ingest(
         "processes": 0, "steps": 0, "attribute_lineage": 0,
     }
 
-    with Session(engine) as session:
+    with Session(bind=engine) as session:
         with session.begin():
-            # â”€â”€â”€â”€ 1. Create or reuse Snapshot row â”€â”€â”€â”€
+            from sqlalchemy import select as _select
+
+            # ──── 1. Create or reuse Snapshot row ────
+            resolved_source = source_system or f"parser:{payload.platform.platform_natural_key}"
+
             if attach_to_snapshot_id is not None:
-                from sqlalchemy import select as _select
                 snap = session.execute(
                     _select(Snapshot).where(Snapshot.snapshot_id == attach_to_snapshot_id)
                 ).scalar_one_or_none()
@@ -107,21 +119,71 @@ def ingest(
                         status_code=404,
                         detail=f"Snapshot {attach_to_snapshot_id} not found.",
                     )
-            else:
+                baseline_snap = None
+            elif not is_full_dump:
+                # INCREMENTAL: find the most recent FULL snapshot for this source_system.
+                baseline_snap = session.execute(
+                    _select(Snapshot)
+                    .where(
+                        Snapshot.source_system == resolved_source,
+                        Snapshot.snapshot_type == "FULL",
+                    )
+                    .order_by(Snapshot.snapshot_id.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
+                if baseline_snap is None:
+                    raise ValueError(
+                        f"No FULL snapshot found for source_system={resolved_source!r}. "
+                        "Import a full dump before sending an incremental payload."
+                    )
                 snap = Snapshot(
                     snapshot_time=payload.parse_timestamp,
-                    source_system=source_system
-                        or f"parser:{payload.platform.platform_natural_key}",
-                    description=description
-                        or f"Parser run {payload.parse_run_id}",
+                    source_system=resolved_source,
+                    description=description or f"Incremental parser run {payload.parse_run_id}",
                     is_baseline=False,
+                    snapshot_type="INCREMENTAL",
+                    baseline_snapshot_id=baseline_snap.snapshot_id,
+                )
+                session.add(snap)
+                session.flush()
+            else:
+                # FULL import — detect a gap: a new FULL arriving when a prior FULL
+                # already exists signals a reset (the caller skipped incrementals and
+                # re-dumped everything, usually due to a data gap on their side).
+                prior_full = session.execute(
+                    _select(Snapshot)
+                    .where(
+                        Snapshot.source_system == resolved_source,
+                        Snapshot.snapshot_type == "FULL",
+                    )
+                    .order_by(Snapshot.snapshot_id.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
+                gap = prior_full is not None  # second+ FULL → implies a reset / gap
+
+                baseline_snap = None
+                snap = Snapshot(
+                    snapshot_time=payload.parse_timestamp,
+                    source_system=resolved_source,
+                    description=description or f"Parser run {payload.parse_run_id}",
+                    is_baseline=False,
+                    snapshot_type="FULL",
+                    gap_detected=gap,
                 )
                 session.add(snap)
                 session.flush()  # force PK assignment so FKs below can reference it
+
+                if gap:
+                    report.warnings.append(
+                        f"FULL import received while a prior FULL snapshot exists for "
+                        f"source_system={resolved_source!r} (snapshot #{prior_full.snapshot_id}). "
+                        "This is treated as a baseline reset — a data gap is assumed on the "
+                        "sender's side. The new snapshot becomes the active day-zero baseline."
+                    )
             report.snapshot_id = snap.snapshot_id
 
-            # â”€â”€â”€â”€ 2. Containers â†’ schema_snapshot â”€â”€â”€â”€
-            # Maps container natural key â†’ inserted schema_id for dataset lookups.
+            # ──── 2. Containers → schema_snapshot ────
+            # Maps container natural key → inserted schema_id for dataset lookups.
             schema_id_by_container: Dict[str, int] = {}
             for c in payload.containers:
                 schema_row = SchemaSnapshot(
@@ -133,10 +195,10 @@ def ingest(
                 schema_id_by_container[c.container_natural_key] = schema_row.schema_id
                 persisted["databases"] += 1
 
-            # â”€â”€â”€â”€ 3. Datasets â†’ table_snapshot + graph_node â”€â”€â”€â”€
+            # ──── 3. Datasets → table_snapshot + graph_node ────
             # The parser's dataset name is "container.table"; we strip the
             # container prefix to match SCION's existing table_name format.
-            # Datasets orphaned (no container match) are skipped â€” that can
+            # Datasets orphaned (no container match) are skipped — that can
             # happen when noise_filter dropped the container but left a
             # dataset referencing it.
             table_id_by_dataset: Dict[str, int] = {}
@@ -146,7 +208,7 @@ def ingest(
                 if schema_id is None:
                     report.warnings.append(
                         f"Dataset {d.dataset_natural_key!r} has unknown container "
-                        f"{d.container_natural_key!r} â€” skipped."
+                        f"{d.container_natural_key!r} — skipped."
                     )
                     continue
 
@@ -178,7 +240,7 @@ def ingest(
                 node_id_by_dataset[d.dataset_natural_key] = node.node_id
                 persisted["graph_nodes"] += 1
 
-            # â”€â”€â”€â”€ 4. Attributes â†’ column_snapshot â”€â”€â”€â”€
+            # ──── 4. Attributes → column_snapshot ────
             # Group by dataset so we can assign deterministic ordinal positions
             # when the parser hasn't emitted them. Order within group uses
             # first-seen (list position) as a stable proxy.
@@ -189,7 +251,7 @@ def ingest(
                     # Attribute's table was filtered out or unknown.
                     report.warnings.append(
                         f"Attribute {a.attribute_natural_key!r} has unknown "
-                        f"dataset {a.dataset_natural_key!r} â€” skipped."
+                        f"dataset {a.dataset_natural_key!r} — skipped."
                     )
                     continue
 
@@ -216,7 +278,7 @@ def ingest(
                 session.add(col)
                 persisted["columns"] += 1
 
-            # â”€â”€â”€â”€ 5. Processes and steps â”€â”€â”€â”€
+            # ──── 5. Processes and steps ────
             # Two passes: processes first so steps can reference the FK.
             process_id_by_natural: Dict[str, int] = {}
             for p in payload.processes:
@@ -239,7 +301,7 @@ def ingest(
                 if process_id is None:
                     report.warnings.append(
                         f"Step {s.step_natural_key!r} references unknown "
-                        f"process {s.process_natural_key!r} â€” skipped."
+                        f"process {s.process_natural_key!r} — skipped."
                     )
                     continue
 
@@ -257,7 +319,7 @@ def ingest(
                 session.add(step_row)
                 persisted["steps"] += 1
 
-            # â”€â”€â”€â”€ 6. Dataset lineage â†’ graph_edge â”€â”€â”€â”€
+            # ──── 6. Dataset lineage → graph_edge ────
             # `node_id_by_dataset` was built in step 3; edges to unknown
             # datasets are dropped (noise_filter should have done it, but
             # we double-check here so nothing dangling slips through).
@@ -274,8 +336,8 @@ def ingest(
                 if src is None or tgt is None:
                     report.warnings.append(
                         f"Dataset lineage edge "
-                        f"{e.source_dataset_natural_key!r} â†’ "
-                        f"{e.target_dataset_natural_key!r} has missing endpoint â€” skipped."
+                        f"{e.source_dataset_natural_key!r} → "
+                        f"{e.target_dataset_natural_key!r} has missing endpoint — skipped."
                     )
                     continue
 
@@ -300,7 +362,7 @@ def ingest(
                 session.add(edge)
                 persisted["graph_edges"] += 1
 
-            # â”€â”€â”€â”€ 6.5. Resolve UNKNOWN-schema references via attribute lineage â”€â”€â”€â”€
+            # ──── 6.5. Resolve UNKNOWN-schema references via attribute lineage ────
             # The parser emits UNKNOWN.<Name> when it can't infer the schema
             # from the SQL context. Noise-filter drops those datasets as
             # unresolvable containers, so their edges are missing from step 6.
@@ -308,7 +370,7 @@ def ingest(
             # endpoint. If the bare object name uniquely matches exactly one
             # real node in this snapshot, we emit the graph_edge so lineage
             # remains visible. Ambiguous names (same table in multiple schemas)
-            # are skipped â€” better to show nothing than to show the wrong link.
+            # are skipped — better to show nothing than to show the wrong link.
             node_ids_by_bare_name: Dict[str, List[int]] = {}
             for key, nid in node_id_by_dataset.items():
                 if "." in key:
@@ -357,7 +419,7 @@ def ingest(
                 session.add(edge)
                 persisted["graph_edges"] += 1
 
-            # â”€â”€â”€â”€ 7. Attribute-level lineage â”€â”€â”€â”€
+            # ──── 7. Attribute-level lineage ────
             for e in payload.attribute_lineage:
                 row = AttributeLineage(
                     snapshot_id=snap.snapshot_id,
@@ -375,22 +437,96 @@ def ingest(
                 session.add(row)
                 persisted["attribute_lineage"] += 1
 
+            # ──── 8. Incremental back-fill ────
+            # Copy schemas/tables/columns from the baseline that are not present
+            # in the incremental payload so every snapshot in the DB is complete.
+            if baseline_snap is not None:
+                from app.db.models.schema_snapshot import SchemaSnapshot
+                from app.db.models.table_snapshot import TableSnapshot
+                from app.db.models.column_snapshot import ColumnSnapshot
+
+                # Collect the schema natural keys the parser already sent.
+                incremental_schemas = {c.container_natural_key for c in payload.containers}
+                incremental_datasets = {d.dataset_natural_key for d in payload.datasets}
+
+                # Load baseline schemas not covered by this incremental.
+                baseline_schemas = session.execute(
+                    _select(SchemaSnapshot).where(
+                        SchemaSnapshot.snapshot_id == baseline_snap.snapshot_id,
+                        SchemaSnapshot.schema_name.notin_(incremental_schemas),
+                    )
+                ).scalars().all()
+
+                for bs in baseline_schemas:
+                    new_schema = SchemaSnapshot(
+                        snapshot_id=snap.snapshot_id,
+                        schema_name=bs.schema_name,
+                    )
+                    session.add(new_schema)
+                    session.flush()
+                    schema_id_by_container[bs.schema_name] = new_schema.schema_id
+                    persisted["databases"] += 1
+
+                    # Tables in this baseline schema.
+                    baseline_tables = session.execute(
+                        _select(TableSnapshot).where(
+                            TableSnapshot.schema_id == bs.schema_id,
+                        )
+                    ).scalars().all()
+
+                    for bt in baseline_tables:
+                        full_key = f"{bs.schema_name}.{bt.table_name}"
+                        if full_key in incremental_datasets:
+                            continue
+                        new_table = TableSnapshot(
+                            schema_id=new_schema.schema_id,
+                            table_name=bt.table_name,
+                            object_type=bt.object_type,
+                        )
+                        session.add(new_table)
+                        session.flush()
+                        persisted["tables"] += 1
+
+                        # Columns for this table.
+                        baseline_cols = session.execute(
+                            _select(ColumnSnapshot).where(
+                                ColumnSnapshot.table_id == bt.table_id,
+                            )
+                        ).scalars().all()
+                        for bc in baseline_cols:
+                            session.add(ColumnSnapshot(
+                                table_id=new_table.table_id,
+                                column_name=bc.column_name,
+                                data_type=bc.data_type,
+                                nullable=bc.nullable,
+                                ordinal_position=bc.ordinal_position,
+                            ))
+                            persisted["columns"] += 1
+
+                report.warnings.append(
+                    f"INCREMENTAL import: back-filled {persisted['databases'] - len(incremental_schemas)} "
+                    f"schema(s) from baseline snapshot #{baseline_snap.snapshot_id}."
+                )
+
             # Attach total object count to parser-created snapshots only. When
             # lineage is attached to an existing dict snapshot, preserve the
             # dictionary object's headline count instead of replacing it with
             # the smaller parser payload count.
             if attach_to_snapshot_id is None:
-                snap.object_count = (
-                    persisted["databases"] + persisted["tables"] + persisted["columns"]
-                )
+                total = persisted["databases"] + persisted["tables"] + persisted["columns"]
+                snap.object_count = total
+                # cumulative_object_count = total objects in the *merged* snapshot
+                # (for FULL this equals object_count; for INCREMENTAL it includes
+                # back-filled objects from the baseline, so it's the true running total).
+                snap.cumulative_object_count = total
 
     report.persisted_counts = persisted
     return report
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────────────────────────────────────────
 # Helpers
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ──────────────────────────────────────────────────────────────────────────
 
 def _strip_prefix(s: str, prefix: str) -> str:
     """Remove `prefix` from `s` if present; otherwise return `s` unchanged.
@@ -402,7 +538,7 @@ def _strip_prefix(s: str, prefix: str) -> str:
     return s[len(prefix):] if s.startswith(prefix) else s
 
 
-# Parser `datasetType` â†’ SCION `object_type`. Kept small and explicit;
+# Parser `datasetType` → SCION `object_type`. Kept small and explicit;
 # unknown values fall through as-is (uppercased). Will be extended as we
 # see more Teradata TableKind variants in real data.
 _DATASET_TYPE_MAP = {
@@ -422,7 +558,7 @@ def _map_dataset_type(dataset_type: Optional[str]) -> str:
     """Normalize parser `datasetType` to SCION's `object_type` enumeration.
 
     Until the parser emits a real value (v2 request), this just returns
-    ``"UNKNOWN"`` â€” SCION's UI already renders UNKNOWN nodes with a neutral
+    ``"UNKNOWN"`` — SCION's UI already renders UNKNOWN nodes with a neutral
     style so this is a safe placeholder.
     """
     if not dataset_type:
