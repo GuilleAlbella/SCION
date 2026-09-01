@@ -19,7 +19,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import and_, or_, select, func
 from sqlalchemy.orm import Session
 
 from app.db.engine import engine
@@ -35,6 +35,8 @@ router = APIRouter(prefix="/entity", tags=["entity"])
 
 
 class EntityResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
     entity_id: int
     entity_type: str
     schema_name: str
@@ -43,9 +45,6 @@ class EntityResponse(BaseModel):
     last_seen_snapshot_id: int
     is_active: bool
     created_at: str
-
-    class Config:
-        from_attributes = True
 
 
 class CriticalityPoint(BaseModel):
@@ -155,7 +154,9 @@ def get_entity_history(entity_id: int) -> EntityHistoryResponse:
     with Session(engine) as session:
         entity = _get_entity_or_404(entity_id, session)
 
-        # Criticality history â€” join snapshot for timestamps
+        # Criticality history — join snapshot for timestamps.
+        # §2.9: prefer entity_id join (stable across renames); fall back to
+        # object_name for rows not yet back-filled (entity_id IS NULL).
         crit_rows = session.execute(
             select(
                 ObjectCriticality.snapshot_id,
@@ -166,7 +167,15 @@ def get_entity_history(entity_id: int) -> EntityHistoryResponse:
                 ObjectCriticality.graph_score,
             )
             .join(Snapshot, ObjectCriticality.snapshot_id == Snapshot.snapshot_id)
-            .where(ObjectCriticality.object_name == entity.object_name)
+            .where(
+                or_(
+                    ObjectCriticality.entity_id == entity_id,
+                    and_(
+                        ObjectCriticality.entity_id.is_(None),
+                        ObjectCriticality.object_name == entity.object_name,
+                    ),
+                )
+            )
             .order_by(Snapshot.snapshot_time)
         ).all()
 

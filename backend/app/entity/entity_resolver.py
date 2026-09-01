@@ -28,7 +28,7 @@ from app.db.models.snapshot import Snapshot
 from app.db.models.schema_snapshot import SchemaSnapshot
 from app.db.models.table_snapshot import TableSnapshot
 from app.graph.graph_models import GraphNode
-from app.usage.usage_models import UsageEvent
+from app.usage.usage_models import ObjectCriticality, UsageEvent
 from app.diff.diff_models import ChangeEvent
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,12 @@ def resolve_entities(snapshot_id: int, session: Session) -> int:
     ).all()
 
     for node_id, object_type, schema_name, object_name in node_rows:
+        # Guard: some graph nodes have a NULL schema_name (e.g. cross-DB refs
+        # produced by the parser before schema attribution is complete).
+        # Prefixing with None would produce ".TABLE" which never matches any
+        # ObjectEntity, so skip these rows rather than generating bad FK links.
+        if not schema_name and "." not in (object_name or ""):
+            continue
         fq_name = f"{schema_name}.{object_name}" if "." not in object_name else object_name
         entity_type = (object_type or "TABLE").upper()
 
@@ -176,7 +182,29 @@ def resolve_entities(snapshot_id: int, session: Session) -> int:
                 .values(entity_id=entity.entity_id)
             )
 
-    # ── Step 5 (baseline only): retire entities no longer in the schema ────────
+    # ── Step 5: back-fill entity_id on object_criticality ──────────────
+    # §2.9 — ObjectCriticality rows computed for this snapshot gain a stable
+    # entity_id FK so get_entity_history can join by ID instead of object_name.
+    crit_rows = session.execute(
+        select(ObjectCriticality.criticality_id, ObjectCriticality.object_name)
+        .where(ObjectCriticality.snapshot_id == snapshot_id)
+        .where(ObjectCriticality.entity_id.is_(None))
+    ).all()
+
+    for crit_id, obj_name in crit_rows:
+        entity = session.execute(
+            select(ObjectEntity).where(ObjectEntity.object_name == obj_name)
+        ).scalar_one_or_none()
+        if entity is not None:
+            session.execute(
+                update(ObjectCriticality)
+                .where(ObjectCriticality.criticality_id == crit_id)
+                .values(entity_id=entity.entity_id)
+            )
+
+    session.flush()
+
+    # ── Step 6 (baseline only): retire entities no longer in the schema ────────
     # Incremental snapshots only capture diffs — a missing table does NOT mean
     # it was dropped. Only a baseline snapshot is a complete picture, so we
     # only mark entities inactive when processing a baseline.
@@ -198,12 +226,14 @@ def resolve_entities(snapshot_id: int, session: Session) -> int:
             deactivated = result.rowcount or 0
 
     logger.info(
-        "[entity-resolver] snapshot=%s upserted=%d deactivated=%d graph_nodes=%d usage_events=%d change_events=%d",
+        "[entity-resolver] snapshot=%s upserted=%d deactivated=%d "
+        "graph_nodes=%d usage_events=%d change_events=%d criticality_rows=%d",
         snapshot_id,
         resolved,
         deactivated,
         len(node_rows),
         len(usage_rows),
         len(change_rows),
+        len(crit_rows),
     )
     return resolved

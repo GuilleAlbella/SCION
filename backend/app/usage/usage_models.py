@@ -63,6 +63,10 @@ class ObjectCriticality(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
+    # §2.9 Integration Model: stable entity FK so history queries can join by
+    # ID rather than object_name string. Nullable for backward compatibility;
+    # back-filled by entity_resolver.resolve_entities() on each ingest run.
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # ``(snapshot_id, combined_score)`` is the exact ordering used by the
     # /usage criticality scorecard, the TAISA "what's most critical here?"
@@ -75,4 +79,5 @@ class ObjectCriticality(Base):
             "snapshot_id",
             "combined_score",
         ),
+        Index("ix_object_criticality_entity", "entity_id"),
     )
