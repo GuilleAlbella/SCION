@@ -13,8 +13,9 @@ import { useSelection } from "@/lib/SelectionContext";
 import { useSnapshots } from "@/lib/hooks/useSnapshots";
 import { getUsageSummary, getCriticality, getObjectUsageDetail } from "@/lib/api/usage";
 import type { ObjectUsageDetail } from "@/lib/api/usage";
-import type { CriticalityResponse, UsageSummaryItem } from "@/lib/api/types";
-import { Shield, Flame, Download, ListTree, GitBranch, X, Info } from "lucide-react";
+import type { CriticalityResponse, UsageSummaryItem, TeamUsageResponse, AppUsageResponse } from "@/lib/api/types";
+import { getUsageByTeam, getUsageByApp } from "@/lib/api/reference";
+import { Shield, Flame, Download, ListTree, GitBranch, X, Info, Users, AppWindow } from "lucide-react";
 import RiskHeatmap from "@/components/shared/RiskHeatmap";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -61,6 +62,8 @@ function UsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [objectFilter, setObjectFilter] = useState<string>("");
   const [searchItems, setSearchItems] = useState<CriticalityResponse["items"] | null>(null);
+  const [teamUsage, setTeamUsage] = useState<TeamUsageResponse | null>(null);
+  const [appUsage, setAppUsage] = useState<AppUsageResponse | null>(null);
   const filterDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Deep-link support: e.g. /usage?object=dw.sales_fact from a Changes row
@@ -152,6 +155,20 @@ function UsagePage() {
       .catch(() => {});
   }, [selectedSnap]);
 
+  // §2.10 Org breakdown — fetch team and app usage when snapshot changes.
+  // Failures are silently swallowed: org data is optional and only present
+  // once reference data has been imported via /reference.
+  useEffect(() => {
+    if (!selectedSnap) {
+      setTeamUsage(null);
+      setAppUsage(null);
+      return;
+    }
+    const snap = Number(selectedSnap);
+    getUsageByTeam(snap).then(setTeamUsage).catch(() => {});
+    getUsageByApp(snap).then(setAppUsage).catch(() => {});
+  }, [selectedSnap]);
+
   // Auto-seed criticality from an active diff, but ONLY if the user hasn't
   // already picked a snapshot manually — hence the `!selectedSnap` guard.
   // `selectedSnap` is deliberately omitted from deps to prevent re-seeding
@@ -231,10 +248,15 @@ function UsagePage() {
   // Dynamic section numbers: Usage footprint is optional (only when telemetry
   // is available). If hidden, Criticality becomes "1." and Drill-down "2."
   const hasUsageSection = !!(usage && usage.length > 0);
+  const hasOrgSection = !!(
+    (teamUsage?.teams && teamUsage.teams.length > 0) ||
+    (appUsage?.applications && appUsage.applications.length > 0)
+  );
   const sectionNums = {
     usage: 1,
     criticality: hasUsageSection ? 2 : 1,
     drilldown: hasUsageSection ? 3 : 2,
+    org: hasUsageSection ? 4 : 3,
   };
 
   return (
@@ -597,6 +619,107 @@ function UsagePage() {
             </tbody>
           </table>
         </div>
+        </GuidedSection>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════
+          SECTION 4 · Org breakdown (§2.10)
+          Only shown when reference data has been imported.
+          ═══════════════════════════════════════════════════════════ */}
+      {hasOrgSection && (
+        <GuidedSection
+          title={`${sectionNums.org}. Org breakdown`}
+          subtitle="Query volume attributed to teams and business applications"
+          icon={Users}
+          intro={
+            <>
+              Usage broken down by <strong>team</strong> (via the org hierarchy imported from HR
+              data) and by <strong>application</strong> (via the schema/table → app mappings).
+              Available once reference data is uploaded on the{" "}
+              <a href="/reference" className="underline text-primary">Reference page</a>.{" "}
+              {teamUsage?.note && (
+                <span className="text-td-gray-dark">{teamUsage.note}</span>
+              )}
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Team usage table */}
+            {teamUsage && teamUsage.teams.length > 0 && (
+              <div className="card p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Users size={14} className="text-primary" /> By team
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-td-gray-dark text-left">
+                        <th className="py-1.5 pr-3 font-medium">Team</th>
+                        <th className="py-1.5 pr-3 font-medium text-td-gray-dark text-xs">Dept</th>
+                        <th className="py-1.5 pr-3 font-medium text-right">Queries</th>
+                        <th className="py-1.5 font-medium text-right">Users</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamUsage.teams.map((t) => (
+                        <tr key={t.team_name} className="border-b border-border/50 hover:bg-surface/50">
+                          <td className="py-1.5 pr-3 font-medium text-xs">{t.team_name}</td>
+                          <td className="py-1.5 pr-3 text-xs text-td-gray-dark">{t.department_name ?? "—"}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-xs">{t.query_count.toLocaleString()}</td>
+                          <td className="py-1.5 text-right tabular-nums text-xs">{t.user_count.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                      {teamUsage.unmapped_query_count > 0 && (
+                        <tr className="border-t border-border">
+                          <td className="py-1.5 pr-3 text-xs text-td-gray-dark italic" colSpan={2}>Unmapped users</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-xs text-td-gray-dark">{teamUsage.unmapped_query_count.toLocaleString()}</td>
+                          <td />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* App usage table */}
+            {appUsage && appUsage.applications.length > 0 && (
+              <div className="card p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <AppWindow size={14} className="text-primary" /> By application
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-td-gray-dark text-left">
+                        <th className="py-1.5 pr-3 font-medium">Application</th>
+                        <th className="py-1.5 pr-3 font-medium text-right">Queries</th>
+                        <th className="py-1.5 pr-3 font-medium text-right">Users</th>
+                        <th className="py-1.5 font-medium text-right">Tables</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {appUsage.applications.map((a) => (
+                        <tr key={a.application_name} className="border-b border-border/50 hover:bg-surface/50">
+                          <td className="py-1.5 pr-3 font-medium text-xs">{a.application_name}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-xs">{a.query_count.toLocaleString()}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-xs">{a.user_count.toLocaleString()}</td>
+                          <td className="py-1.5 text-right tabular-nums text-xs">{a.table_count.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                      {appUsage.unmapped_query_count > 0 && (
+                        <tr className="border-t border-border">
+                          <td className="py-1.5 pr-3 text-xs text-td-gray-dark italic">Unmapped</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-xs text-td-gray-dark">{appUsage.unmapped_query_count.toLocaleString()}</td>
+                          <td /><td />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </GuidedSection>
       )}
 

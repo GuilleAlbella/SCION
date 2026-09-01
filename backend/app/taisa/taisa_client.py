@@ -474,6 +474,10 @@ class TaisaClient:
         from app.graph.impact_models import ImpactEvent
         from app.taisa.taisa_models import ReasoningEvent
         from app.usage.usage_models import UsageEvent, ObjectCriticality
+        from app.db.models.reference import (
+            TeamEntity, DepartmentEntity, UserEntity,
+            ApplicationEntity, TableApplicationMapping,
+        )
 
         q_lower = question.lower()
         # Each section becomes a block in the final prompt, separated by blank
@@ -774,6 +778,59 @@ class TaisaClient:
                 sections.append(f"LATEST TAISA REASONING:\n" + "\n".join(reas_lines))
 
         # â”€â”€ 9. Algorithm knowledge base (static â€” explains HOW SCION computes things) â”€â”€
+
+
+            # -- 10. §2.10 Org/team usage -- keyword-gated --
+            # Only injected when the question is about who uses what. Costs ~30
+            # tokens; only meaningful once reference data has been imported.
+            org_words = {
+                "team", "teams", "department", "org", "organization", "who",
+                "app", "apps", "application", "applications", "business", "unit",
+                "user", "users", "consumer", "consumers",
+            }
+            if org_words & set(q_lower.split()):
+                team_rows = session.execute(
+                    select(
+                        TeamEntity.team_name,
+                        DepartmentEntity.department_name,
+                        func.sum(UsageEvent.query_count).label("total_queries"),
+                        func.count(UserEntity.user_id.distinct()).label("user_count"),
+                    )
+                    .join(UserEntity, UserEntity.team_id == TeamEntity.team_id)
+                    .join(UsageEvent, UsageEvent.username == UserEntity.username)
+                    .outerjoin(DepartmentEntity, TeamEntity.department_id == DepartmentEntity.department_id)
+                    .group_by(TeamEntity.team_name, DepartmentEntity.department_name)
+                    .order_by(desc("total_queries"))
+                    .limit(5)
+                ).all()
+                if team_rows:
+                    team_lines = [
+                        f"  {r.team_name}"
+                        + (f" ({r.department_name})" if r.department_name else "")
+                        + f": {r.total_queries:,} queries, {r.user_count} users"
+                        for r in team_rows
+                    ]
+                    sections.append("TOP TEAMS BY USAGE:\n" + "\n".join(team_lines))
+
+                app_rows = session.execute(
+                    select(
+                        ApplicationEntity.application_name,
+                        func.count(TableApplicationMapping.mapping_id).label("table_count"),
+                    )
+                    .outerjoin(
+                        TableApplicationMapping,
+                        TableApplicationMapping.application_id == ApplicationEntity.application_id,
+                    )
+                    .group_by(ApplicationEntity.application_name)
+                    .order_by(desc("table_count"))
+                    .limit(5)
+                ).all()
+                if app_rows:
+                    app_lines = [
+                        f"  {r.application_name}: {r.table_count} mapped tables"
+                        for r in app_rows
+                    ]
+                    sections.append("TOP APPLICATIONS (by table coverage):\n" + "\n".join(app_lines))
         sections.append(SCION_ALGORITHM_KNOWLEDGE)
 
         return "\n\n".join(sections) if sections else "No data in SCION yet."
