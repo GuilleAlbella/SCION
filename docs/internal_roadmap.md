@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-08-31 · Current version: **v2.09.12 (BETA)** (`main`) / **v1.21.78** (`hotfix/rahul-round4` — mergeado en main).
+Last updated: 2026-09-02 · Current version: **v2.09.12 (BETA)** (`main`).
 
 ---
 

@@ -1,184 +1,119 @@
 # SCION Roadmap
 
 Forward-looking plan for SCION releases. Companion to `CHANGELOG.md`
-(which records what already shipped). Items below are grouped by
-release; ordering inside each release is a reasonable execution order
-but not a contract.
+(which records what already shipped) and `docs/internal_roadmap.md`
+(the detailed engineering view with decision log and owner cheat-sheet).
 
-Current version: **v1.20.00** (see `frontend/src/lib/constants.ts`).
-
----
-
-## v1.21 — Containerised deploy (in progress)
-
-Goal: one-command deploy on the test VM that ITS provisions on
-CloudBolt. Target spec confirmed in Reunion 9: 8 core / 32 GB RAM,
-single VM, SCION + Parser co-located.
-
-- **Dockerfiles**: `backend.Dockerfile` (FastAPI + uvicorn, multi-stage,
-  slim) and `frontend.Dockerfile` (Next.js standalone runtime).
-- **`docker-compose.yml`**: backend + frontend + nginx reverse proxy
-  on a single public port. Named volume for the SQLite file so
-  rebuilds don't wipe the DB.
-- **Entrypoint**: runs `backend/tools/db_init.py init` (idempotent,
-  brings the DB to head) before launching uvicorn.
-- **`.env.example`**: `NEXT_PUBLIC_API_URL`, `DATA_DIR`, `LOG_LEVEL`,
-  `DATA_REGION` (logged-only for now, used in v1.23).
-- **GHCR publish**: GitHub Action that builds and pushes
-  `ghcr.io/<owner>/scion-backend:<tag>` and `:latest` on every
-  release tag. Image visibility set to public (repo stays private).
-- **Watchtower (read-only mode)**: container that polls GHCR every 6h
-  and pulls new images automatically. No UI interaction yet.
-- **Version banner in Sidebar**: backend exposes `/api/v1/system/version`
-  (current vs. latest from GitHub releases API, cached 1h). Frontend
-  pill in the sidebar shows `v1.20.00 — Update available → v1.21.00`
-  when behind, links to release notes. **Read-only**, no in-app update
-  trigger yet (that's v1.22).
-- **Deploy README** under `docker/README.md`: how to bring SCION up on
-  a fresh CloudBolt VM, how to point it at a Teradata source, how to
-  upgrade.
-
-Acceptance: ITS hands us an empty 8c/32GB VM, we run
-`git clone && docker compose up -d`, SCION is reachable on port 80,
-and the upload flow ingests a dictionary export end-to-end.
+Current version: **v2.09.12 BETA** (see `frontend/src/lib/constants.ts`).
 
 ---
 
-## v1.22 — Self-update + portability hygiene
+## Completed phases
 
-Goal: close the deploy story and remove future migration risk.
+### Phase 0 — Foundations ✅
 
-- **In-app "Update now" button**: enable Watchtower's HTTP API,
-  add `POST /api/v1/system/update` endpoint (backend → Watchtower
-  token-protected call), wire a confirmation modal in the sidebar
-  pill. Clicking pulls + recreates containers (~30s downtime).
-- **SQL portability sweep**: replace SQLite-only constructs
-  (`INSERT OR IGNORE`, `strftime`, `julianday`, ad-hoc `||` casts) with
-  ANSI equivalents that also work on Postgres. Behaviour-preserving,
-  zero-risk, paid forward to v1.25.
-- **`DATABASE_URL` discipline**: audit that no module hardcodes the
-  SQLite path; everything reads from the env var. Add a runtime check
-  at boot that the URL is reachable.
-- **`/system/version` fix**: today the endpoint queries the SCION
-  repo's GitHub Releases API, which returns 404 anonymously because
-  the repo is private — so the "update available" pill never lights
-  up. Switch the lookup to `scion-deploy` (public) and either
-  cross-tag releases there from the SCION publish workflow or
-  publish a `LATEST.txt` in `scion-deploy` that the workflow
-  updates. Either way, the banner only matters once there is a
-  newer release than what's installed.
+7 backend engines, 13 UI pages, Pipeline 1 (parser JSON ingest), narrative
+UX with guided sections. Shipped as v1.11.00 BETA.
 
-Acceptance: a user clicks "Update" in the UI, the version pill goes
-green, and `grep -RE "INSERT OR (IGNORE|REPLACE)|strftime|julianday"
-backend/app` returns nothing.
+### Phase 1 — Pipelines 2 & 3 ✅ (done v1.21.43)
 
----
+- Pipeline 2 (data dictionary `.dat` batch) — live since v1.12
+- Pipeline 3 (PDCR usage statistics) — live since v1.21.6
+- Column-level lineage via DataDNA parser — live since v1.21.23
+- Containerised Docker deploy with GHCR images — v1.21.0
+- 165 CVEs cleared — v1.21.4
 
-## v1.23 — Multi-region readiness
+### Phase 2 — Scale & Hardening ✅ (mostly done, one item pending)
 
-Goal: meet the data-residency point Kindy raised in Reunion 9 — US
-data stays in US, EU in EU, etc. Code change is small; the bulk is
-deploy doc + telemetry hygiene.
+All major items completed by v2.09.12:
 
-- **`DATA_REGION` env var** surfaced in the Sidebar footer ("Region:
-  eu-west-1") and stamped on every log line and audit row.
-- **Region-scoped logs**: confirm that no logger ships off-region.
-  Sentry / OTLP exporters (when added) read `DATA_REGION`.
-- **Deploy guide for Azure AKS** (the option Asim flagged at
-  ~$350/month, 8c / 64GB / 200GB NVMe), one section per supported
-  region. Includes ingress config and TLS termination.
-- **CloudBolt vs. AKS decision matrix** in `docker/README.md` so the
-  field team knows which to pick per customer.
+| Item | Done | Version |
+|------|------|---------|
+| SQLite → PostgreSQL migration | ✅ | v2.00.00 |
+| Graph engine performance (SQL GROUP BY, dead-code removal) | ✅ | v2.01.00 |
+| Frontend infinite scroll (Changes, Impact) | ✅ | v2.02.00 |
+| Staging Layer (validation pipeline, import status) | ✅ | v2.03.00 |
+| Integration Model / entity layer (object_entity, cross-snapshot IDs) | ✅ | v2.03.00 |
+| Access Layer — Landscape page | ✅ | v2.03.00 |
+| Production runtime (systemd units, structured JSON logging) | ✅ | v2.04.00 |
+| Column-level lineage navigation (breadcrumb, BFS traverse) | ✅ | v2.05.00 |
+| AI column PII classification (TAISA batch, badges, filter) | ✅ | v2.06.00 |
+| Reference Data (org hierarchy + business apps, `/reference` page) | ✅ | v2.07.00 |
+| Incremental snapshot handling (baseline tracking, gap detection) | ✅ | v2.08.00 |
+| Manifest-derived timestamps in Snapshots page | ✅ | v2.09.00 |
+| Phase 2 deep audit — 25+ correctness + reliability fixes | ✅ | v2.09.01–v2.09.06 |
+| Case normalisation + change-ID search (Rahul round-3 bugs) | ✅ | v2.09.08 |
+| VIEW object type + duplicate node prevention in graph | ✅ | v2.09.11 |
 
-Acceptance: `docker/azure-aks/eu-west.md` walks a fresh deployer from
-zero to a running SCION pinned to one region in under an hour.
+**Still pending in Phase 2:**
 
----
+- **§2.15.d Progressive Disclosure UI** — Landscape and key pages rewritten
+  in business language (by dept/app, not by snapshot/schema). Kindy Flyvholm
+  confirmed this is the differentiated value. Piloting on Landscape first,
+  then extending to Changes, Intelligence, Timeline if validated by Chris/Ripley.
 
-## v1.24 — Parser integration (depends on Rahul)
+- **§2.10 pending items** — usage filter by team/dept in Usage + Intelligence
+  pages; TAISA user/app context in Q&A. Blocked on PDCR extractor providing
+  per-user rows (today only `user_count`).
 
-Goal: ingest the Tier-3 lineage edges produced by the Parser pipeline
-so `/impact` returns real numbers on dictionary-only imports
-(Transcend-class data).
-
-- **Edge ingest endpoint**: `POST /api/v1/edges/bulk` accepting the
-  format Rahul defines, validated and chunked at 900 (SQLite var
-  limit). Idempotent on `(source_id, target_id, edge_type, snapshot_id)`.
-- **Edge-source provenance**: each `graph_edge` row gains a
-  `source` column (`fk_heuristic` | `parser_feed` | `manual`) so the
-  UI can show where lineage came from and we can re-derive on demand.
-- **Compose extension**: a sidecar service in the same VM running the
-  Parser, sharing the volume that holds the SQLite file. Optional —
-  customers who run Parser elsewhere just hit the new endpoint over
-  HTTPS.
-- **`/impact` smoke test on Transcend** with parser feed loaded:
-  expected non-zero impacted-objects KPI on at least 80% of
-  changes.
-
-Blocked on: Parser output format from Rahul's team. Email sent
-2026-05-05.
+- **§2.15.c Entity-Centric view** — criticality trend chart + usage trend
+  per object. Backend `/entity/{id}/history` is ready; frontend chart
+  components pending.
 
 ---
 
-## v1.25 — Postgres migration (when needed)
+## Phase 3 — First Customer Pilot 🔴 Blocked
 
-Trigger: first multi-region or multi-tenant customer. **Not before.**
-Until then SQLite + WAL is fine and lets us iterate fast.
+**Blocked on:** Phase 2 §2.15.d, authentication, infosec clearance.
 
-- **`docker-compose.postgres.yml`** override: brings up Postgres 16
-  alongside backend, swaps `DATABASE_URL`, mounts a backup volume.
-- **Alembic migrations validated against Postgres** in CI (parallel
-  job to the existing SQLite parity test).
-- **JSON → JSONB** for the columns that benefit from indexed key
-  lookups (`change_event.metadata`, `impact_event.payload`).
-- **Backup / restore runbook**: `pg_dump` schedule, PITR config,
-  restore drill documented.
-- **Migration guide**: how to take an existing SQLite SCION instance
-  and move it to Postgres without losing history.
-
-Estimated effort once triggered: 1-2 days, given the v1.22 portability
-hygiene is in place.
+- Auth: decide HTTP Basic / SSO via Teradata IDP / reverse-proxy with
+  customer auth. `API_KEY` header auth is built in but not sufficient alone.
+- Infosec: no PII in logs, no row-level data exfiltration via TAISA.
+- Release discipline: tag v1.0-rc1, write `ROLLBACK.md`, verify Alembic
+  down-migrations end-to-end. Per `docs/release_policy.md`.
+- Use-case validation sessions with 6–8 field architects (Kindy to organise).
 
 ---
 
-## Backlog (no version pinned)
+## Phase 4 — v1.0 GA 🔴 Future
 
-- **TAISA batch reasoning cap** — the reasoning-event generator can
-  still spike memory on very large change sets. Cap + paginate.
-- **Export / report endpoints** — paginate or stream the existing
-  CSV/PDF exports (currently buffer the full result in memory).
-- **Extractor packaging** — separate Docker image for the on-prem
-  extractor that lives next to the customer's Teradata. Out of scope
-  of the main compose; ships independently when Rahul's design lands.
-- **Naming audit** — Reunion 9: Kindy noted the "lite" connotation
-  is the wrong message. Sweep README, package.json, page titles, any
-  user-visible string for residual `Kalido-lite` / `lite` mentions.
-- **CI: parity test against Postgres** — same idea as the SQLite
-  parity test, blocks merges that introduce dialect drift.
-- **Audit log UI** — surface `usage_event` and `reasoning_event` in
-  a filterable table for compliance review.
-- **SSO / RBAC** — required for any deployment that has more than one
-  human user. Likely Azure Entra (formerly AAD) given Teradata's
-  ecosystem.
+Flip `APP_STAGE` from `"BETA"` to `""` once all GA criteria in
+`docs/release_policy.md §3` are satisfied. Sign-off needed from:
+Chris (scope), Kindy (sales-readiness), Rahul (extractor stability), infosec.
 
 ---
 
-## Out of scope (for now)
+## Near-term backlog (no version pinned)
 
-These have come up in conversation and are explicitly **not** on the
-roadmap. Re-raise if priorities change.
+- **§2.3 Dict view-definition parsing** — parser team to parse view DDLs
+  from the data dictionary so SCION fills lineage gaps for views created
+  before the DBQL extraction window. Same JSON output format as Pipeline 1.
+- **§2.4 DDL timestamp merge** — keep the most recent DDL version when the
+  same object arrives from both DBQL and dict extracts. Absorbed into §2.16
+  staging validator but not yet surfaced in UI.
+- **In-app update button** — trigger `update.sh` from the sidebar version
+  pill. Backend `POST /system/update` → Watchtower API. ~1 day.
+- **TAISA batch reasoning cap** — reasoning-event generator can spike memory
+  on very large change sets. Cap + paginate.
+- **SSO / RBAC** — required for multi-user deployments. Likely Azure Entra.
+- **Audit log UI** — surface `usage_event` + `reasoning_event` in a
+  filterable table for compliance review.
+- **Per-object usage idempotency** — re-uploading the same
+  `pdcr_object_usage_*.dat` currently inserts duplicates. Needs a natural
+  key on `usage_event`.
+- **Security + ops runbooks** — pre-GA blockers tracked in `docs/SPEC.md §13.4`.
 
-- **Kubernetes-native deploy (Helm chart)** — overkill for the
-  single-VM topology Rahul described. Revisit if a customer asks.
+---
+
+## Out of scope
+
+- **Kubernetes Helm chart** — overkill for single-VM topology.
 - **Real-time change detection** — current model is batch-on-demand.
-  Streaming detection is a different product.
-- **Mobile UI** — desktop-first; mobile is read-only at best and not
-  a priority for the steward persona.
-- **Custom AI model fine-tuning** — TAISA uses the platform model.
-  Fine-tuning is a much bigger commitment than the value justifies
-  today.
+- **Mobile UI** — desktop-first; mobile is read-only at best.
+- **Custom LLM fine-tuning** — TAISA uses the platform model.
+- **Raw code pipeline (Pipeline 4)** — deferred until a customer asks.
+  Parsed tree is sufficient for impact + lineage today.
 
 ---
 
-*Last updated: 2026-05-06. Edit this file when scope shifts; don't let
-it drift behind reality.*
+*Last updated: 2026-09-02. Edit this file when scope shifts.*

@@ -4,7 +4,7 @@
 
 SCION is a proprietary platform that replaces Kalido within Teradata DNA. It monitors structural changes across the data warehouse, assesses impact, and provides AI-powered risk recommendations — with full TAISA conversational Q&A, "what-if" simulation, and DataDNA parser integration.
 
-**Version:** BETA v2.04.00
+**Version:** BETA v2.09.12
 
 ---
 
@@ -53,7 +53,7 @@ Snapshot → Diff → Graph & Impact → TAISA Reasoning
 |-------|-----------|
 | Backend | Python 3.11+, FastAPI, SQLAlchemy 2.0, Alembic |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
-| Database | SQLite (demo), PostgreSQL-ready |
+| Database | PostgreSQL 16 (production), SQLite (dev/demo) |
 | Charts | Recharts |
 | Graphs | React Flow (@xyflow/react) + dagre layout |
 | Data fetching | SWR + Axios |
@@ -111,7 +111,7 @@ Parser/                  # Sample payloads from the extractor team
 
 ---
 
-## UI Pages (13)
+## UI Pages (15)
 
 | Page | Description |
 |------|-------------|
@@ -128,6 +128,8 @@ Parser/                  # Sample payloads from the extractor team
 | **Timeline** | Object evolution across snapshots (accepts `?object=X`) |
 | **Alerts** | 6 alert types: breaking, high-severity, TAISA risk, broken lineage, orphan objects, hub changes |
 | **Control** | Engine stop/restart |
+| **Landscape** | Business-friendly entry point: active entities, high-risk count, risk distribution bar, top critical objects, recently changed objects. KPI cards + risk overview API. |
+| **Reference** | Org hierarchy (departments → teams → users) + business application metadata. Upload Excel/CSV. Tabs: Organisation / Applications. Usage-by-team and usage-by-app dashboards. |
 
 ### Global Features
 
@@ -190,6 +192,22 @@ Parser/                  # Sample payloads from the extractor team
 | GET | `/api/v1/intelligence/{snapshot_id}` | Governance scorecard, volatility trend |
 | GET | `/api/v1/usage` | Usage events + criticality |
 
+### Reference data, Landscape, Entity
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/reference-import/users` | Upload Excel/CSV with org hierarchy (username / team / department) |
+| POST | `/api/v1/reference-import/applications` | Upload Excel/CSV with app metadata (application / schema / table) |
+| GET | `/api/v1/reference-import/status` | Imported entity counts |
+| GET | `/api/v1/reference/teams` | Teams with department and user count |
+| GET | `/api/v1/reference/applications` | Apps with owner team and mapping counts |
+| GET | `/api/v1/reference/usage-by-team` | Usage grouped by team/dept |
+| GET | `/api/v1/reference/usage-by-app` | Usage grouped by app via schema/table mappings |
+| GET | `/api/v1/landscape/summary` | Active entities, high-risk count, recent changes, top risk objects |
+| GET | `/api/v1/landscape/risk-overview` | Risk distribution (HIGH/MEDIUM/LOW), top critical, recently changed high-risk |
+| GET | `/api/v1/entity/` | Paginated entity list, filterable by schema/type/active |
+| GET | `/api/v1/entity/{id}/history` | Full criticality + usage + change history per object |
+| GET | `/api/v1/entity/resolve` | Lookup by natural key (entity_type + FQ name) |
+
 ### Reports, Export, Timeline, Search, Alerts, DDL, Control, Schema-tree
 | Method | Path | Description |
 |--------|------|-------------|
@@ -204,7 +222,7 @@ Parser/                  # Sample payloads from the extractor team
 
 ---
 
-## Database Schema (20 tables)
+## Database Schema (30 tables)
 
 | Table | Group | Purpose |
 |-------|-------|---------|
@@ -228,6 +246,15 @@ Parser/                  # Sample payloads from the extractor team
 | `reasoning_event` | Usage & AI | TAISA reasoning results |
 | `usage_event` | Usage & AI | Usage statistics ingested from PDCR extractor |
 | `object_criticality` | Usage & AI | Combined criticality scores (60% usage + 40% graph weight) |
+| `object_entity` | Integration Model | Persistent cross-snapshot entity layer — unique per (entity_type, object_name) |
+| `staging_table_import` | Staging Layer | Per-table import status tracking (staged → committed / failed) |
+| `staging_column_import` | Staging Layer | Per-column import status tracking |
+| `department_entity` | Reference Data | Customer org departments |
+| `team_entity` | Reference Data | Teams within a department |
+| `user_entity` | Reference Data | Users with team and department linkage |
+| `application_entity` | Reference Data | Business applications |
+| `database_application_mapping` | Reference Data | Schema-level app ownership mapping |
+| `table_application_mapping` | Reference Data | Table-level app ownership mapping |
 
 ---
 
@@ -447,10 +474,10 @@ Top-level phases at a glance:
 
 | Phase | Status | Highlights |
 |-------|--------|------------|
-| **0 · Foundations** | ✅ Done | 7 engines, 14 UI pages, parser + dict ingest, narrative UX |
+| **0 · Foundations** | ✅ Done | 7 engines, 13 UI pages, parser + dict ingest, narrative UX |
 | **1 · Pipelines 2 & 3** | ✅ Done | Pipeline 2 (dict) live v1.12; Pipeline 3 (PDCR usage) live v1.21.6; column-level lineage v1.21.23 |
-| **2 · Scale & hardening** | 🔵 In progress | Docker deploy live (v1.21); Integration Model, ED integration, incremental snapshots |
-| **3 · First customer pilot** | 🔴 Future | Auth, infosec, release discipline (`docs/release_policy.md`) |
+| **2 · Scale & hardening** | 🟡 In flight | PostgreSQL migration done (v2.00); Staging + Integration + Access layers (v2.03–v2.09); incremental snapshots (v2.08); PII classification (v2.06); Reference data (v2.07); §2.15.d Progressive Disclosure pending |
+| **3 · First customer pilot** | 🔴 Blocked | Auth, infosec, release discipline (`docs/release_policy.md`) |
 | **4 · v1.0 GA** | 🔴 Future | Flip `APP_STAGE` from `BETA` once GA criteria are satisfied |
 
 Other docs worth reading once: `docs/use_cases.md` (what SCION does in 8 bullets), `docs/handover.md` (first-day setup for new maintainers), `docs/release_policy.md` (versioning + rollback), `docs/ingestion_pipelines.md` (architecture of the 4 input pipelines).

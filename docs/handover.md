@@ -7,7 +7,7 @@ the first time, or picking up after a context switch.
 `docs/internal_roadmap.md` (the *what's next*) and `docs/SPEC.md`
 (the *what and why*). This doc is the *how to actually do it day one*.
 
-**Current version:** v2.00.00 (2026-07-20)
+**Current version:** v2.09.12 (2026-09-02)
 
 ---
 
@@ -53,7 +53,7 @@ If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
 
 ---
 
-## 3. Current state of the codebase (as of v2.00.00)
+## 3. Current state of the codebase (as of v2.09.12)
 
 ### What's live and stable
 
@@ -63,18 +63,26 @@ If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
 | **Pipeline 2** — Data Dictionary ingest | ✅ Stable | `/dict-import`. 6-file .dat batch; idempotent on `extract_run_id`. |
 | **Pipeline 3** — PDCR usage ingest | ✅ Stable | Bundled with dict-import. Real criticality scoring (60% usage + 40% graph). |
 | **Share import** | ✅ Stable | Auto-scan, one-click Import All, manual picker, already-imported detection. |
-| **Column-level lineage** | ✅ Live since v1.21.23 | `/lineage/columns` endpoint + full panel + Column view toggle in graph. Edge labels via `EdgeLabelRenderer` (HTML, precise clicks). Indirect impacts deduplicated. Dedup key = `(src_col, tgt_col)` pair. |
-| **Graph / impact / diff / TAISA** | ✅ Stable | All engines pre-aggregating at ingest time. |
-| **Containerised deploy** | ✅ Stable | GHCR private images, one-liner installer, `update.sh`. |
+| **Column-level lineage** | ✅ Stable | `/lineage/columns` + Column view toggle + BFS navigate (breadcrumb, ←/→ buttons). Edge labels via `EdgeLabelRenderer`. |
+| **Graph / impact / diff / TAISA** | ✅ Stable | All engines pre-aggregating at ingest time. SQL GROUP BY replaces RAM-heavy Python aggregation. |
+| **Containerised deploy** | ✅ Stable | GHCR private images, one-liner installer, `update.sh`. PostgreSQL 16 in production. |
+| **Staging Layer** | ✅ Stable | Validation pipeline, import_status tracking, cross-source duplicate detection (v2.03). |
+| **Integration Model** | ✅ Backend stable | `object_entity` table + resolver hook + `/entity/` API. Frontend trend charts pending. |
+| **Reference Data** | ✅ Stable | `/reference` page — org hierarchy + app metadata. `/reference-import/users` + `/applications`. |
+| **Landscape page** | ✅ Stable | Business-friendly entry point; KPI cards, risk distribution, top critical objects (v2.03). |
+| **PII Classification** | ✅ Stable | TAISA-powered batch classify; badges + filter in column-level lineage panel (v2.06). |
+| **Incremental snapshots** | ✅ Stable | Baseline tracking, gap detection, cumulative object count (v2.08). |
+| **Manifest timestamps** | ✅ Stable | `extract_timestamp` from `extract_run_id` prefix shown in Snapshots page (v2.09). |
 
 ### Known open items / follow-ups
 
-- **Incremental snapshot handling** — today every import creates a fresh snapshot; no delta-only update path yet.
-- **DataDNA QueryID correlation** — `dbql_query` stores DBQL query text; wiring it to the Code Parser output requires the Code Parser team to ship a QueryID join key.
-- **Postgres migration** — roadmap item for when multi-tenant arrives. SQLAlchemy + Alembic do most of the work; see SPEC §7.3.
+- **§2.15.d Progressive Disclosure UI** — Landscape + key pages in business language (dept/app, not snapshot/schema). Piloting on Landscape. Validated direction by Kindy/Chris in Reunión 29.
+- **§2.10 pending UI** — usage/intelligence filters by team/dept; TAISA user/app context. Blocked on PDCR extractor providing per-user rows.
+- **Entity trend charts** — frontend criticality + usage trend charts using `/entity/{id}/history`. Backend ready.
+- **DataDNA QueryID correlation** — `dbql_query` stores DBQL text; wiring to Code Parser requires QueryID join key from parser team.
 - **Security architecture doc** — still missing (tracked in `docs/SPEC.md` §13.4).
 - **Operations / on-call runbook** — still missing (tracked in §13.4).
-- **Cross-team reference ETL fixture** — §10.10 + §11.5 in SPEC; pending Code Parser team selecting a candidate flow.
+- **Per-object usage idempotency** — re-uploading the same `pdcr_object_usage_*.dat` inserts duplicates.
 
 ### Running tests
 
@@ -150,12 +158,12 @@ Parser/                         # Code Parser contracts + sample data
 
 - **Branches:** `feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `design/<slug>`. Never push to `main` directly.
 - **Commits:** conventional commits — `feat:`, `fix:`, `chore:`, `design:`, `docs:`. Short imperative subject, optional body. CI gates on this.
-- **Versioning:** `v1.MINOR.PATCH`. Single source of truth → `frontend/src/lib/constants.ts::APP_VERSION`. Bump `README.md` + `CHANGELOG.md` in the same commit. Tag = CI publishes GHCR images.
+- **Versioning:** `vMAJOR.MINOR.PATCH` (currently v2.x). Single source of truth → `frontend/src/lib/constants.ts::APP_VERSION`. Bump `README.md` + `CHANGELOG.md` in the same commit. Tag = CI publishes GHCR images.
 - **Release flow:** `git tag vX.Y.Z && git push origin main --tags` → GitHub Actions builds and pushes GHCR images → manual deploy via `update.sh` on production VM (ps-ubuntu-0043).
 - **Comments:** explain *why*, not *what*. Match the inline-narrative style. One-line max — no multi-paragraph docstrings.
 - **Narrative UX:** any new page goes through `GuidedSection` for numbered intro-boxed sections. Keep the pattern consistent.
 - **Tests:** new backend code ships with a test in `backend/tests/`. `test_schema_parity.py` must always be green — it guards ORM/Alembic drift and is the single most important safety net.
-- **Session patterns:** use `with Session(bind=engine) as db:` (NOT `Depends(get_db)`) in new endpoints. See `backend/app/api/v1/lineage.py` for the pattern.
+- **Session patterns:** use `with Session(engine) as db:` (NOT `Session(bind=engine)` — removed in v2.09.05 — and NOT `Depends(get_db)`). See `backend/app/api/v1/lineage.py` for the canonical pattern.
 
 ---
 
@@ -210,7 +218,7 @@ Full table in `internal_roadmap.md` decision log. Highlights:
 | FK direction: referenced → fk_holder | accounts(customer_id) → customers means accounts *depends on* customers | v1.10 |
 | Dedup column lineage at API layer, not in DB | Parser intentionally stores one row per SQL step for audit trail; dedup at presentation preserves traceability | v1.21.24 |
 | Watchtower removed | 31 inherited CVEs + `docker.sock` = root-equivalent. Users run `update.sh` manually | v1.21.4 |
-| SQLite + WAL for now | Single-VM, single-tenant. Postgres on roadmap when multi-tenant arrives | Always |
+| PostgreSQL 16 in production (since v2.00) | Migration done in lab 2026-07-20; SQLite still used for local dev/demo | v2.00 |
 | "No DDL emitted to the warehouse" (NG4) | SCION is observation, not control. Generate DDL produces a *text artefact* only — it never executes | Always |
 | Code Parser has no persistent storage | It processes inputs and emits outputs; any QueryID correlation requires external orchestration | Clarified 2026-06-18 |
 
@@ -218,12 +226,12 @@ Full table in `internal_roadmap.md` decision log. Highlights:
 
 ## 8. Backlog items (none of these block anything today)
 
-1. **Postgres portability sweep** (v1.22 hygiene step) — replace `INSERT OR IGNORE` / `strftime` / `julianday` with ANSI equivalents before the Postgres migration. SQLAlchemy handles most of it; a few raw SQL strings need touching.
-2. **`tools/benchmark_ingest.py`** — end-to-end timing script. Spec in `internal_roadmap.md` §1.1. Needed before the SQLite-vs-Postgres decision at Transcend scale.
-3. **Per-object usage idempotency** — `pdcr_object_usage_*.dat` re-upload currently doesn't deduplicate (no natural key). Tracked as v1.22 follow-up.
-4. **Security architecture doc** — auth, secrets, GHCR, threat model. Pre-GA blocker per SPEC §13.4.
-5. **Operations / on-call runbook** — what to do when something fails in prod. Pre-GA blocker per SPEC §13.4.
-6. **Customer onboarding guide** — what a customer-side deployer needs to know. Pre-GA blocker per SPEC §13.4.
+1. **Per-object usage idempotency** — `pdcr_object_usage_*.dat` re-upload inserts duplicates (no natural key on `usage_event`).
+2. **Security architecture doc** — auth, secrets, GHCR, threat model. Pre-GA blocker per SPEC §13.4.
+3. **Operations / on-call runbook** — what to do when something fails in prod. Pre-GA blocker per SPEC §13.4.
+4. **Customer onboarding guide** — what a customer-side deployer needs to know. Pre-GA blocker per SPEC §13.4.
+5. **`tools/benchmark_ingest.py`** — end-to-end timing script for future scaling decisions.
+6. **Entity trend charts** — frontend components for criticality/usage trends using the `/entity/{id}/history` endpoint (backend already ready).
 
 ---
 
