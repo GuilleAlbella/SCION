@@ -7,15 +7,19 @@ the first time, or picking up after a context switch.
 `docs/internal_roadmap.md` (the *what's next*) and `docs/SPEC.md`
 (the *what and why*). This doc is the *how to actually do it day one*.
 
-**Current version:** v2.09.12 (2026-09-02)
+**Current version:** v2.09.15 (2026-09-02)
 
 ---
 
 ## 1. The docs you must read first (in order)
 
-| Order | File | Why |
+> These files are all inside the repository. Read them **after** you have
+> completed §2 (cloned and running). You don't need them to set up the app —
+> they give you the *why* behind the design decisions.
+
+| Order | File (open after cloning) | Why |
 |---|---|---|
-| 1 | `README.md` | Architecture, engines, Quick Start, API surface. |
+| 1 | `README.md` | Architecture, engines, API surface. |
 | 2 | `docs/SPEC.md` §1–§4 | What SCION is, what it deliberately isn't, tech stack. ~30 min. |
 | 3 | `docs/internal_roadmap.md` | Phases, decision log, owner cheat-sheet. |
 | 4 | `docs/use_cases.md` | What SCION does in 8 bullet points — how to explain it. |
@@ -27,33 +31,225 @@ demo walkthrough scripts — useful for end-to-end validation after a change.
 
 ---
 
-## 2. First-day checklist
+## 2. Local dev setup — step by step
 
-Clone **outside OneDrive** (see §6 — this is critical on Windows):
-
-```powershell
-# 1. Set up the venv + node_modules
-python -m venv .venv
-.venv\Scripts\pip install -r backend\requirements\dev.txt
-cd frontend && npm install && cd ..
-
-# 2. Create the SQLite DB + demo seed
-#    db_init.py is the single canonical entry point for all DB lifecycle ops.
-#    `reset --with-seed` drops everything and rebuilds with demo data.
-#    `init` is idempotent — safe to run on an existing DB.
-.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed
-
-# 3. Run both services
-.\dev.ps1
-```
-
-UI → http://localhost:3000 · API → http://localhost:8000 · OpenAPI → /docs
-
-If `dev.ps1` exits silently after starting, see the WatchFiles note in §6.
+This section is self-contained. You can follow it before you have anything
+installed. Estimated time: 30–45 minutes on a clean machine.
 
 ---
 
-## 3. Current state of the codebase (as of v2.09.12)
+### Step 1 — Install prerequisites
+
+You need three tools. Install them in this order.
+
+**Git**
+```powershell
+winget install --id Git.Git -e --source winget
+```
+Or download from https://git-scm.com/download/win and run the installer with
+all defaults.
+
+**Python 3.11**
+```powershell
+winget install --id Python.Python.3.11 -e --source winget
+```
+Or download from https://www.python.org/downloads/release/python-3119/ —
+pick "Windows installer (64-bit)". During install, **check "Add Python to PATH"**.
+
+Verify:
+```powershell
+python --version   # should print Python 3.11.x
+```
+
+**Node.js 18 LTS**
+```powershell
+winget install --id OpenJS.NodeJS.LTS -e --source winget
+```
+Or download from https://nodejs.org/en/download (choose the LTS installer).
+
+Verify:
+```powershell
+node --version   # should print v18.x.x or higher
+npm --version    # should print 9.x.x or higher
+```
+
+---
+
+### Step 2 — Get repository access
+
+Ask Guillermo (guillermo.albella@teradata.com) or Rahul Kulkarni to invite
+your **personal GitHub account** (the one linked to your Teradata email) as
+a collaborator on:
+
+- `https://github.com/GuilleAlbella/SCION` — application code
+- `https://github.com/GuilleAlbella/scion-deploy` — production deploy config
+
+You will receive an invitation email from GitHub. Accept it before continuing.
+
+---
+
+### Step 3 — Clone the repository
+
+> ⚠️ **Critical on Windows:** do NOT clone inside your OneDrive folder.
+> OneDrive silently corrupts `.git/index` over time. Clone to a plain local
+> path such as `C:\dev\`.
+
+```powershell
+# Create a clean dev directory (skip if it already exists)
+New-Item -ItemType Directory -Force C:\dev
+
+# Clone
+cd C:\dev
+git clone https://github.com/GuilleAlbella/SCION.git
+cd SCION
+```
+
+---
+
+### Step 4 — Python virtual environment
+
+Always use a venv — never install packages into the system Python.
+
+```powershell
+# From C:\dev\SCION
+python -m venv .venv
+.venv\Scripts\pip install --upgrade pip
+.venv\Scripts\pip install -r backend\requirements\dev.txt
+```
+
+If `pip install` fails with a red SSL or proxy error, you may need to add
+Teradata's internal certificate. Ask IT or Rahul Shiyekar for the `.pem` file
+and run:
+```powershell
+.venv\Scripts\pip install --cert path\to\teradata-cert.pem -r backend\requirements\dev.txt
+```
+
+---
+
+### Step 5 — Frontend dependencies
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+This installs ~500 MB of packages into `frontend\node_modules`. It only needs
+to run once (or again after a `package.json` change).
+
+---
+
+### Step 6 — AI configuration file
+
+SCION's AI assistant needs a configuration file that contains an API key.
+This file is **not in the repository** (for security reasons).
+
+Ask Guillermo to send you `taisa_llm.yaml` by email or Teams.
+Place it at:
+```
+C:\dev\SCION\backend\app\config\taisa_llm.yaml
+```
+
+Do **not** commit this file. It is already in `.gitignore`.
+
+If you don't have the file yet, the app still runs — the AI widget will
+return an error, but everything else works normally.
+
+---
+
+### Step 7 — Initialize the database
+
+```powershell
+# From C:\dev\SCION
+.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed
+```
+
+This creates `scion_dev.db` (SQLite) in the project root and loads demo data
+so you have something to explore immediately. It is safe to re-run — it drops
+and rebuilds from scratch.
+
+Expected output ends with something like:
+```
+✓ Schema applied (alembic upgrade head)
+✓ Demo seed loaded — 2 snapshots, 500+ objects
+```
+
+---
+
+### Step 8 — Run
+
+```powershell
+# From C:\dev\SCION
+.\dev.ps1
+```
+
+`dev.ps1` starts both the backend (FastAPI on port 8000) and the frontend
+(Next.js on port 3000) in the same terminal window.
+
+Open your browser at **http://localhost:3000**
+
+You should see the SCION dashboard with demo data loaded.
+
+API docs (Swagger UI) → http://localhost:8000/docs
+
+To stop: press `Ctrl+C` in the terminal.
+
+---
+
+### Step 9 — Verify everything works
+
+Run the backend test suite to confirm nothing is broken:
+
+```powershell
+.venv\Scripts\pytest backend\tests\ -v
+```
+
+Expected: all tests pass (a couple may be marked `skip` — that is normal).
+
+TypeScript check for the frontend:
+
+```powershell
+cd frontend
+npx tsc --noEmit
+cd ..
+```
+
+Expected: no output (zero errors).
+
+---
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `dev.ps1` exits immediately with no output | Open PowerShell as Administrator, run `Set-ExecutionPolicy RemoteSigned` |
+| Port 3000 or 8000 already in use | Close whatever is using it, or edit `dev.ps1` to use different ports |
+| `python: command not found` | Re-open PowerShell after Python install so PATH is refreshed |
+| `ModuleNotFoundError` on backend start | Make sure you ran `pip install` inside `.venv`, not with system Python |
+| `NEXT_PUBLIC_API_BASE_URL` warning in browser console | Normal in dev — the frontend defaults to `http://localhost:8000/api/v1` |
+| AI widget shows "Service unavailable" | `taisa_llm.yaml` is missing or has wrong key — everything else works fine |
+
+---
+
+### After setup — daily workflow
+
+```powershell
+cd C:\dev\SCION
+.\dev.ps1          # start
+# … make changes …
+# Ctrl+C            # stop
+git add <files>
+git commit -m "fix: describe what you changed"
+git push origin main
+```
+
+When the push includes a new tag (`git tag vX.Y.Z && git push origin main --tags`),
+GitHub Actions automatically builds and publishes new Docker images to GHCR.
+Production is then updated manually (see §6).
+
+---
+
+## 3. Current state of the codebase (as of v2.09.15)
 
 ### What's live and stable
 
@@ -196,10 +392,26 @@ and 8000.
 
 ### SSH key for production deploy
 Production VM (ps-ubuntu-0043, 10.27.122.64) requires the SSH key at
-`C:/Users/<you>/.ssh/scion_key`. Keep it in KeePass — never commit it.
-Deploy command:
+`C:\Users\<you>\.ssh\scion_key`. Ask Guillermo for the key file — keep it
+in KeePass, never commit it.
+
+Deploy command (run after GitHub Actions finishes building the new images):
 ```powershell
-ssh -i C:/Users/<you>/.ssh/scion_key scionadmin@10.27.122.64 "curl -fsSL https://raw.githubusercontent.com/GuilleAlbella/scion-deploy/main/update.sh | bash"
+ssh -i C:\Users\<you>\.ssh\scion_key root@10.27.122.64 "cd /var/opt/scion && docker compose pull && docker compose up -d"
+```
+
+Verify containers are healthy after deploy:
+```powershell
+ssh -i C:\Users\<you>\.ssh\scion_key root@10.27.122.64 "docker ps --format 'table {{.Names}}\t{{.Status}}'"
+```
+
+Expected output — all four containers showing `(healthy)` or `Up`:
+```
+NAMES            STATUS
+scion-frontend   Up 15 seconds (healthy)
+scion-backend    Up 21 seconds (healthy)
+scion-nginx      Up 30 minutes
+scion-postgres   Up 9 hours (healthy)
 ```
 
 ---
