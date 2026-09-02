@@ -65,9 +65,7 @@ def upgrade() -> None:
                 sa.ForeignKey("snapshot.snapshot_id"),
                 nullable=False,
             ),
-            # server_default uses SQL-standard literals compatible with both
-            # PostgreSQL and SQLite (true/now() are Postgres-only).
-            sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("1")),
+            sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("true")),
             sa.Column(
                 "created_at",
                 sa.DateTime(timezone=True),
