@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { getEntity, getEntityHistory, getEntityContext } from "@/lib/api/entity";
+import { getEntity, getEntityHistory, getEntityContext, resolveEntity } from "@/lib/api/entity";
 import type { EntityResponse, EntityHistoryResponse, EntityContextResponse } from "@/lib/api/types";
 
 export function useEntity(entityId: number | null) {
@@ -20,5 +20,13 @@ export function useEntityContext(entityId: number | null) {
   return useSWR<EntityContextResponse>(
     entityId != null ? `entity-context-${entityId}` : null,
     () => getEntityContext(entityId!),
+  );
+}
+
+export function useEntityResolve(name: string | null, type = "TABLE") {
+  return useSWR<EntityResponse>(
+    name ? `entity-resolve-${type}-${name}` : null,
+    () => resolveEntity(name!, type),
+    { shouldRetryOnError: false },
   );
 }

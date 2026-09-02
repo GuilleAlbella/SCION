@@ -15,7 +15,8 @@ import { getUsageSummary, getCriticality, getObjectUsageDetail } from "@/lib/api
 import type { ObjectUsageDetail } from "@/lib/api/usage";
 import type { CriticalityResponse, UsageSummaryItem, TeamUsageResponse, AppUsageResponse } from "@/lib/api/types";
 import { getUsageByTeam, getUsageByApp } from "@/lib/api/reference";
-import { Shield, Flame, Download, ListTree, GitBranch, X, Info, Users, AppWindow } from "lucide-react";
+import { Shield, Flame, Download, ListTree, GitBranch, X, Info, Users, AppWindow, History } from "lucide-react";
+import { useEntityResolve } from "@/lib/hooks/useEntity";
 import RiskHeatmap from "@/components/shared/RiskHeatmap";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import { GuidedSection } from "@/components/shared/GuidedSection";
@@ -114,6 +115,11 @@ function UsagePage() {
     }
     return { resolvedObject: activeObject, columnParent: null };
   }, [activeObject]);
+
+  // §2.9 — resolve focused object to its persistent entity_id so we can
+  // link to the entity history page. Silently skipped when no object is
+  // focused or the entity isn't registered yet.
+  const { data: focusedEntity } = useEntityResolve(resolvedObject);
 
   // Fetch the per-object profile whenever the focused object or the
   // selected snapshot changes. Resolves ANY object via the backend, even
@@ -339,13 +345,21 @@ function UsagePage() {
                   <div className="text-xs text-td-gray-dark mt-1">—</div>
                 )}
               </div>
-              <div className="bg-gray-50 rounded p-2 flex items-center">
+              <div className="bg-gray-50 rounded p-2 flex flex-col gap-2">
                 <Link
                   href={`/lineage?object=${encodeURIComponent(resolvedObject ?? activeObject)}&snapshot=${selectedSnap}`}
                   className="inline-flex items-center gap-1 text-xs font-medium text-td-object hover:underline"
                 >
                   <GitBranch size={12} /> View lineage
                 </Link>
+                {focusedEntity && (
+                  <Link
+                    href={`/entity/${focusedEntity.entity_id}`}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <History size={12} /> Entity history
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -586,7 +600,19 @@ function UsagePage() {
                   className={`border-t border-gray-100 cursor-pointer ${isFocused(item.object_name) ? "bg-td-orange/10" : "hover:bg-gray-50"}`}
                   title="Click to drill into this object"
                 >
-                  <td className="px-4 py-3 font-mono text-xs">{item.object_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    <span>{item.object_name}</span>
+                    {isFocused(item.object_name) && focusedEntity && (
+                      <Link
+                        href={`/entity/${focusedEntity.entity_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-2 inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline"
+                        title="View entity history"
+                      >
+                        <History size={10} /> history
+                      </Link>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">

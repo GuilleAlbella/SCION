@@ -400,8 +400,9 @@ Resolution uses the `(entity_type, schema_name, object_name)` natural key throug
 - [x] `GET /entity/{id}/history` endpoint — criticality + usage + change history across snapshots. *(v2.03.00)*
 - [x] `GET /entity/resolve` endpoint — lookup by natural key (type + FQ name). *(v2.03.00)*
 - [x] `GET /entity/` list endpoint — paginated, filterable by schema/type/active. *(v2.03.00)*
-- [ ] UI: criticality trend chart — backend history endpoint ready; frontend component pendiente.
-- [ ] UI: usage trend per object — same, pendiente frontend.
+- [x] UI: criticality trend chart — sparkline en `/entity/[id]` page + `useEntityResolve` hook. *(v2.09.x)*
+- [x] UI: usage trend per object — sparkline + usage history table en `/entity/[id]` page. *(v2.09.x)*
+- [x] UI: "Entity history" link en Usage page drill-down panel + tabla de drill-down. *(v2.09.x)*
 
 ### 2.10 Reference Data Support  ✅ COMPLETO (v2.07.00, 2026-07-20)
 
