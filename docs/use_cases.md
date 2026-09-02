@@ -52,8 +52,8 @@ table/view → column. Designed for hundred-thousand-object warehouses, not
 ### 5. Criticality-weighted change review
 *"I have 200 changes. Which 10 do I actually care about?"*
 
-Criticality engine combines graph centrality + usage (when Pipeline 3 lands)
-+ blast radius. The "HIGH" shortlist is usually 5–10% of total changes.
+Criticality engine combines graph centrality + real PDCR usage (Pipeline 3,
+live since v1.21.6) + blast radius. The "HIGH" shortlist is usually 5–10% of total changes.
 
 **Personas:** architects, data owners, planners.
 

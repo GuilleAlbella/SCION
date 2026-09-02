@@ -1,12 +1,10 @@
 # SCION — Technical Specification
 
-> **Version:** 1.21.6-spec-r11-sdd-ddd-cleanup
-> **Last Updated:** 2026-05-29 (SDD/DDD review cleanup)
-> **Status:** Complete — all 14 sections + 2 appendices, with the
-> Reunion 10 outcomes and Pipeline 3 usage ingest integrated (FR-13 graceful out-of-scope
-> handling, §10.10 end-user scenario testing, §11.5 cross-team
-> test-plan commitment, §13.4 handover-doc requirements, NG13
-> agentic AI explicitly out of scope)
+> **Version:** 2.09.12-spec-r12
+> **Last Updated:** 2026-09-02
+> **Status:** Complete — all 14 sections + 2 appendices. Reflects v2.09.12 BETA:
+> PostgreSQL 16 in production (v2.00), Staging + Integration + Access layers
+> (v2.03–v2.09), all three live pipelines (Parser v1.04, Dict v1.12, PDCR v1.21.6).
 > **Author:** Guillermo Albella, with AI-assisted drafting
 
 ---
@@ -83,19 +81,24 @@ Everything ships as **two public-facing containers + one private installer** tha
 
 > **Critical reading for newcomers.** SCION is intentionally a narrow product. The boundary below is what keeps it from becoming "the next over-scoped data platform". When in doubt, **default to "out of scope"**.
 
-| ✅ Does TODAY (v1.21.6) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
+| ✅ Does TODAY (v2.09.12) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
 |---|---|---|
-| Ingest 6-file dictionary extract from the Metadata Extractor | In-app "Update now" button (v1.22) | Parse SQL, scripts, BTEQ, or KSH — that's **the Code Parser (DataDNA)** |
-| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, v1.21.6) | Postgres migration when multi-tenant arrives (backlog) | Connect to a live Teradata over JDBC/ODBC |
-| Snapshot + diff + structural hash | Code Parser lineage feed integration — column-level lineage panel live (v1.21.23); full end-to-end scenario testing pending reference ETL fixture | Capture lineage in real time from running queries |
-| Server-side paginated change feed (Changes page) | SSO / RBAC when first multi-user deploy lands (backlog) | Edit the warehouse — SCION never sends DDL/DML/GRANT to the database |
-| Blast-radius computation + impact summaries | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Store row-level customer data — only metadata |
-| Click-to-expand graph exploration (`/graph/focus`) | Export streaming / CSV pagination (backlog) | Replace the steward — assists, never decides |
-| TAISA Q&A grounded on real metadata, bounded context | DataDNA QueryID correlation — pending Code Parser shipping the QueryID join key in its lineage feed | Provide a query optimizer or recommend index changes |
-| Usage signals + usage-weighted criticality scoring (real PDCR data, Pipeline 3) | | |
-| Snapshot-pair simulation ("what if I make this change?") | Export streaming / CSV pagination (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
-| Containerised deploy (one-liner installer Linux + Windows) | Naming audit final sweep (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
-| TAISA pre-configured in private image, no per-user setup | TAISA batch-reasoning cap (backlog) | Stream from Kafka, listen on webhooks, or push notifications externally |
+| Ingest 6-file dictionary extract from the Metadata Extractor (Pipeline 2, live v1.12) | §2.15.d Progressive Disclosure UI — business-language views by dept/app | Parse SQL, scripts, BTEQ, or KSH — that's **the Code Parser (DataDNA)** |
+| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, live v1.21.6) | §2.10 usage/intelligence filter by team/dept + TAISA user/app context | Connect to a live Teradata over JDBC/ODBC |
+| Snapshot + diff + structural hash (incremental with baseline tracking v2.08) | SSO / RBAC when first multi-user deploy lands (backlog) | Capture lineage in real time from running queries |
+| Server-side paginated change feed (Changes page) | DataDNA QueryID correlation — pending Code Parser shipping the QueryID join key | Edit the warehouse — SCION never sends DDL/DML/GRANT to the database |
+| Blast-radius computation + impact summaries (pre-aggregated at ingest time) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Store row-level customer data — only metadata |
+| Column-level lineage (BFS navigate, breadcrumb, ←/→ buttons) (v2.05) | Entity trend charts — backend ready, frontend pending | Replace the steward — assists, never decides |
+| TAISA Q&A grounded on real metadata, bounded context | In-app update button — trigger `update.sh` from sidebar version pill | Provide a query optimizer or recommend index changes |
+| Usage signals + usage-weighted criticality scoring (60% usage + 40% graph) | TAISA batch-reasoning cap (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
+| Snapshot-pair simulation ("what if I make this change?") | Per-object usage idempotency on `usage_event` (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
+| Staging Layer (validation pipeline, import_status tracking) (v2.03) | | Stream from Kafka, listen on webhooks, or push notifications externally |
+| Integration Model / entity layer (cross-snapshot object IDs) (v2.03) | | |
+| Reference Data (org hierarchy + business apps, `/reference` page) (v2.07) | | |
+| AI-powered PII classification per column (TAISA batch) (v2.06) | | |
+| Landscape page — business-friendly entry point (v2.03) | | |
+| Containerised deploy (one-liner installer Linux + Windows), PostgreSQL 16 in production | | |
+| TAISA pre-configured in private image, no per-user setup | | |
 
 ### 1.5 Boundary with the Parser (DataDNA)
 
@@ -214,9 +217,9 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 │                                              │                               │
 │                                              ▼                               │
 │                                    ┌────────────────────┐                    │
+│                                    │  PostgreSQL 16     │                    │
+│                                    │  (production)      │                    │
 │                                    │  /data volume      │                    │
-│                                    │  scion.db (SQLite) │                    │
-│                                    │  WAL mode          │                    │
 │                                    └────────────────────┘                    │
 │                                              │                               │
 │                                              ▼                               │
@@ -233,7 +236,7 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 **Key properties:**
 
 - **Single-VM**, single-tenant. No clustering, no replicas, no orchestration. One customer = one VM = one stack.
-- **Storage:** lab environment uses **Postgres 16** (`docker-compose.lab.yml`, Phase 2 §2.5a — complete 2026-07-20). Production still runs **SQLite with WAL** on a named volume; production migration to Postgres is the next step (see `docs/internal_roadmap.md` §2.5a).
+- **Storage:** **PostgreSQL 16 in production** since v2.00.00 (2026-07-20). SQLite is used for local dev/demo only (`DATABASE_URL` defaults to SQLite in dev; Docker Compose in production uses `docker-compose.lab.yml` pointing to the Postgres container).
 - **Three application containers** (backend, frontend, nginx) + the volume. Watchtower was removed in v1.21.4.
 - **TAISA** is the only external dependency — and it's optional. If TAISA is unreachable the reasoning features go quiet but everything else keeps working.
 
@@ -310,7 +313,7 @@ Cross-context calls SHOULD go through the public engines listed in §8.2, not by
 | **ASGI server** | uvicorn | 0.30.6 | Standard for FastAPI; standalone, no external process supervisor needed inside the container. |
 | **ORM** | SQLAlchemy | 2.0.35 | New-style API, type-annotated, dialect-portable. Lab already running on Postgres; `alembic/env.py` reads `DATABASE_URL` env var at runtime. |
 | **Migrations** | Alembic | 1.13.3 | Canonical for SQLAlchemy; idempotent `db_init.py init` wraps it for one-command lifecycle. |
-| **Database** | SQLite (prod) / Postgres 16 (lab) | 3.40+ / 16 | SQLite: zero-config, embedded, WAL for read concurrency. Postgres: lab complete (Phase 2 §2.5a); production migration pending. Driver: `psycopg[binary]` v3. |
+| **Database** | PostgreSQL 16 (production) / SQLite (dev/demo) | 16 / 3.40+ | PostgreSQL 16 in production since v2.00.00. SQLite used for local dev and demo seed. Driver: `psycopg[binary]` v3. |
 | **LLM client** | TAISA (custom client) | n/a | Wraps the LLM provider behind a stable interface so the underlying model can be swapped without touching `taisa_client.py` callers. |
 | **LLM model** | `llama-4-scout-17b-16e-instruct` | 2026-q1 | 131k-token context, fast, cheap, good at structured Q&A over metadata. Configured in `backend/app/config/taisa_llm.yaml` (baked into the private backend image). |
 | **Frontend framework** | Next.js | 16.2.3 | App Router, RSC-ready, native standalone output for tight Docker image. |
@@ -354,7 +357,7 @@ fastapi==0.115.6        # CVE-2024-47874 fix
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
 alembic==1.13.3
-psycopg[binary]==3.2.13 # ready for v1.25 Postgres migration
+psycopg[binary]==3.2.13 # PostgreSQL 16 driver (production)
 httpx==0.27.2
 pydantic==2.9.2
 pydantic-settings==2.5.2
@@ -999,7 +1002,7 @@ the backend container via compose).
 
 ### 7.1 ORM Table Inventory
 
-There are **20 ORM tables** + the standard `alembic_version` metadata table.
+There are **30 ORM tables** + the standard `alembic_version` metadata table.
 Group by purpose:
 
 #### Snapshot core (8 tables)
@@ -1078,26 +1081,20 @@ flips because they're computed on the filtered set, not the slice.
 ### 7.3 Storage Layout
 
 ```
-SQLite + WAL is the v1.x storage backend.
+PostgreSQL 16 is the production storage backend (since v2.00.00, 2026-07-20).
+SQLite is retained for local dev and demo seed only.
 
   - DATABASE_URL defaults to sqlite:///{PROJECT_ROOT}/kalido_lite.db
-    in dev, sqlite:////data/scion.db inside the Docker container.
-  - WAL mode (PRAGMA journal_mode=WAL) is enabled on every connection
-    via SQLAlchemy event. The decision is documented inline in
-    backend/app/db/engine.py and was driven by the dict_persister
-    contention pattern (one big writer + many short readers).
+    in dev; the Docker Compose stack for production points to the
+    PostgreSQL 16 container via DATABASE_URL env var.
+  - Migration tooling: `backend/tools/migrate_sqlite_to_postgres.py`
+    (dry-run + batch support) for one-shot data migration.
   - Indexes are added via Alembic migrations only. Composite indexes
     on (snapshot_id, ...) cover the hot read paths (per-snapshot
     listings, change_event filters by snapshot pair).
-  - The SQLite host-parameter limit (999 in older builds, 32 766 in
-    3.32+) is the reason every IN-clause that fans out from a list
-    is chunked at 900. See _chunked() in app/graph/impact_summary.py.
-
-Postgres is roadmapped for v1.25 when the first multi-tenant
-deployment lands. The portability hygiene step in v1.22 (replace
-INSERT OR IGNORE / strftime / julianday with ANSI equivalents) is
-what makes the move tractable. SQLAlchemy + Alembic do the bulk of
-the work; the application code shouldn't need to change.
+  - SQLite dev note: IN-clauses that fan out from a list are still
+    chunked at 900 rows (SQLite host-parameter limit) so the code
+    works in both backends. See _chunked() in app/graph/impact_summary.py.
 ```
 
 ---

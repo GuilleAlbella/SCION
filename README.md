@@ -70,7 +70,7 @@ backend/
       parser_import.py   #   POST /parser-import (JSON pipeline, v1.04+)
       dict_import.py     #   POST /dict-import (.dat batch pipeline, v1.12+)
       ...                #   snapshots, diff, graph, impact, …
-    db/                  # ORM models (SQLAlchemy) — 20 tables
+    db/                  # ORM models (SQLAlchemy) — 30 tables
       models/            #   snapshot, schema_snapshot, table_snapshot,
                          #   column_snapshot, process, step, attribute_lineage, …
     ddl/                 # DDL generator engine

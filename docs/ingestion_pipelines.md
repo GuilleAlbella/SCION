@@ -2,6 +2,7 @@
 
 **Status:** Architecture decision — Meeting #7 (Luis, Rahul, Kindy).
 **Owner:** Guillermo Albella (SCION) + Rahul Kulkarni (Code Parser / Extractors).
+**Last updated:** 2026-09-02
 
 ## Principle
 
@@ -24,10 +25,10 @@ This was agreed in committee and re-confirmed in Meeting #7:
 
 | # | Pipeline | Owner | Status | SCION consumer |
 |---|----------|-------|--------|----------------|
-| 1 | **BTEQ / SQL parser** | Rahul | ✅ Live (v1) | `/api/v1/parser-import` |
-| 2 | **Data dictionary** | Rahul | 🟡 Spec delivered, extractor pending | `/api/v1/dict-import` (stub) |
-| 3 | **Usage statistics** | Rahul | 🔴 Not started | Future `/api/v1/usage-import` |
-| 4 | **Raw code (BTX, shell, procs)** | Rahul | 🔴 Roadmap | Future release |
+| 1 | **BTEQ / SQL parser** | Rahul | ✅ Live (v1.04+) | `/api/v1/parser-import` |
+| 2 | **Data dictionary** | Rahul | ✅ Live (v1.12+) | `/api/v1/dict-import` |
+| 3 | **Usage statistics (PDCR)** | Rahul | ✅ Live (v1.21.6+) | `/api/v1/dict-import` (bundled) |
+| 4 | **Raw code (BTX, shell, procs)** | Rahul | 🔴 Deferred | Future release |
 
 All four share the same shape:
 
@@ -39,43 +40,54 @@ All four share the same shape:
                                                  (never connects to customer DB) ────┘
 ```
 
-## Pipeline 1 · BTEQ / SQL parser  *(live)*
+## Pipeline 1 · BTEQ / SQL parser  *(live since v1.04)*
 
 - **Input to extractor:** BTEQ / SQL scripts on customer filesystem.
-- **Output:** JSON parse tree (one object per parsed statement).
-- **SCION endpoint:** `POST /api/v1/parser-import` (file upload → snapshot).
+- **Output:** JSON parse tree (one object per parsed statement). Tier-1/2/3
+  lineage edges plus a consolidated `lineageFactAttribute` table.
+- **SCION endpoint:** `POST /api/v1/parser-import/lineage`
 - **What SCION does:** builds graph nodes + FEEDS edges from CREATE/INSERT
-  dependencies, classifies objects by `datasetType`.
+  dependencies, classifies objects by `datasetType`, persists
+  `attribute_lineage` rows for column-level lineage. Supports dry-run mode.
 
-## Pipeline 2 · Data dictionary  *(next)*
+## Pipeline 2 · Data dictionary  *(live since v1.12)*
 
-- **Input to extractor:** `DBC.TABLES`, `DBC.COLUMNS` views (and equivalents).
-- **Output format:** §-delimited, `ENDREC`-terminated ASCII flat file.
-  Spec doc: `docs/dictionary_integration.md`.
-- **SCION endpoint:** `POST /api/v1/dict-import` *(stubbed, waiting on real sample)*.
-- **What SCION does:** enriches parser-sourced nodes with real column lists,
-  data types, table kinds. Without this, column-level lineage depends on
-  parser inference alone.
+- **Input to extractor:** `DBC.DatabasesV`, `DBC.TablesV`, `DBC.ColumnsV`,
+  `DBC.IndicesV`, `DBC.PartitioningConstraintsV`, `DBC.TableTextV`.
+- **Output format:** §-delimited, `ENDREC`-terminated ASCII flat files (6 files).
+  Spec: `Parser/Data extract 2/README.md`.
+- **SCION endpoint:** `POST /api/v1/dict-import` (multipart upload, 1–6 files).
+- **What SCION does:** content-type detection per file, batch validation
+  (same `source + run_id + temporal coherence`), idempotent snapshot keyed by
+  `extract_run_id`. Tested end-to-end against Transcend-DevTest (10 716 schemas /
+  240k tables / 9.8M columns).
 
-## Pipeline 3 · Usage statistics  *(planned)*
+## Pipeline 3 · Usage statistics (PDCR)  *(live since v1.21.6)*
 
-- **Input to extractor:** `DBC.AMPUsageV` / query log / DBQL.
-- **Output format:** TBD — follows same §-delimited convention as dict.
-- **SCION endpoint:** Future `POST /api/v1/usage-import`.
-- **What SCION does:** drives criticality scoring, anomaly detection,
-  "unused object" reports. Today SCION falls back to a synthetic
-  `usage_available=false` flag when no real usage is loaded.
+- **Input to extractor:** PDCR `DBC.ObjectUsageV` (and related views).
+- **Output format:** two file types, same §-delimited convention as Pipeline 2:
+  - `pdcr_object_usage_<from>_<to>.dat` — per-object access counters (12 fields).
+  - `pdcr_log_<from>_<to>.dat` — DBQL query log (10 fields, ENDREC-terminated,
+    SQL text may span multiple rows via `SqlRowNo`).
+- **SCION endpoint:** `POST /api/v1/dict-import` — PDCR files are auto-detected
+  and routed into a separate pipeline; they never enter the dict snapshot pipeline.
+- **What SCION does:**
+  - `pdcr_object_usage_*` → `UsageEvent` rows; drives criticality scoring
+    (60% usage weight + 40% graph fragility).
+  - `pdcr_log_*` → `dbql_query` rows (reassembled SQL by QueryID);
+    stores DBQL text for future DataDNA QueryID correlation.
+  - Criticality recomputed after PDCR ingest with `usage_available=True`.
+- **Validated against real data:** 77 619 / 78 049 = 99.45% object-usage rows
+  inserted; 44 540 DBQL queries persisted; idempotency confirmed.
 
-> **Meeting #7 decision:** Rahul will build the usage extractor. SCION does
-> *not* query the customer DB for usage — same reason as dict, same
-> architecture.
-
-## Pipeline 4 · Raw code  *(future release)*
+## Pipeline 4 · Raw code  *(deferred)*
 
 - **Input:** BTEQ scripts, shell wrappers, stored procedure bodies, trigger
   text. Rahul's parser already reads these; pipeline 4 is about keeping the
   **raw text** alongside the parsed tree so SCION can show code diffs and
   semantic summaries via TAISA.
+- **Status:** Deferred until at least one customer asks for it. Parsed tree
+  from Pipeline 1 is sufficient for impact + lineage today.
 
 ## Why four separate pipelines, not one big one?
 
@@ -95,9 +107,3 @@ Discussed in Meeting #7:
 - ❌ Direct JDBC / ODBC from SCION to customer DB. Ever.
 - ❌ Streaming / real-time ingestion. Snapshots are discrete events.
 - ❌ Write-back to customer DB. SCION is read-only analytics.
-
-## Open questions
-
-- Usage volume per customer (Chris / Kindy to scope).
-- Do we store raw code in SCION's SQLite, or just a hash + pointer?
-- Incremental vs full dict re-import — today we replace everything.
