@@ -70,7 +70,7 @@ def compute_node_metrics(snapshot_id: int) -> Dict[int, NodeMetrics]:
     # Normalise by max_out so the score stays in [0, 1] at any scale.
     # Dividing by total_edges was the old formula — it rounded to 0.0
     # for every node at Transcend scale (250k+ edges, most out_degree=1).
-    max_out = max(out_degree.values(), default=1)
+    max_out = max(out_degree.values(), default=0) or 1
 
     return {
         nid: NodeMetrics(

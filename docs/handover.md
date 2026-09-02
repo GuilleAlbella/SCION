@@ -161,17 +161,17 @@ return an error, but everything else works normally.
 
 ```powershell
 # From C:\dev\SCION
-.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed
+.venv\Scripts\python.exe backend\tools\db_init.py reset --with-seed --yes
 ```
 
-This creates `scion_dev.db` (SQLite) in the project root and loads demo data
-so you have something to explore immediately. It is safe to re-run — it drops
-and rebuilds from scratch.
+This creates `kalido_lite.db` (SQLite) in the project root and loads demo data
+so you have something to explore immediately. The `--yes` flag skips the
+confirmation prompt. It is safe to re-run — it drops and rebuilds from scratch.
 
 Expected output ends with something like:
 ```
-✓ Schema applied (alembic upgrade head)
-✓ Demo seed loaded — 2 snapshots, 500+ objects
+[db_init] Seed complete.
+ UI is ready at http://localhost:3000
 ```
 
 ---
@@ -204,7 +204,9 @@ Run the backend test suite to confirm nothing is broken:
 .venv\Scripts\pytest backend\tests\ -v
 ```
 
-Expected: all tests pass (a couple may be marked `skip` — that is normal).
+Expected: 125 pass, 2 known failures (`test_not_applicable_prefix_variants` and
+`test_alembic_head_matches_orm_metadata`) — these are pre-existing and tracked.
+Do not worry about them. If you see more than 2 failures, something is wrong.
 
 TypeScript check for the frontend:
 
