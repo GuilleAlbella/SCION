@@ -13,6 +13,10 @@ import {
   BarChart3,
   Info,
 } from "lucide-react";
+import PageShell from "@/components/layout/PageShell";
+import KpiCard from "@/components/shared/KpiCard";
+import ErrorAlert from "@/components/shared/ErrorAlert";
+import EmptyState from "@/components/shared/EmptyState";
 import {
   getApplications,
   getReferenceStatus,
@@ -82,18 +86,18 @@ function ImportCard({ title, subtitle, icon, templateHint, onUpload, onDone }: I
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-4">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 flex flex-col gap-4">
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-td-navy/10 dark:bg-white/10 flex items-center justify-center shrink-0">
+        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
           {icon}
         </div>
         <div>
-          <div className="font-semibold text-gray-900 dark:text-white text-sm">{title}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</div>
+          <div className="font-semibold text-gray-900 text-sm">{title}</div>
+          <div className="text-xs text-td-gray-dark mt-0.5">{subtitle}</div>
         </div>
       </div>
 
-      <div className="text-[11px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-900 rounded-lg px-3 py-2 font-mono leading-relaxed">
+      <div className="text-[11px] text-td-gray-dark bg-gray-50 rounded-lg px-3 py-2 font-mono leading-relaxed border border-gray-100">
         {templateHint}
       </div>
 
@@ -120,28 +124,17 @@ function ImportCard({ title, subtitle, icon, templateHint, onUpload, onDone }: I
       </button>
 
       {state === "success" && (
-        <div className="flex items-start gap-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">
           <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
           {message}
         </div>
       )}
       {state === "error" && (
-        <div className="flex items-start gap-2 text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
           <AlertCircle size={13} className="mt-0.5 shrink-0" />
           {message}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── stat chip ──────────────────────────────────────────────────────────────
-
-function StatChip({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex flex-col items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-5 py-3">
-      <span className="text-2xl font-bold text-td-navy dark:text-white">{fmt(value)}</span>
-      <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</span>
     </div>
   );
 }
@@ -208,104 +201,96 @@ export default function ReferencePage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <Building2 size={22} className="text-td-navy dark:text-white" />
-          Reference Data
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Link technical metadata to business context — teams, departments, and owning applications.
-        </p>
-      </div>
+    <PageShell
+      title="Reference Data"
+      subtitle="Link technical metadata to business context — teams, departments, and owning applications."
+      icon={Building2}
+    >
+      <div className="max-w-6xl mx-auto space-y-6">
 
-      <div className="bg-blue-50/40 border border-blue-100 rounded-lg px-3 py-2 flex items-start gap-2">
-        <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
-        <p className="text-[11px] text-td-gray-dark leading-relaxed">
-          Reference Data bridges the gap between raw technical objects and the business teams that own them.
-          Upload your organisation hierarchy (users → teams → departments) and application catalogue once,
-          and SCION will automatically enrich every table, view and schema with ownership context — enabling
-          risk scoring by business domain, filtering by team, and impact analysis scoped to a department.
-          Schema and table mappings let you assign ownership at any granularity.
-        </p>
-      </div>
-
-      {/* Load error — shown when the initial fetch fails (e.g. backend starting up) */}
-      {loadError && (
-        <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          <span>{loadError}</span>
-        </div>
-      )}
-
-      {/* KPI row */}
-      {status && (
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          <StatChip label="Departments" value={status.departments} />
-          <StatChip label="Teams" value={status.teams} />
-          <StatChip label="Users" value={status.users} />
-          <StatChip label="Applications" value={status.applications} />
-          <StatChip label="Schema maps" value={status.schema_mappings} />
-          <StatChip label="Table maps" value={status.table_mappings} />
-        </div>
-      )}
-
-      {/* Import cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ImportCard
-          title="Organisation Hierarchy"
-          subtitle="Upload a user/team/department mapping file."
-          icon={<Users size={18} className="text-td-navy dark:text-white" />}
-          templateHint={"username | display_name | email | team | department"}
-          onUpload={handleUsersUpload}
-          onDone={load}
-        />
-        <ImportCard
-          title="Business Applications"
-          subtitle="Upload an application-to-schema/table mapping file."
-          icon={<Database size={18} className="text-td-navy dark:text-white" />}
-          templateHint={"application_name | description | schema_name | table_name | owner_team"}
-          onUpload={handleAppsUpload}
-          onDone={load}
-        />
-      </div>
-
-      {/* Tabs: Org view / App view */}
-      <div>
-        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4">
-          {(
-            [
-              { key: "org", label: "Organisation", icon: <Users size={14} /> },
-              { key: "apps", label: "Applications", icon: <Database size={14} /> },
-            ] as const
-          ).map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                tab === key
-                  ? "border-td-orange text-td-orange"
-                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-              }`}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
+        {/* Info banner */}
+        <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 flex items-start gap-2">
+          <Info size={12} className="text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-td-gray-dark leading-relaxed">
+            Reference Data bridges the gap between raw technical objects and the business teams that own them.
+            Upload your organisation hierarchy (users → teams → departments) and application catalogue once,
+            and SCION will automatically enrich every table, view and schema with ownership context — enabling
+            risk scoring by business domain, filtering by team, and impact analysis scoped to a department.
+            Schema and table mappings let you assign ownership at any granularity.
+          </p>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin text-gray-400" />
+        {/* Load error */}
+        {loadError && <ErrorAlert message={loadError} />}
+
+        {/* KPI row */}
+        {status && (
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            <KpiCard label="Departments" value={status.departments} />
+            <KpiCard label="Teams" value={status.teams} />
+            <KpiCard label="Users" value={status.users} />
+            <KpiCard label="Applications" value={status.applications} />
+            <KpiCard label="Schema maps" value={status.schema_mappings} />
+            <KpiCard label="Table maps" value={status.table_mappings} />
           </div>
-        ) : tab === "org" ? (
-          <OrgView teams={teams} teamUsage={teamUsage} />
-        ) : (
-          <AppsView apps={apps} appUsage={appUsage} />
         )}
+
+        {/* Import cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ImportCard
+            title="Organisation Hierarchy"
+            subtitle="Upload a user/team/department mapping file."
+            icon={<Users size={18} className="text-td-navy" />}
+            templateHint={"username | display_name | email | team | department"}
+            onUpload={handleUsersUpload}
+            onDone={load}
+          />
+          <ImportCard
+            title="Business Applications"
+            subtitle="Upload an application-to-schema/table mapping file."
+            icon={<Database size={18} className="text-td-navy" />}
+            templateHint={"application_name | description | schema_name | table_name | owner_team"}
+            onUpload={handleAppsUpload}
+            onDone={load}
+          />
+        </div>
+
+        {/* Tabs */}
+        <div>
+          <div className="flex gap-1 border-b border-gray-200 mb-4">
+            {(
+              [
+                { key: "org", label: "Organisation", icon: <Users size={14} /> },
+                { key: "apps", label: "Applications", icon: <Database size={14} /> },
+              ] as const
+            ).map(({ key, label, icon }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  tab === key
+                    ? "border-td-orange text-td-orange"
+                    : "border-transparent text-td-gray-dark hover:text-gray-700"
+                }`}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 size={24} className="animate-spin text-gray-400" />
+            </div>
+          ) : tab === "org" ? (
+            <OrgView teams={teams} teamUsage={teamUsage} />
+          ) : (
+            <AppsView apps={apps} appUsage={appUsage} />
+          )}
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -320,11 +305,7 @@ function OrgView({
 }) {
   if (!teams || teams.total === 0) {
     return (
-      <EmptyState
-        icon={<Users size={28} className="text-gray-300 dark:text-gray-600" />}
-        title="No organisation data yet"
-        description="Upload a user/team mapping file to link usage data to business teams."
-      />
+      <EmptyState message="No organisation data yet. Upload a user/team mapping file to link usage data to business teams." />
     );
   }
 
@@ -332,18 +313,16 @@ function OrgView({
 
   return (
     <div className="space-y-4">
-      {/* Usage notice */}
       {teamUsage?.note && (
-        <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-4 py-3">
+        <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-4 py-3">
           <Info size={14} className="mt-0.5 shrink-0" />
           {teamUsage.note}
         </div>
       )}
 
-      {/* Teams table */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <thead className="bg-gray-50 text-xs text-td-gray-dark uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3 text-left">Team</th>
               <th className="px-4 py-3 text-left">Department</th>
@@ -352,28 +331,24 @@ function OrgView({
               <th className="px-4 py-3 text-right">Objects accessed</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+          <tbody className="divide-y divide-gray-100">
             {teams.teams.map((team: TeamRow) => {
               const usage = usageMap.get(team.team_name);
               return (
                 <tr
                   key={team.team_id}
-                  className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="bg-white hover:bg-gray-50 transition-colors"
                 >
-                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                    {team.team_name}
+                  <td className="px-4 py-3 font-medium text-gray-900">{team.team_name}</td>
+                  <td className="px-4 py-3 text-td-gray-dark">
+                    {team.department_name ?? <span className="text-gray-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
-                    {team.department_name ?? <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  <td className="px-4 py-3 text-right text-gray-700">{fmt(team.user_count)}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">
+                    {usage ? fmt(usage.query_count) : <span className="text-gray-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {fmt(team.user_count)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {usage ? fmt(usage.query_count) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {usage ? fmt(usage.object_count) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  <td className="px-4 py-3 text-right text-gray-700">
+                    {usage ? fmt(usage.object_count) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               );
@@ -383,7 +358,7 @@ function OrgView({
       </div>
 
       {teamUsage && teamUsage.unmapped_query_count > 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-td-gray-dark">
           {fmt(teamUsage.unmapped_query_count)} queries not attributed to any team.
         </p>
       )}
@@ -402,11 +377,7 @@ function AppsView({
 }) {
   if (!apps || apps.total === 0) {
     return (
-      <EmptyState
-        icon={<Database size={28} className="text-gray-300 dark:text-gray-600" />}
-        title="No application data yet"
-        description="Upload an application mapping file to attribute usage to business applications."
-      />
+      <EmptyState message="No application data yet. Upload an application mapping file to attribute usage to business applications." />
     );
   }
 
@@ -414,9 +385,9 @@ function AppsView({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <thead className="bg-gray-50 text-xs text-td-gray-dark uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3 text-left">Application</th>
               <th className="px-4 py-3 text-left">Owner team</th>
@@ -437,35 +408,29 @@ function AppsView({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+          <tbody className="divide-y divide-gray-100">
             {apps.applications.map((app: AppRow) => {
               const usage = usageMap.get(app.application_name);
               return (
                 <tr
                   key={app.application_id}
-                  className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="bg-white hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {app.application_name}
-                    </div>
+                    <div className="font-medium text-gray-900">{app.application_name}</div>
                     {app.description && (
-                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">
+                      <div className="text-xs text-td-gray-dark mt-0.5 line-clamp-1">
                         {app.description}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
-                    {app.owner_team ?? <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  <td className="px-4 py-3 text-td-gray-dark">
+                    {app.owner_team ?? <span className="text-gray-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {fmt(app.schema_count)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {fmt(app.table_count)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">
-                    {usage ? fmt(usage.query_count) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                  <td className="px-4 py-3 text-right text-gray-700">{fmt(app.schema_count)}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">{fmt(app.table_count)}</td>
+                  <td className="px-4 py-3 text-right text-gray-700">
+                    {usage ? fmt(usage.query_count) : <span className="text-gray-300">—</span>}
                   </td>
                 </tr>
               );
@@ -475,30 +440,10 @@ function AppsView({
       </div>
 
       {appUsage && appUsage.unmapped_query_count > 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-td-gray-dark">
           {fmt(appUsage.unmapped_query_count)} queries not attributed to any application.
         </p>
       )}
-    </div>
-  );
-}
-
-// ── empty state ────────────────────────────────────────────────────────────
-
-function EmptyState({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-      {icon}
-      <div className="font-medium text-gray-600 dark:text-gray-300">{title}</div>
-      <div className="text-sm text-gray-400 dark:text-gray-500 max-w-sm">{description}</div>
     </div>
   );
 }
