@@ -82,6 +82,24 @@ class ShareScanResponse(BaseModel):
 
 _IMPORTABLE_SUFFIXES = {".dat", ".json"}
 
+
+def _find_archive_dir(mount_path: str) -> Optional[Path]:
+    """Return the archive sub-directory regardless of capitalisation.
+
+    CIFS shares from Windows hosts may use 'Archive' (title-case) while the
+    code historically looked for 'archive' (lower-case). Search all children
+    of mount_path and return the first directory whose name matches
+    case-insensitively, so both 'archive' and 'Archive' are accepted.
+    """
+    base = Path(mount_path)
+    if not base.is_dir():
+        return None
+    for child in base.iterdir():
+        if child.is_dir() and child.name.lower() == "archive":
+            return child
+    return None
+
+
 def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> List[Path]:
     """Return importable files (.dat, .json) in <mount_path>/<subdir>.
 
@@ -108,8 +126,8 @@ def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
              Each sub-folder becomes a separate entry, sorted descending
              (most recent first).
     """
-    archive_root = Path(mount_path) / "archive"
-    if not archive_root.is_dir():
+    archive_root = _find_archive_dir(mount_path)
+    if archive_root is None:
         return []
 
     # Flat layout: Data Dictionary (or any known subdir) lives directly
@@ -240,7 +258,7 @@ def scan_share(
     dict_paths = _iter_share_files(_DICT_DIR, mount)
     already_imported, existing_snapshot_id, run_id = _check_already_imported(dict_paths)
 
-    archive_root = Path(mount) / "archive"
+    archive_root = _find_archive_dir(mount)
     archive_entries = _scan_archive_entries(mount)
 
     return ShareScanResponse(
@@ -252,8 +270,8 @@ def scan_share(
         already_imported=already_imported,
         existing_snapshot_id=existing_snapshot_id,
         extract_run_id=run_id,
-        archive_available=archive_root.is_dir(),
-        archive_path=str(archive_root),
+        archive_available=archive_root is not None,
+        archive_path=str(archive_root) if archive_root else "",
         archive_entries=archive_entries,
     )
 

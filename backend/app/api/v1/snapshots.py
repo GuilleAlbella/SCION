@@ -97,9 +97,12 @@ def list_snapshots() -> dict[str, list[dict[str, Any]]]:
             ),
             "source_system": row.source_system,
             "description": row.description or "",
-            # Â§2.16 Staging Layer (v2.03.00): import lifecycle status.
+            # §2.16 Staging Layer (v2.03.00): import lifecycle status.
             # Pre-staging rows return "committed" (migration server_default).
             "import_status": getattr(row, "import_status", "committed"),
+            # §2.16.c: validation warnings list — each item is
+            # {type, severity, message, object_name?}. NULL when clean.
+            "validation_warnings": getattr(row, "validation_warnings", None),
             # Â§2.13 Manifest-Derived Timestamps (v2.09.00)
             "extract_timestamp": (
                 getattr(row, "extract_timestamp", None).isoformat()
@@ -487,6 +490,23 @@ def delete_snapshot(snapshot_id: int, confirm_id: int) -> dict[str, Any]:
         # Finally, the snapshot itself.
         session.execute(delete(Snapshot).where(Snapshot.snapshot_id == snapshot_id))
         session.commit()
+
+    # â”€â”€â”€â”€ 5b. Reset the PK sequence so the next insert reuses the freed ID â”€â”€â”€â”€
+    # PostgreSQL sequences never rewind automatically after a DELETE, so
+    # deleting snapshot #3 and re-importing would produce #4, #5, …
+    # Instead we reset the sequence to MAX(snapshot_id), making the next
+    # auto-assigned ID exactly MAX + 1. For SQLite the sequence is the
+    # built-in rowid mechanism and does not support this reset.
+    is_pg = engine.url.get_dialect().name == “postgresql”
+    if is_pg:
+        with Session(engine) as seq_session:
+            max_id = seq_session.scalar(
+                select(func.max(Snapshot.snapshot_id))
+            ) or 0
+            seq_session.execute(
+                text(“SELECT setval('snapshot_snapshot_id_seq', :v, true)”).bindparams(v=max_id)
+            )
+            seq_session.commit()
 
     # â”€â”€â”€â”€ 6. VACUUM to physically reclaim freed pages â”€â”€â”€â”€
     # SQLite default `auto_vacuum = NONE` keeps deleted pages as free
