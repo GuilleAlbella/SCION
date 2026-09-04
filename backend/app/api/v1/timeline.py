@@ -49,7 +49,7 @@ class TimelineResponse(BaseModel):
 
 
 # Server-side defaults / hard caps for timeline pagination. Default is
-# generous (200) because the typical use case â€” a single object's history â€”
+# generous (200) because the typical use case — a single object's history —
 # rarely has more than a few dozen events; the cap exists for the pathological
 # case where ``object_name`` is short enough that the substring match catches
 # tens of thousands of identifiers.
@@ -82,7 +82,7 @@ def get_timeline(
             for s in snapshots
         }
 
-    # Shared filter â€” applied to both COUNT and the page query. Pre-built
+    # Shared filter — applied to both COUNT and the page query. Pre-built
     # once so the two queries can't drift if the filter logic changes.
     where_clause = or_(
         ChangeEvent.object_identifier.ilike(object_name),

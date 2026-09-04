@@ -8,7 +8,7 @@ the lineage-mvp.json, then ingests them in the correct order:
   1. Dict + PDCR .dat files  â†’  new snapshot  (via dict_import pipeline)
   2. Lineage JSON            â†’  attached to that snapshot  (parser_import)
 
-The endpoint reads from the filesystem on the server â€” the browser never
+The endpoint reads from the filesystem on the server — the browser never
 needs to upload any file. This is the counterpart to the notification bell
 that shows "New data available from share."
 """
@@ -51,7 +51,7 @@ class ShareImportResponse(BaseModel):
 class ArchiveEntry(BaseModel):
     """One importable entry found inside the archive sub-directory."""
     name: str                          # sub-folder name (used as label in UI)
-    path: str                          # absolute path â€” pass as `path` to /share-import
+    path: str                          # absolute path — pass as `path` to /share-import
     dict_files: List[str]
     pdcr_files: List[str]
     lineage_files: List[str]
@@ -76,9 +76,9 @@ class ShareScanResponse(BaseModel):
     archive_entries: List[ArchiveEntry] = []
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 # Helpers
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 _IMPORTABLE_SUFFIXES = {".dat", ".json"}
 
@@ -103,7 +103,7 @@ def _find_archive_dir(mount_path: str) -> Optional[Path]:
 def _iter_share_files(subdir: str, mount_path: str = SCION_SHARE_MOUNT_PATH) -> List[Path]:
     """Return importable files (.dat, .json) in <mount_path>/<subdir>.
 
-    Companion files such as .manifest.csv are intentionally excluded â€”
+    Companion files such as .manifest.csv are intentionally excluded —
     they are metadata sidecars, not data files the importer can process.
     """
     base = Path(mount_path) / subdir
@@ -117,11 +117,11 @@ def _scan_archive_entries(mount_path: str) -> List[ArchiveEntry]:
 
     Two layouts are supported:
 
-    Flat  â€” archive contains the data sub-dirs directly
+    Flat  — archive contains the data sub-dirs directly
             (e.g. archive/Data Dictionary/â€¦).  Treated as one entry
             named "archive".
 
-    Nested â€” archive contains date/run sub-folders, each of which
+    Nested — archive contains date/run sub-folders, each of which
              holds the data sub-dirs (e.g. archive/20260628/Data Dictionary/â€¦).
              Each sub-folder becomes a separate entry, sorted descending
              (most recent first).
@@ -178,23 +178,23 @@ def _path_to_upload(path: Path) -> UploadFile:
     """Wrap a server-side file as a Starlette UploadFile.
 
     The file is opened in binary mode; import_dict_batch's streaming
-    helper reads it in 4-MiB chunks via upload.file.read() â€” the same
+    helper reads it in 4-MiB chunks via upload.file.read() — the same
     way it handles real HTTP multipart uploads.
     """
-    fobj = open(path, "rb")  # noqa: SIM115  â€” kept open for the handler's lifetime
+    fobj = open(path, "rb")  # noqa: SIM115  — kept open for the handler's lifetime
     return UploadFile(filename=path.name, file=fobj)  # type: ignore[arg-type]
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 # Endpoints
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 def _check_already_imported(dict_paths: List[Path]) -> tuple[bool, Optional[int], Optional[str]]:
     """Peek the first record from any dict file to get extract_run_id, then
     check whether that run was already persisted as a snapshot.
 
     Returns (already_imported, existing_snapshot_id, extract_run_id).
-    On any read error returns (False, None, None) â€” scan stays non-destructive.
+    On any read error returns (False, None, None) — scan stays non-destructive.
     """
     databases_file = next(
         (p for p in dict_paths if "database" in p.name.lower()),
@@ -242,7 +242,7 @@ def scan_share(
     """Return the list of importable files found in the share (no-op).
 
     `path` overrides the server-default SCION_SHARE_MOUNT_PATH for this
-    request â€” useful when the share is mounted at a different location.
+    request — useful when the share is mounted at a different location.
     Includes an already_imported check: peeks the first record of any dict
     file to read extract_run_id, then queries existing snapshots.
     """
@@ -316,7 +316,7 @@ def import_from_share(
             ),
         )
 
-    # â”€â”€â”€â”€ 1. Import dict + PDCR files â”€â”€â”€â”€
+    # â"€â"€â"€â"€ 1. Import dict + PDCR files â"€â"€â"€â"€
     # Build UploadFile wrappers so we can reuse the existing handler.
     # Opened files are tracked for cleanup in the finally block.
     upload_files: List[UploadFile] = []
@@ -347,7 +347,7 @@ def import_from_share(
 
     snapshot_id: int = dict_result.snapshot_id
 
-    # â”€â”€â”€â”€ 2. Attach lineage JSON to the same snapshot â”€â”€â”€â”€
+    # â"€â"€â"€â"€ 2. Attach lineage JSON to the same snapshot â"€â"€â"€â"€
     lineage_attached = False
     lineage_tables = 0
     lineage_edges = 0

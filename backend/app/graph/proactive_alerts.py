@@ -57,7 +57,7 @@ def compute_proactive_alerts_for_snapshot(snapshot_id: int) -> List[Dict]:
     """Run the three proactive checks and return ready-to-persist dicts.
 
     Returns rows in the shape ``proactive_alert`` expects, ready for
-    bulk-insert. The function is purely computational â€” persistence
+    bulk-insert. The function is purely computational — persistence
     happens in ``persist_proactive_alerts`` so callers can plug into
     their own session/transaction lifecycle.
     """
@@ -74,7 +74,7 @@ def compute_proactive_alerts_for_snapshot(snapshot_id: int) -> List[Dict]:
             select(GraphEdge).where(GraphEdge.snapshot_id == snapshot_id)
         ).scalars().all()
 
-        # â”€â”€â”€â”€ Check 1: broken lineage â”€â”€â”€â”€
+        # â"€â"€â"€â"€ Check 1: broken lineage â"€â"€â"€â"€
         # An edge pointing to a node that no longer exists in this
         # snapshot is a silent data-quality problem (something was
         # deleted without cleaning up references). We surface up to
@@ -104,7 +104,7 @@ def compute_proactive_alerts_for_snapshot(snapshot_id: int) -> List[Dict]:
                 "detected_at_iso": snap_ts,
             })
 
-        # â”€â”€â”€â”€ Check 2: orphan objects â”€â”€â”€â”€
+        # â"€â"€â"€â"€ Check 2: orphan objects â"€â"€â"€â"€
         # Tables / views with no incoming or outgoing edges. SCHEMAs are
         # excluded because they're container nodes; their connectivity
         # is structural rather than data-flow.
@@ -125,17 +125,17 @@ def compute_proactive_alerts_for_snapshot(snapshot_id: int) -> List[Dict]:
                 "alert_type": "ORPHAN_OBJECT",
                 "severity": "MEDIUM",
                 "message": (
-                    "Orphan object â€” no upstream or downstream dependencies detected"
+                    "Orphan object — no upstream or downstream dependencies detected"
                 ),
                 "object_identifier": name_by_id.get(n.node_id, n.object_name),
                 "detected_at_iso": snap_ts,
             })
 
-        # â”€â”€â”€â”€ Check 3: hub-node changes â”€â”€â”€â”€
+        # â"€â"€â"€â"€ Check 3: hub-node changes â"€â"€â"€â"€
         # A "hub" is a node flagged ``is_hub`` in its metrics metadata
         # (see ``persist_node_metrics``). Cross-referencing recent
         # ChangeEvents against the hub list flags hub-touching changes
-        # for extra scrutiny â€” they have outsized blast-radius.
+        # for extra scrutiny — they have outsized blast-radius.
         hub_node_ids = {
             n.node_id
             for n in nodes
@@ -161,7 +161,7 @@ def compute_proactive_alerts_for_snapshot(snapshot_id: int) -> List[Dict]:
                     "alert_type": "HUB_CHANGED",
                     "severity": "HIGH",
                     "message": (
-                        "Hub node changed â€” high-connectivity object was modified"
+                        "Hub node changed — high-connectivity object was modified"
                     ),
                     "object_identifier": c.object_identifier,
                     "detected_at_iso": (

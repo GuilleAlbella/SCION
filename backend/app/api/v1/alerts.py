@@ -108,9 +108,9 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # â”€â”€â”€â”€ Proactive structural alerts (read from pre-computed table) â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Proactive structural alerts (read from pre-computed table) â"€â"€â"€â"€
     # Until v1.19, this block loaded every graph_node + graph_edge for
-    # the latest snapshot and ran the 3 checks inline on each request â€”
+    # the latest snapshot and ran the 3 checks inline on each request —
     # 337k+ rows + Python walks per click. The work has moved to
     # ``run_post_ingest_pipeline`` (writes into ``proactive_alert``),
     # so the endpoint just reads indexed rows. Lazy fallback: if no
@@ -155,7 +155,7 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
                         ).scalars().all()
                     except Exception:
                         # Keep the endpoint usable even if backfill
-                        # fails â€” the change-event-based alerts above
+                        # fails — the change-event-based alerts above
                         # are independent and already populated.
                         pre_rows = []
 
@@ -184,10 +184,10 @@ def get_alerts(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     }
 
 
-# â”€â”€â”€â”€ Statistical anomaly detection (v1.07 data-science pack) â”€â”€â”€â”€
+# â"€â"€â"€â"€ Statistical anomaly detection (v1.07 data-science pack) â"€â"€â"€â"€
 # Kept as a dedicated endpoint rather than folded into /alerts so the UI
 # can render a visually distinct "statistical anomalies" card (z-scores,
-# expected vs observed) â€” the generic /alerts schema has no room for
+# expected vs observed) — the generic /alerts schema has no room for
 # those fields.
 
 @router.get("/anomalies", status_code=status.HTTP_200_OK)
@@ -197,7 +197,7 @@ def get_anomalies(
 ) -> Dict[str, Any]:
     """Per-(schema, snapshot) change-volume anomalies flagged by z-score.
 
-    Uses leave-one-out mean/stdev over the schema's own history â€” so a
+    Uses leave-one-out mean/stdev over the schema's own history — so a
     spike can't hide itself inside its own baseline. Returns the full
     list sorted by |z-score| desc.
     """

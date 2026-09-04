@@ -16,7 +16,7 @@ we compute three standard association metrics:
 - **confidence(A â†’ B)** = P(B | A) = support(A, B) / support(A)
 - **lift(A, B)** = confidence(A â†’ B) / P(B)
 
-`lift > 1` means B changes MORE than random chance when A changes â€”
+`lift > 1` means B changes MORE than random chance when A changes —
 i.e. the two are *historically coupled*. This surfaces invisible
 relationships the lineage graph cannot capture:
   - Cross-domain tables that the same team tweaks every release.
@@ -49,7 +49,7 @@ DEFAULT_MIN_LIFT = 1.5
 
 # Cap on history depth (most recent N consecutive snapshot pairs scanned).
 # Without this, mining the entire change_event table is O(rows) on every
-# request â€” a 250k-row Transcend extract turned the Intelligence page
+# request — a 250k-row Transcend extract turned the Intelligence page
 # into a multi-second wait per click. 20 pairs â‰ˆ a quarter of operational
 # history for a typical weekly-import shop, which is plenty of signal
 # for Apriori-style mining.
@@ -58,7 +58,7 @@ DEFAULT_MAX_HISTORY_PAIRS = 20
 # Maximum basket size (unique table-level objects per delta) before a
 # transaction is dropped from the mining input. Deltas with more objects
 # than this cap are mass-refresh events (full schema reloads, large
-# migrations) where every object changes together â€” they don't generate
+# migrations) where every object changes together — they don't generate
 # meaningful co-change signal and dominate the combinations step with
 # O(NÂ²) pairs. At N=245k that's ~30 billion pairs; the algo would never
 # finish. By skipping these "noisy" transactions we keep the mining
@@ -93,7 +93,7 @@ def _load_deltas_as_transactions(
 
     History cap: only the ``max_history_pairs`` most recent consecutive
     snapshot pairs are scanned. Without this, every cochange request
-    on a 250k-row ``change_event`` table loaded all of them â€” multi-
+    on a 250k-row ``change_event`` table loaded all of them — multi-
     second latency per click. The cap is on number of *deltas* (pair
     transactions), not raw change-event rows; one delta usually
     contains a few hundred to a few thousand changes.
@@ -112,7 +112,7 @@ def _load_deltas_as_transactions(
         if not recent_pairs:
             return []
 
-        # â”€â”€ Fast pre-filter by raw change count â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # â"€â"€ Fast pre-filter by raw change count â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
         # Loading all rows for a pair with 450 k changes is wasteful when
         # the basket will be discarded anyway. We use COUNT(*) as a cheap
         # upper bound on basket size (since COUNT(*) â‰¥ COUNT(DISTINCT)):
@@ -154,7 +154,7 @@ def _load_deltas_as_transactions(
             candidate_pairs = recent_pairs
 
         if not candidate_pairs:
-            return []  # all pairs are too large â€” no useful signal
+            return []  # all pairs are too large — no useful signal
 
         pair_filter = or_(
             *[
@@ -218,7 +218,7 @@ def mine_cochange_pairs(
     Returns rules where ``lift >= min_lift`` and the pair has co-occurred
     in at least ``min_pair_support`` deltas. Sorted by lift desc
     (strongest coupling first), then confidence. ``max_history_pairs``
-    bounds the input window â€” see ``_load_deltas_as_transactions``.
+    bounds the input window — see ``_load_deltas_as_transactions``.
     """
     transactions = _load_deltas_as_transactions(
         max_history_pairs=max_history_pairs,
@@ -228,7 +228,7 @@ def mine_cochange_pairs(
     if total == 0:
         return []
 
-    # â”€â”€ 1. Count per-item and per-pair occurrences in a single pass â”€â”€
+    # â"€â"€ 1. Count per-item and per-pair occurrences in a single pass â"€â"€
     item_count: Dict[str, int] = {}
     pair_count: Dict[Tuple[str, str], int] = {}
 
@@ -238,7 +238,7 @@ def mine_cochange_pairs(
         for a, b in combinations(sorted(basket), 2):
             pair_count[(a, b)] = pair_count.get((a, b), 0) + 1
 
-    # â”€â”€ 2. Emit both directions (Aâ†’B and Bâ†’A) â€” different confidences â”€â”€
+    # â"€â"€ 2. Emit both directions (Aâ†’B and Bâ†’A) — different confidences â"€â"€
     results: List[CoChangePair] = []
     for (a, b), co in pair_count.items():
         if co < min_pair_support:

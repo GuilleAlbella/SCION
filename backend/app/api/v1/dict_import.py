@@ -21,10 +21,10 @@ True)`` after PDCR object_usage rows land, so the criticality cache
 reflects real query/access counts instead of the graph-only
 fallback the post-ingest pipeline writes. The re-compute is gated
 on ``obj_result.inserted > 0`` and is best-effort (failures are
-logged but don't fail the import â€” the dict snapshot already
+logged but don't fail the import — the dict snapshot already
 committed).
 
-The endpoint is **format-agnostic at the wire level** â€” files are
+The endpoint is **format-agnostic at the wire level** — files are
 received as multipart upload regardless of extension. The format
 detector classifies each file by content (and filename as tiebreaker)
 before routing to the right reader.
@@ -97,19 +97,19 @@ def _fmt_bytes(n: int) -> str:
     return f"{n:.1f} GB"
 
 
-# â”€â”€â”€â”€ Streaming knobs â”€â”€â”€â”€
+# ──── Streaming knobs ────
 # 4 MiB chunks balance syscall overhead against memory footprint. At
-# this size a 2 GB upload is 512 chunks â€” well below any practical
+# this size a 2 GB upload is 512 chunks — well below any practical
 # overhead, and a single chunk is small enough that it won't blow up
 # RAM even on a constrained box.
 _UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024
-# Format detection only needs the file head. 64 KiB is plenty â€”
+# Format detection only needs the file head. 64 KiB is plenty —
 # detector inspects at most the first 8 KB but we keep some margin
 # for files with unusual whitespace/BOM padding.
 _DETECTION_HEAD_SIZE = 64 * 1024
 
 
-# â”€â”€â”€â”€ Response shape â”€â”€â”€â”€
+# ──── Response shape ────
 
 class DictImportResponse(BaseModel):
     """What we send back after a successful (or no-op) import.
@@ -133,7 +133,7 @@ class DictImportResponse(BaseModel):
     partitioning_seen: int
     tabletext_seen: int
     files_received: int
-    # â”€â”€â”€â”€ PDCR routing (Pipeline 3, PR-D) â”€â”€â”€â”€
+    # ──── PDCR routing (Pipeline 3, PR-D) ────
     # All optional / default 0 so callers that only upload dict files
     # see the same response shape they've always seen. The fields land
     # in the response payload when the mixed-batch route persists
@@ -146,7 +146,7 @@ class DictImportResponse(BaseModel):
     object_usage_skipped_orphan: int = 0
     object_usage_skipped_invalid: int = 0
     # Per-PDCR-type count of unmapped-type skips (e.g. {"UDF": 54, "SP": 22}).
-    # Surfaced so operators see exactly what coverage we're missing â€”
+    # Surfaced so operators see exactly what coverage we're missing —
     # FR-13 graceful out-of-scope handling.
     object_usage_skipped_by_type: Dict[str, int] = {}
     # Snapshot used for case-insensitive resolution of object_usage
@@ -155,7 +155,7 @@ class DictImportResponse(BaseModel):
     # contains only PDCR files; None when there's no snapshot at all
     # (every row is then accepted blindly).
     pdcr_resolved_against_snapshot_id: Optional[int] = None
-    # â”€â”€â”€â”€ Criticality re-compute (Pipeline 3, PR-E) â”€â”€â”€â”€
+    # ──── Criticality re-compute (Pipeline 3, PR-E) ────
     # The post-ingest pipeline calls ``compute_criticality(usage_available=
     # False)`` because at that moment no PDCR usage rows exist yet for
     # the snapshot. After PR-D wires PDCR ingest into the same request,
@@ -171,7 +171,7 @@ class DictImportResponse(BaseModel):
     criticality_low_count: int = 0
 
 
-# â”€â”€â”€â”€ Streaming helpers â”€â”€â”€â”€
+# ──── Streaming helpers ────
 
 def _stream_upload_to_disk(upload: UploadFile) -> Path:
     """Persist an UploadFile to a NamedTemporaryFile in 4-MiB chunks.
@@ -179,14 +179,14 @@ def _stream_upload_to_disk(upload: UploadFile) -> Path:
     Why not `upload.file.read()` (no chunks): that returns the entire
     file as a single bytes object. For Rahul's full Transcend-DevTest
     extract that's 1.9 GB held in Python heap memory before parsing
-    even begins â€” unworkable on a laptop and silly on a server.
+    even begins — unworkable on a laptop and silly on a server.
     Chunked streaming keeps RAM bounded at a single chunk regardless
     of file size.
 
     Why sync (not `async def` + `await upload.read()`): the parent
     handler is `def`, not `async def`, because the heavy work
     (parse + persist + post-ingest) is all synchronous and blocking
-    it inside an async handler would freeze the event loop â€”
+    it inside an async handler would freeze the event loop —
     starving the parallel `/progress` and `/cancel` requests for
     minutes. Reading from `upload.file` (the underlying
     `SpooledTemporaryFile`) is the sync equivalent of
@@ -210,7 +210,7 @@ def _stream_upload_to_disk(upload: UploadFile) -> Path:
 def _detect_path(path: Path, filename: str):
     """Run format_detector against the head of a file on disk.
 
-    The detector is content-only â€” it only looks at the first few KB.
+    The detector is content-only — it only looks at the first few KB.
     Reading just the head keeps detection cheap regardless of file
     size; loading the whole 1.9 GB columns file just to detect that
     it's flat-file would defeat the entire streaming refactor.
@@ -224,7 +224,7 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
     """Switch SQLite to fast-bulk-insert mode for the duration of one ingest.
 
     The default `PRAGMA synchronous = FULL` makes SQLite fsync after
-    every commit â€” and `bulk_insert_mappings` commits once per batch.
+    every commit — and `bulk_insert_mappings` commits once per batch.
     For 9.8M-row workloads that's ~2 000 fsyncs serialised by Windows'
     write-through layer, and we measured the disk pegged at ~0.7 MB/s
     even on local NVMe. Relaxing to `synchronous = OFF` removes the
@@ -236,7 +236,7 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
     connection re-enables SQLite's writer-blocks-readers locking. The
     moment that's enabled, the parallel `/progress` polls and any
     other reads stall the persist writer instead of running
-    concurrently â€” we measured a 3Ã— regression in persist wall time
+    concurrently — we measured a 3Ã— regression in persist wall time
     on the Transcend-DevTest extract once the polling started
     actually working. WAL (set globally on the engine connect event)
     is the right journal mode for our mixed read+write workload.
@@ -254,7 +254,7 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
     Returns a dict of the previous values so callers can restore them
     via `_restore_pragmas` regardless of how the transaction ended.
     Capturing the originals (instead of hard-coding "NORMAL") means we
-    honour whatever the engine was configured with â€” if a future
+    honour whatever the engine was configured with — if a future
     migration tunes SQLite globally, this helper still round-trips
     correctly.
     """
@@ -265,7 +265,7 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
         "synchronous": str(session.execute(text("PRAGMA synchronous")).scalar()),
         "cache_size": str(session.execute(text("PRAGMA cache_size")).scalar()),
     }
-    # We don't change journal_mode anymore â€” leaving WAL active is what
+    # We don't change journal_mode anymore — leaving WAL active is what
     # lets the parallel `/progress` polls run without blocking the
     # writer. We *do* still need to be outside any active transaction
     # to set PRAGMAs reliably on SQLite, so issue a rollback first.
@@ -279,7 +279,7 @@ def _apply_bulk_insert_pragmas(session: Session) -> Dict[str, str]:
 
 
 def _restore_pragmas(session: Session, previous: Dict[str, str]) -> None:
-    """Best-effort PRAGMA restore. Never raises â€” diagnostic-only."""
+    """Best-effort PRAGMA restore. Never raises — diagnostic-only."""
     if not previous:
         return
     try:
@@ -298,7 +298,7 @@ def _content_type_to_category(ct: ContentType) -> Optional[str]:
     routing it to the wrong pipeline.
 
     PDCR usage files are valid here as of PR-D (Pipeline 3). They are
-    routed to the PDCR persisters after the dict pipeline finishes â€”
+    routed to the PDCR persisters after the dict pipeline finishes —
     see ``_DICT_CATEGORIES`` / ``_PDCR_CATEGORIES`` for the partitions.
     """
     return {
@@ -327,12 +327,12 @@ _PDCR_CATEGORIES = {"dbql_log", "object_usage"}
 # 2026-06-02): SCION stores the reassembled SQL text per QueryID but
 # nothing consumes it, and DataDNA isn't joining against it near-term,
 # so we keep the database lean and don't persist it. The reader and the
-# `dbql_query` table/migration stay in place (dormant) â€” flip this to
+# `dbql_query` table/migration stay in place (dormant) — flip this to
 # True to re-enable if DataDNA later wants the QueryID â†’ SQL correlation.
 INGEST_DBQL = False
 
 
-# â”€â”€â”€â”€ The endpoint â”€â”€â”€â”€
+# ──── The endpoint ────
 
 @router.get("/{import_id}/progress")
 def get_import_progress(import_id: str) -> dict:
@@ -367,7 +367,7 @@ def cancel_import(import_id: str) -> dict:
 
     Returns 200 with `{cancelled: true}` if the flag was set; 404 if
     the import isn't registered or has already finished. The latter
-    case is intentionally not an error â€” the cancel button can race
+    case is intentionally not an error — the cancel button can race
     with natural completion and we don't want to surface that as a
     user-visible failure.
     """
@@ -391,14 +391,14 @@ def import_dict_batch(
     files: List[UploadFile] = File(
         ...,
         description=(
-            "Up to 8 extract files in any combination â€” the 6 dict views "
+            "Up to 8 extract files in any combination — the 6 dict views "
             "(databases, tables, columns, indices, partitioning, "
             "tabletext) plus the 2 PDCR usage extracts "
             "(pdcr_log_*, pdcr_object_usage_*). The endpoint auto-detects "
             "which view each file represents by content; filenames matching "
             "Rahul's templates are detected with high confidence. PDCR "
             "files are routed to the usage persisters after the dict "
-            "snapshot commits â€” see Pipeline 3 in docs/SPEC.md."
+            "snapshot commits — see Pipeline 3 in docs/SPEC.md."
         ),
     ),
     force: bool = Form(
@@ -431,12 +431,12 @@ def import_dict_batch(
     persist, post-ingest) are all synchronous and add up to several
     minutes on a real customer extract. If we ran inside the asyncio
     event loop, those sync calls would block the loop and starve
-    every other request â€” including the parallel `/progress` polls
+    every other request — including the parallel `/progress` polls
     and the `/cancel` POST that the frontend relies on for live
     feedback. Making the handler sync delegates it to FastAPI's
     threadpool (default 40 workers via anyio), keeping the loop free
     to dispatch the small endpoints concurrently. We pay nothing for
-    the change because there's no async I/O here anyway â€”
+    the change because there's no async I/O here anyway —
     `upload.file.read()` is the sync equivalent of
     `await upload.read()`, SQLAlchemy is synchronous, and the
     downstream parsers / persisters are all sync.
@@ -450,17 +450,17 @@ def import_dict_batch(
     # Stage timings collected as we go. We log each stage individually
     # at INFO and then emit a single summary table at the end. Keys are
     # ordered semantically (the same order the user perceives the
-    # work happening) â€” the dict preserves insertion order in 3.7+.
+    # work happening) — the dict preserves insertion order in 3.7+.
     timings: Dict[str, float] = {}
     sizes_by_category: Dict[str, int] = {}
     t_overall = time.perf_counter()
-    logger.info("[ingest] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ dict-import started â€” %d file(s) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€", len(files))
+    logger.info("[ingest] ───────────── dict-import started — %d file(s) ─────────────", len(files))
 
     # Register progress tracking if the client supplied an import_id.
     # Every subsequent step pushes updates via `import_progress`; the
     # frontend polls `GET /{import_id}/progress` in parallel to render
     # the checklist UI. Wrapped in a helper so the rest of the handler
-    # stays readable â€” `_progress_*` no-ops cleanly when import_id is
+    # stays readable — `_progress_*` no-ops cleanly when import_id is
     # None (i.e. for non-UI callers like our pytest TestClient).
     if import_id is not None:
         import_progress.init(import_id, import_progress.DICT_IMPORT_STEPS)
@@ -481,7 +481,7 @@ def import_dict_batch(
         if import_id is not None:
             import_progress.end_step(import_id, step, caption)
 
-    # â”€â”€â”€â”€ Step 1: stream every upload to disk + classify by content â”€â”€â”€â”€
+    # ──── Step 1: stream every upload to disk + classify by content ────
     # Paths are kept by category so multiple files of the same view
     # would overwrite each other deliberately (only one
     # `columnsv_*.dat` per batch is the contract). The temp files are
@@ -560,7 +560,7 @@ def import_dict_batch(
             caption=f"{len(files)} files Â· {_fmt_bytes(total_uploaded_bytes)}",
         )
 
-        # â”€â”€â”€â”€ PDCR-only batch guard â”€â”€â”€â”€
+        # ──── PDCR-only batch guard ────
         # PR-D scope is mixed batches (dict + PDCR) and dict-only.
         # PDCR-only batches need a snapshot to resolve identifiers
         # against; supporting them properly is deferred to a later
@@ -576,8 +576,8 @@ def import_dict_batch(
                 ),
             )
 
-        # â”€â”€â”€â”€ Step 2: parse the small views eagerly (fits in memory) â”€â”€â”€â”€
-        # databases â‰¤ 50k rows, tables â‰¤ 500k, partitioning â‰¤ 50k â€”
+        # ──── Step 2: parse the small views eagerly (fits in memory) ────
+        # databases â‰¤ 50k rows, tables â‰¤ 500k, partitioning â‰¤ 50k —
         # well under any memory pressure. tabletext can hit hundreds of
         # MB for a large EDW but its 9-field ENDREC layout doesn't
         # have a streaming reader yet (see tabletext TODO in reader);
@@ -639,14 +639,14 @@ def import_dict_batch(
             ),
         )
 
-        # â”€â”€â”€â”€ Step 3: identity validation â”€â”€â”€â”€
+        # ──── Step 3: identity validation ────
         t_validate = time.perf_counter()
         _progress_start("validate_identity", caption="checking source / run_id consistencyâ€¦")
         # Walk the in-memory lists for the small views, plus peek the
         # first record of the streamed views (columns, indices). This
         # keeps the temporal/identity checks O(small files) without
         # blowing up on the multi-GB columns file. Rahul's contract
-        # guarantees identity is uniform within a single file â€” we
+        # guarantees identity is uniform within a single file — we
         # rely on parser-side arity validation to catch mid-file
         # corruption rather than walking 9.8M rows twice.
         validator_input: List[Tuple[str, list]] = []
@@ -690,7 +690,7 @@ def import_dict_batch(
                 detail=str(e),
             )
         timings["3_validate_identity"] = time.perf_counter() - t_validate
-        logger.info("[ingest] identity validation passed in %s â€” %s",
+        logger.info("[ingest] identity validation passed in %s — %s",
                     _fmt_time(timings["3_validate_identity"]),
                     identity.snapshot_label)
         _progress_end(
@@ -698,7 +698,7 @@ def import_dict_batch(
             caption=identity.snapshot_label,
         )
 
-        # â”€â”€â”€â”€ Step 4: persist (streaming columns + indices) â”€â”€â”€â”€
+        # ──── Step 4: persist (streaming columns + indices) ────
         # We pass the generators directly to `persist_batch`. The
         # persister consumes them in chunks via
         # `bulk_insert_mappings`, never materialising more than one
@@ -752,7 +752,7 @@ def import_dict_batch(
                 # clean 499 (the de-facto "client closed request"
                 # status code; FastAPI doesn't define it, so we use
                 # 499 as a custom integer). The frontend treats it as
-                # "the cancel went through" â€” not an error to toast.
+                # "the cancel went through" — not an error to toast.
                 session.rollback()
                 if import_id is not None:
                     state = import_progress.get(import_id)
@@ -808,8 +808,8 @@ def import_dict_batch(
         logger.info("[ingest] persist (parse+stream columns/indices + bulk insert + commit) %s",
                     _fmt_time(timings["4_persist_total"]))
 
-        # â”€â”€â”€â”€ Step 5: post-ingest analytical pipeline â”€â”€â”€â”€
-        # Skipped on idempotent re-imports â€” the prior run already
+        # ──── Step 5: post-ingest analytical pipeline ────
+        # Skipped on idempotent re-imports — the prior run already
         # populated everything, re-running would be wasted work.
         if not result.skipped_existing:
             t_post = time.perf_counter()
@@ -825,12 +825,12 @@ def import_dict_batch(
                         _fmt_time(timings["5_post_ingest"]))
             _progress_end("post_ingest", caption="all derived tables populated")
         else:
-            # Idempotent re-import â€” mark post-ingest as a no-op rather
+            # Idempotent re-import — mark post-ingest as a no-op rather
             # than leaving it in "pending" forever, otherwise the UI
             # checklist would show one step stuck on the spinner.
             _progress_end("post_ingest", caption="skipped (snapshot already exists)")
 
-        # â”€â”€â”€â”€ Step 6: PDCR usage ingest (Pipeline 3, PR-D) â”€â”€â”€â”€
+        # ──── Step 6: PDCR usage ingest (Pipeline 3, PR-D) ────
         # Runs in its own session so a failure here doesn't roll back
         # the dict snapshot that already committed. The persisters
         # use natural-key idempotency, so a retry of just the PDCR
@@ -896,7 +896,7 @@ def import_dict_batch(
                     )
             timings["6_persist_pdcr"] = time.perf_counter() - t_pdcr
             logger.info(
-                "[ingest] PDCR persisted in %s â€” "
+                "[ingest] PDCR persisted in %s — "
                 "dbql inserted=%d dup=%d invalid=%d Â· "
                 "object_usage inserted=%d unmapped=%d orphan=%d invalid=%d",
                 _fmt_time(timings["6_persist_pdcr"]),
@@ -906,20 +906,20 @@ def import_dict_batch(
                 obj_result.skipped_orphan, obj_result.skipped_invalid,
             )
 
-            # â”€â”€â”€â”€ Step 6b: criticality re-compute with usage (PR-E) â”€â”€â”€â”€
+            # ──── Step 6b: criticality re-compute with usage (PR-E) ────
             # The post-ingest pipeline ran ``compute_criticality`` with
             # ``usage_available=False`` because no UsageEvent rows
             # existed for this snapshot yet. Now that PR-D persisted
             # them, re-run the engine with ``usage_available=True`` so
             # the criticality cache reflects real query / access
             # counts. ``force=True`` is mandatory because the post-
-            # ingest pass already populated rows for this snapshot â€”
+            # ingest pass already populated rows for this snapshot —
             # without it, the cache-check at the top of
             # ``compute_criticality`` would return early.
             #
             # Gate on ``obj_result.inserted > 0`` so we don't pay the
             # full re-compute when the batch only carried DBQL (which
-            # doesn't feed UsageEvent â€” see persister docstrings).
+            # doesn't feed UsageEvent — see persister docstrings).
             if obj_result.inserted > 0:
                 _progress_update(
                     "persist_pdcr",
@@ -943,7 +943,7 @@ def import_dict_batch(
                         time.perf_counter() - t_crit
                     )
                     logger.info(
-                        "[ingest] criticality re-computed with usage in %s â€” "
+                        "[ingest] criticality re-computed with usage in %s — "
                         "HIGH=%d MEDIUM=%d LOW=%d (total=%d)",
                         _fmt_time(timings["6b_recompute_criticality"]),
                         criticality_high, criticality_medium,
@@ -951,7 +951,7 @@ def import_dict_batch(
                     )
                 except Exception as e:
                     # Don't fail the whole import over a criticality
-                    # re-compute glitch â€” the dict snapshot + PDCR
+                    # re-compute glitch — the dict snapshot + PDCR
                     # rows are already committed, and the on-demand
                     # /usage/criticality endpoint will recompute on
                     # next request. Log and continue.
@@ -981,7 +981,7 @@ def import_dict_batch(
                 ),
             )
         else:
-            # No PDCR files in this batch â€” mark the step as a no-op
+            # No PDCR files in this batch — mark the step as a no-op
             # so the UI checklist doesn't sit on a spinner forever.
             _progress_end(
                 "persist_pdcr",
@@ -991,10 +991,10 @@ def import_dict_batch(
         if import_id is not None and finalize_progress:
             import_progress.mark_finished(import_id, ok=True)
 
-        # Final summary table â€” easy to grep for and to copy/paste
+        # Final summary table — easy to grep for and to copy/paste
         # when comparing two runs to see where time went.
         total = time.perf_counter() - t_overall
-        logger.info("[ingest] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€")
+        logger.info("[ingest] ───────────── summary ─────────────")
         logger.info("[ingest]   snapshot_id=%s  source=%s  run=%s",
                     result.snapshot_id, identity.source_system_name,
                     identity.extract_run_id[:24] + ("â€¦" if len(identity.extract_run_id) > 24 else ""))
@@ -1006,7 +1006,7 @@ def import_dict_batch(
             pct = (elapsed / total * 100) if total > 0 else 0
             logger.info("[ingest]   %-25s %12s  (%4.1f%%)", stage, _fmt_time(elapsed), pct)
         logger.info("[ingest]   %-25s %12s", "TOTAL", _fmt_time(total))
-        logger.info("[ingest] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€")
+        logger.info("[ingest] ────────────────────────────────────")
 
         return DictImportResponse(
             snapshot_id=result.snapshot_id,

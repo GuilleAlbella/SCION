@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-"""Schema Tree API â€” returns hierarchical schema/table/column structure for a snapshot."""
+"""Schema Tree API — returns hierarchical schema/table/column structure for a snapshot."""
 
 from typing import Any, Dict, List
 

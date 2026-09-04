@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-"""Reasoning API (v1) â€” TAISA individual and batch analysis."""
+"""Reasoning API (v1) — TAISA individual and batch analysis."""
 
 from typing import Any, Dict, List, Optional
 
@@ -174,7 +174,7 @@ def execute_reasoning(change_id: int) -> ReasoningResponse:
                                 detail="snapshot not found.")
 
         # Join ImpactEvent -> GraphNode so we can feed TAISA object names
-        # (not opaque node ids) â€” critical for the LLM to reason usefully.
+        # (not opaque node ids) — critical for the LLM to reason usefully.
         impact_rows = session.execute(
             select(ImpactEvent, GraphNode)
             .join(GraphNode, GraphNode.node_id == ImpactEvent.impacted_node_id)

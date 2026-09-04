@@ -35,7 +35,7 @@ from app.diff.diff_models import ChangeEvent
 
 # Default rolling window (in snapshots). Tuned for demo-scale data where
 # we only have ~10 snapshots; in production with daily snapshots this
-# would be 7â€“14 and would represent weekly cadence.
+# would be 7â€"14 and would represent weekly cadence.
 DEFAULT_WINDOW = 3
 
 # Cap on history depth (most recent N snapshots scanned). Same motivation
@@ -88,7 +88,7 @@ def compute_schema_volatility_trend(
     """Return rolling volatility per schema across the recent history.
 
     Algorithm:
-      1. Identify the ``max_history_snapshots`` most recent snapshots â€”
+      1. Identify the ``max_history_snapshots`` most recent snapshots —
          this is the universe scanned for changes. Anything older is
          excluded so the function stays bounded at production scale.
       2. Load schemaâ†’table counts for those snapshots.
@@ -102,7 +102,7 @@ def compute_schema_volatility_trend(
       5. Emit the per-schema series plus the delta between the last and
          second-to-last points.
     """
-    # â”€â”€ 1. Snapshot order + per-schema object counts per snapshot â”€â”€
+    # â"€â"€ 1. Snapshot order + per-schema object counts per snapshot â"€â"€
     # Restricted to the most-recent ``max_history_snapshots`` so this
     # never tries to walk every historical snapshot at Transcend scale.
     #
@@ -125,7 +125,7 @@ def compute_schema_volatility_trend(
 
         snap_id_list = ",".join(str(s) for s in recent_snapshot_ids)
 
-        # (snapshot_id, schema_name, table_count) â€” one row per schemaÃ—snap.
+        # (snapshot_id, schema_name, table_count) — one row per schemaÃ—snap.
         # JOIN keeps all work server-side; no large IN-clause over schema_ids.
         count_rows = session.execute(text(f"""
             SELECT ss.snapshot_id, ss.schema_name, COUNT(ts.table_id) AS table_count
@@ -135,7 +135,7 @@ def compute_schema_volatility_trend(
             GROUP BY ss.snapshot_id, ss.schema_name
         """)).fetchall()
 
-        # (snapshot_to, schema_name, objects_changed) aggregate â€” avoids
+        # (snapshot_to, schema_name, objects_changed) aggregate — avoids
         # loading all 1.86 M change_event rows into Python.
         # COLUMN changes are collapsed to their parent table using inline
         # SUBSTR so the numerator counts "tables touched", not raw columns.
@@ -186,7 +186,7 @@ def compute_schema_volatility_trend(
         (r[1], int(r[0])): int(r[2]) for r in change_agg
     }
 
-    # â”€â”€ 3. Build the per-schema series â”€â”€
+    # â"€â"€ 3. Build the per-schema series â"€â"€
     all_schemas = sorted({r[1] for r in count_rows})
     trends: List[SchemaVolatilityTrend] = []
 
@@ -210,7 +210,7 @@ def compute_schema_volatility_trend(
                 objects_total=total,
             ))
 
-        # â”€â”€ 4. Delta between the most recent and its predecessor â”€â”€
+        # â"€â"€ 4. Delta between the most recent and its predecessor â"€â"€
         current = series[-1].volatility if series else 0.0
         prior = series[-2].volatility if len(series) >= 2 else current
         delta = current - prior

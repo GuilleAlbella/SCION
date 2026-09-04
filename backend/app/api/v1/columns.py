@@ -1,12 +1,12 @@
 ﻿from __future__ import annotations
 
-"""Columns API â€” PII classification and retrieval.
+"""Columns API — PII classification and retrieval.
 
 Two endpoints:
-  POST /columns/classify  â€” run TAISA PII analysis over unclassified columns
+  POST /columns/classify  — run TAISA PII analysis over unclassified columns
                             in a snapshot (or a specific table), caching results
                             on column_snapshot.pii_label / pii_confidence.
-  GET  /columns/pii       â€” return cached PII data for one SCHEMA.TABLE object.
+  GET  /columns/pii       — return cached PII data for one SCHEMA.TABLE object.
 """
 
 from datetime import datetime, timezone
@@ -106,7 +106,7 @@ def classify_columns(
     limit: int = Query(500, ge=1, le=5000, description="Max columns to classify in this call"),
     force: bool = Query(False, description="Re-classify already-classified columns"),
     object: Optional[str] = Query(
-        None, description="Scope to a single SCHEMA.TABLE â€” omit to process all tables"
+        None, description="Scope to a single SCHEMA.TABLE — omit to process all tables"
     ),
 ) -> ClassifyResponse:
     """Batch-classify columns using TAISA PII analysis, caching results on column_snapshot."""
@@ -139,7 +139,7 @@ def classify_columns(
         for table_id, table_name, schema_name in tables:
             remaining = limit - classified
             if remaining <= 0:
-                # Budget exhausted â€” skip remaining tables without querying them.
+                # Budget exhausted — skip remaining tables without querying them.
                 # We don't count precise skipped-column totals past this point,
                 # but avoid issuing N more SQL queries for tables we won't classify.
                 break

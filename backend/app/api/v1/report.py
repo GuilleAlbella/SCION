@@ -84,7 +84,7 @@ def _build_html_report(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCION Impact Report â€” Snapshot #{snapshot_from} â†’ #{snapshot_to}</title>
+<title>SCION Impact Report — Snapshot #{snapshot_from} â†’ #{snapshot_to}</title>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a2e; }}
@@ -114,7 +114,7 @@ def _build_html_report(
 </head>
 <body>
 <div class="header">
-    <div class="brand">TERADATA â€” PROJECT SCION</div>
+    <div class="brand">TERADATA — PROJECT SCION</div>
     <h1>Impact Comparison Report</h1>
     <div class="meta">Snapshot #{snapshot_from} â†’ #{snapshot_to} &nbsp;|&nbsp; Generated: {now}</div>
 </div>
@@ -167,7 +167,7 @@ def _build_html_report(
     </div>
 </div>
 <div class="footer">
-    SCION â€” Structural Change Intelligence &amp; Observability Node &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
+    SCION — Structural Change Intelligence &amp; Observability Node &nbsp;|&nbsp; Teradata Corporation &nbsp;|&nbsp; BETA v1.00.00
 </div>
 </body>
 </html>"""
@@ -217,7 +217,7 @@ def generate_report(snapshot_from: int, snapshot_to: int) -> str:
             "is_breaking": r.is_breaking or False,
         })
 
-    # Blast radius and TAISA reasoning are best-effort â€” if either engine is
+    # Blast radius and TAISA reasoning are best-effort — if either engine is
     # stopped or fails, the report still renders with the diff section so the
     # user at least gets the raw change list.
     blast_radius = None

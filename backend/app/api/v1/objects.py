@@ -15,12 +15,12 @@ Two backing sources are supported via the ``source`` query parameter:
   that have actually changed (e.g. the Timeline page, the TAISA scope
   selector).
 - ``graph``: full set of objects in the dependency graph for a given
-  snapshot. Used by Simulation / What-If, where every object â€” even ones
-  that never changed â€” is a valid pick.
+  snapshot. Used by Simulation / What-If, where every object — even ones
+  that never changed — is a valid pick.
 
 The endpoint is built for typeahead UX and never returns more than a
 small page (default 20, hard-capped at 100). It exposes ``has_more`` so
-the UI can render "Showing 20 of many â€” keep typing" affordances without
+the UI can render "Showing 20 of many — keep typing" affordances without
 a separate count query (which on large extracts is the slow part).
 """
 
@@ -44,7 +44,7 @@ class ObjectSearchResponse(BaseModel):
 
     ``items`` is the (at most) ``limit`` matching object identifiers,
     sorted alphabetically. ``has_more`` is True when more matches exist
-    beyond the page â€” the UI should prompt the user to refine the query.
+    beyond the page — the UI should prompt the user to refine the query.
     """
 
     items: List[str]
@@ -83,7 +83,7 @@ def search_objects(
     --------------------
     - We fetch ``limit + 1`` rows on every query and treat the trailing
       one as the ``has_more`` sentinel. This avoids a second ``COUNT(*)``
-      round-trip â€” cheap for autocomplete which doesn't need an exact
+      round-trip — cheap for autocomplete which doesn't need an exact
       total, just the "are there more?" signal.
     - For ``source=changes`` we use ``DISTINCT`` because the same object
       can appear in many change events; the SQLite query planner serves
@@ -108,7 +108,7 @@ def search_objects(
 
         else:  # source == "graph"
             if snapshot_id is None:
-                # Empty result rather than a 400 â€” keeps the UI calling
+                # Empty result rather than a 400 — keeps the UI calling
                 # this endpoint defensively (e.g. before a snapshot is
                 # picked) cheap and free of error toasts.
                 return {"items": [], "has_more": False, "source": source}
@@ -116,7 +116,7 @@ def search_objects(
             # The graph builder already stores the canonical identifier in
             # `object_name`: qualified "schema.table" for TABLE/VIEW nodes
             # and the bare schema name for SCHEMA nodes. So `object_name`
-            # IS the full id â€” we must NOT prepend `schema_name` again.
+            # IS the full id — we must NOT prepend `schema_name` again.
             # The old `schema_name + "." + object_name` synthesis produced
             # doubled identifiers like "ACC_TED_VW.ACC_TED_VW.td_ps_ff_..."
             # which only resolved by accident (the focus resolver splits on

@@ -39,7 +39,7 @@ def global_search(q: str = Query(..., min_length=1, description="Search query"))
     """Search for objects by name across graph nodes and change events."""
 
     # Dedup via composite key: the same object may appear as both a graph
-    # node and a change event â€” we want a single result row per "thing".
+    # node and a change event — we want a single result row per "thing".
     results: List[Dict[str, Any]] = []
     seen = set()
     query_lower = q.lower()

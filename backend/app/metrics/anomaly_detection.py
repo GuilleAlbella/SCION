@@ -6,13 +6,13 @@ Feature #1 of the v1.07 data-science pack. The idea is simple: each
 `schema` has a *normal* cadence of structural change (e.g. `reporting`
 averages 1.2 changes per snapshot, `staging` averages 0.3). When a new
 snapshot produces a volume that deviates significantly from that baseline
-â€” measured by z-score against the schema's own historical distribution â€”
+— measured by z-score against the schema's own historical distribution —
 we surface it as an anomaly.
 
 This is **classical statistical process control**, not machine learning:
 - Zero training required. The baseline IS the history.
 - Explainable (we return mean, std, z-score, observed count).
-- Cheap to compute â€” one pass over `change_event`.
+- Cheap to compute — one pass over `change_event`.
 
 The complementary value is that it catches *patterns* that per-change
 rules miss: every change in isolation may be legitimate, but 6 changes
@@ -79,13 +79,13 @@ def detect_anomalies(
       2. For each schema, build a distribution of "changes per snapshot"
          across its entire history.
       3. Compute mean + std over the baseline (everything EXCEPT the
-         snapshot being evaluated â€” leave-one-out, so a single outlier
+         snapshot being evaluated — leave-one-out, so a single outlier
          doesn't hide itself by inflating its own expected value).
       4. Flag `(schema, snapshot)` with |z| >= `z_threshold`.
 
     Returns anomalies sorted by absolute z-score descending.
     """
-    # â”€â”€ 1. Load all change events with their schema prefix â”€â”€
+    # â"€â"€ 1. Load all change events with their schema prefix â"€â"€
     per_schema_snapshot: Dict[str, Dict[int, int]] = {}
     all_snapshots: set[int] = set()
     with Session(engine) as session:
@@ -102,10 +102,10 @@ def detect_anomalies(
         per_schema_snapshot[schema][snap_to] = per_schema_snapshot[schema].get(snap_to, 0) + 1
         all_snapshots.add(snap_to)
 
-    # â”€â”€ 2. For each schema, compute leave-one-out z-score per snapshot â”€â”€
+    # â"€â"€ 2. For each schema, compute leave-one-out z-score per snapshot â"€â"€
     results: List[AnomalyRecord] = []
     for schema, counts in per_schema_snapshot.items():
-        # Fill zeros for snapshots where this schema had no changes at all â€”
+        # Fill zeros for snapshots where this schema had no changes at all —
         # absence IS part of its distribution.
         full = {snap: counts.get(snap, 0) for snap in all_snapshots}
 

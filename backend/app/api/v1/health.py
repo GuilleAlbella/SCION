@@ -29,9 +29,9 @@ from app.engine_registry import get_engine_states
 router = APIRouter(prefix="/health", tags=["health"])
 
 
-# â”€â”€â”€â”€ Liveness probe: /healthz â”€â”€â”€â”€
+# â"€â"€â"€â"€ Liveness probe: /healthz â"€â"€â"€â"€
 # Kubernetes / Docker convention. Must NOT touch the DB or any
-# external dependency â€” its only job is to prove the process is up
+# external dependency — its only job is to prove the process is up
 # and responsive. If this fails, the orchestrator restarts the pod.
 # Anything stateful belongs in /readyz instead.
 @router.get(
@@ -43,7 +43,7 @@ def liveness() -> JSONResponse:
     """Return 200 unconditionally as long as the process is responsive.
 
     Used by Docker `HEALTHCHECK`, Kubernetes liveness probes, and
-    load balancers. Cheap on purpose â€” no DB query, no engine
+    load balancers. Cheap on purpose — no DB query, no engine
     introspection, no external calls. A green `/healthz` means
     "the process is alive"; it does NOT mean "ready to serve
     traffic" (that's `/readyz`).
@@ -51,18 +51,18 @@ def liveness() -> JSONResponse:
     return JSONResponse({"status": "ok"}, status_code=status.HTTP_200_OK)
 
 
-# â”€â”€â”€â”€ Readiness probe: /readyz â”€â”€â”€â”€
+# â"€â"€â"€â"€ Readiness probe: /readyz â"€â"€â"€â"€
 # Returns 200 only if the backend can serve real requests. We verify
 # DB connectivity with a `SELECT 1` (fast, dialect-agnostic). If the
 # DB is unreachable the orchestrator stops sending traffic without
-# killing the pod â€” a transient DB hiccup shouldn't trigger a
+# killing the pod — a transient DB hiccup shouldn't trigger a
 # restart cascade.
 @router.get(
     "/ready",  # final path: `/api/v1/health/ready`. We keep it under
                 # the `/health` prefix instead of a hypothetical
                 # standalone `/readyz` because the v1 router has a
                 # consistent prefix policy and orchestrators (k8s,
-                # Docker) can be configured with any path â€” the
+                # Docker) can be configured with any path — the
                 # convention is in the response shape, not the URL.
     summary="Readiness probe (DB + engines)",
 )
@@ -74,7 +74,7 @@ def readiness() -> JSONResponse:
       2. The engine registry reports `database_ready=True`.
 
     We don't gate on `snapshot_ready` / `diff_ready` / etc. on
-    purpose â€” those engines may be intentionally stopped by an
+    purpose — those engines may be intentionally stopped by an
     operator via the Control panel; that's a degraded state, not
     an unready one.
     """

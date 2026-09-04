@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-"""Simulation API (v1) â€” "what if" analysis.
+"""Simulation API (v1) — "what if" analysis.
 
 Lets a user pick a hypothetical change (e.g. "change this column type",
 "drop this table") and see the blast radius + TAISA analysis WITHOUT
@@ -89,7 +89,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
     severity = _SEVERITY_MAP.get(request.change_type, "LOW")
     is_breaking = _BREAKING.get(request.change_type, False)
 
-    # â”€â”€â”€â”€ Resolve the simulation target to a graph node â”€â”€â”€â”€
+    # ──── Resolve the simulation target to a graph node ────
     # Graph nodes are tables/views (schema.table), not columns. If the user
     # simulates a column-level change like COLUMN_REMOVED on
     # "schema.table.col", we walk impact from the parent TABLE node because
@@ -165,7 +165,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
         with Session(engine) as session:
             usage_rows = session.execute(select(UsageEvent)).scalars().all()
             # Index usage by BOTH full qualified name ("schema.table") and the
-            # short table name â€” query logs may store either form, and we
+            # short table name — query logs may store either form, and we
             # don't want to miss matches because of a prefix mismatch.
             usage_map = {}
             for u in usage_rows:
@@ -217,7 +217,7 @@ def simulate_change(request: SimulationRequest) -> Dict[str, Any]:
         )
     else:
         recommendation = (
-            f"âœ“ LOW RISK: Minimal impact detected ({impact_count} dependents, "
+            f"✓ LOW RISK: Minimal impact detected ({impact_count} dependents, "
             f"~{queries_affected:,} queries). Safe to proceed with standard testing."
         )
 

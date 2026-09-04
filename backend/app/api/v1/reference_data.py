@@ -1,9 +1,9 @@
-﻿"""Â§2.10 Reference Data â€” query endpoints.
+﻿"""Â§2.10 Reference Data — query endpoints.
 
-GET /reference/teams           â€” org hierarchy (teams + department)
-GET /reference/applications    â€” business applications with mapping counts
-GET /reference/usage-by-team   â€” usage stats grouped by team/department
-GET /reference/usage-by-app    â€” usage stats grouped by application
+GET /reference/teams           — org hierarchy (teams + department)
+GET /reference/applications    — business applications with mapping counts
+GET /reference/usage-by-team   — usage stats grouped by team/department
+GET /reference/usage-by-app    — usage stats grouped by application
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from app.usage.usage_models import UsageEvent
 router = APIRouter(prefix="/reference", tags=["reference"])
 
 
-# â”€â”€ response schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ response schemas â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 class TeamRow(BaseModel):
@@ -86,7 +86,7 @@ class AppUsageResponse(BaseModel):
     unmapped_query_count: int
 
 
-# â”€â”€ endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â"€â"€ endpoints â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 
 @router.get("/teams", response_model=TeamsResponse)

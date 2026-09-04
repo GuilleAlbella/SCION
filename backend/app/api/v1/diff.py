@@ -181,7 +181,7 @@ class DiffDetailResponse(BaseModel):
 
 
 # Server-side defaults / hard caps for diff-details pagination. ``LIMIT_MAX``
-# is the ceiling we'll enforce regardless of what the client sends â€” large
+# is the ceiling we'll enforce regardless of what the client sends — large
 # enough that scripts and ad-hoc API consumers can pull a useful chunk in
 # one round trip, small enough that no single response can OOM the browser
 # or the server's response buffer on a 250k-change extract.
@@ -219,7 +219,7 @@ def get_diff_details(
     Pre-paginated revisions returned every change event in a single
     response, plus an in-Python summary computed by counting rows. With
     Rahul's Transcend extract that meant ~250k rows + tens of MB of
-    JSON in one response â€” the browser couldn't survive parsing it.
+    JSON in one response — the browser couldn't survive parsing it.
 
     The endpoint now:
 
@@ -239,18 +239,18 @@ def get_diff_details(
     Filter semantics
     ----------------
     - ``severity``: case-insensitive; "ALL" or null disables the filter.
-    - ``is_breaking``: tri-state â€” null means "any", true/false restrict.
+    - ``is_breaking``: tri-state — null means "any", true/false restrict.
     - ``object_q``: ``ILIKE %q%`` against ``object_identifier``.
     """
 
-    # â”€â”€â”€â”€ Direction normalisation â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Direction normalisation â"€â"€â"€â"€
     # Always work with the lower snapshot_id as "from" so the pair filter
     # matches the canonical rows stored by DiffEngine (which normalises the
     # same way). The cumulative-pairs range query also requires from <= to.
     if snapshot_from > snapshot_to:
         snapshot_from, snapshot_to = snapshot_to, snapshot_from
 
-    # â”€â”€â”€â”€ Step 1: resolve snapshots into consecutive pairs â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Step 1: resolve snapshots into consecutive pairs â"€â"€â"€â"€
     with Session(db_engine) as session:
         all_snaps = session.execute(
             select(Snapshot.snapshot_id)
@@ -268,7 +268,7 @@ def get_diff_details(
     else:
         pairs = [(snapshot_from, snapshot_to)]
 
-    # â”€â”€â”€â”€ Step 2: idempotent compute_diff (first page only) â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Step 2: idempotent compute_diff (first page only) â"€â"€â"€â"€
     # Doing this on every page would be wasteful and would make pagination
     # weirdly slow on offset>0 fetches. compute_diff is itself idempotent
     # (it short-circuits when the pair already has change_event rows), so
@@ -288,10 +288,10 @@ def get_diff_details(
                 exc,
             )
 
-    # â”€â”€â”€â”€ Step 3: build the shared filter expression â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Step 3: build the shared filter expression â"€â"€â"€â"€
     # We previously used `tuple_(...).in_(pairs)` to push the pair filter
     # in one shot, but SQLite's planner doesn't always recognise row-value
-    # IN as eligible for index seeks on a composite-key index â€” depending
+    # IN as eligible for index seeks on a composite-key index — depending
     # on version it falls back to a full table scan. Expanding to a plain
     # OR-of-equality-pairs gives the planner unambiguous index hints,
     # which on tables with a hot `change_event` (250k+ rows) is the
@@ -321,7 +321,7 @@ def get_diff_details(
 
     where_clause = and_(*filters)
 
-    # â”€â”€â”€â”€ Steps 4 & 5: summary + page â”€â”€â”€â”€
+    # â"€â"€â"€â"€ Steps 4 & 5: summary + page â"€â"€â"€â"€
     # One session covers both queries so we don't pay the connection-acquire
     # / PRAGMA-emission cost twice. Summary (small GROUP BY) and page
     # (LIMIT/OFFSET) read the same rows, so SQLite's page cache warms up
