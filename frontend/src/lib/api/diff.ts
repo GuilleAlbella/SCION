@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 export async function runDiff(req: DiffRequest): Promise<DiffResponse> {
-  const { data } = await client.post<DiffResponse>("/diff", req);
+  const { data } = await client.post<DiffResponse>("/diff", req, { timeout: 0 });
   return data;
 }
 
