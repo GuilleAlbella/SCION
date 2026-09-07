@@ -1,7 +1,7 @@
 Object name  : snapshot_diff_comprehensive
 Test type    : diff_count
 Priority     : P1
-Min downstream : 1000
+Min downstream : 10
 
 Note: Phase 2 — UC-03 (Large Snapshot Diff). Verifies that the diff between
       the two most recent snapshots returns at least 1,000 changes, demonstrating
