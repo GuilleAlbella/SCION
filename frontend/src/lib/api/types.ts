@@ -14,6 +14,8 @@ export interface Snapshot {
   description: string;
   /** §2.16 Staging Layer: pending | staged | committed | failed */
   import_status?: string;
+  /** §2.16.c: validation issues — each item is {type, severity, message, object_name?}. Null when clean. */
+  validation_warnings?: Array<{ type: string; severity: string; message: string; object_name?: string }> | null;
   /** §2.13 Manifest Timestamps: when the extractor ran on the client (UTC ISO string, NULL for parser/demo) */
   extract_timestamp?: string | null;
   /** §2.2 Incremental Loading: true for day-zero baselines and gap resets */
