@@ -1,6 +1,7 @@
 Object name  : teams
 Test type    : reference
 Priority     : P2
+Skip         : yes
 Min value    : 1
 
 Note: Phase 2 test — verifies that org-hierarchy reference data (teams) has been

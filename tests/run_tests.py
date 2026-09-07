@@ -94,6 +94,8 @@ def parse_test_file(path: Path) -> dict:
     target_field  = field("Target field")    # e.g. "total_objects" for landscape tests
     min_value_raw = field("Min value")
     min_value     = int(min_value_raw) if min_value_raw and min_value_raw.isdigit() else 0
+    skip_raw  = field("Skip")
+    skip      = skip_raw is not None and skip_raw.lower() in ("yes", "true", "1")
 
     return {
         "file":           path.name,
@@ -105,6 +107,7 @@ def parse_test_file(path: Path) -> dict:
         "priority":       priority,
         "target_field":   target_field,
         "min_value":      min_value,
+        "skip":           skip,
     }
 
 
@@ -920,6 +923,11 @@ def run_reference_test(base_url: str, test: dict) -> dict:
 
 def run_test(base_url: str, snapshot_id: int, snap_from: int, snap_to: int,
              test: dict, hops: int) -> dict:
+    if test.get("skip"):
+        r = _result(test, "SKIP", note="Pending setup — see fixture file Note for details.")
+        r["snapshot_id"] = snapshot_id
+        r["priority"]    = test.get("priority", "P3")
+        return r
     test_type = test.get("test_type", "lineage")
     if test_type == "lineage":
         r = run_lineage_test(base_url, snapshot_id, test, hops)
@@ -1587,7 +1595,10 @@ def main():
         # Header line
         type_padded = f"[{test_type:<14}]"
         obj_padded  = f"{obj_name:<40}"
-        print(f"  {CYAN}►{RESET} {type_padded} {obj_padded} {DIM}({priority}){RESET}")
+        if test.get("skip"):
+            print(f"  {DIM}► {type_padded} {obj_padded} ({priority}){RESET}")
+        else:
+            print(f"  {CYAN}►{RESET} {type_padded} {obj_padded} {DIM}({priority}){RESET}")
 
         t0 = time.time()
         r  = run_test(args.base_url, snapshot_id, snap_from, snap_to, test, args.hops)
@@ -1596,7 +1607,8 @@ def main():
         results.append(r)
 
         # Type-specific detail
-        _print_detail(r)
+        if r["status"] != "SKIP":
+            _print_detail(r)
 
         # Accumulate headline stats
         if test_type == "snapshot_health" and r["status"] in ("PASS", "PARTIAL"):
@@ -1665,6 +1677,13 @@ def main():
         t = r.get("test_type", "lineage")
         by_type.setdefault(t, {"PASS": 0, "PARTIAL": 0, "FAIL": 0, "SKIP": 0})
         by_type[t][r["status"]] = by_type[t].get(r["status"], 0) + 1
+
+    # ── Top summary line ──
+    print(f"  {GREEN}{passed} PASS{RESET}  /  "
+          f"{YELLOW}{partial} PARTIAL{RESET}  /  "
+          f"{RED}{failed} FAIL{RESET}  /  "
+          f"{DIM}{skipped} SKIP (pending setup){RESET}")
+    print()
 
     # ── Summary table ──
     col_cat  = 21

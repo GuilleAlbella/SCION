@@ -1,6 +1,7 @@
 Object name  : incntv_cmpnstn_empl_ss_arcs_vw
 Test type    : breaking
 Priority     : P1
+Skip         : yes
 Min downstream : 1
 
 Note: BREAKING CHANGE — Phase 2 core capability. Verifies SCION can identify

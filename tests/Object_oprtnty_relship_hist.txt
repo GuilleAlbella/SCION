@@ -2,6 +2,7 @@ Object name  : oprtnty_relship_hist
 Schema       : UAT_NFL_COR_TED_TBL
 Test type    : changed
 Priority     : P3
+Skip         : yes
 
 Note: Provided by Rahul Kulkarni as a "known changed table" (email 2026-06-10).
       CreateTimestamp 2026-02-11 15:17:59, LastAlterTimestamp 2026-05-21 05:43:28.

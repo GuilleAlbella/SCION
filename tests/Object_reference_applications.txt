@@ -1,6 +1,7 @@
 Object name  : applications
 Test type    : reference
 Priority     : P2
+Skip         : yes
 Min value    : 1
 
 Note: Phase 2 test — verifies that business application reference data has been

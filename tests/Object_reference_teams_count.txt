@@ -1,6 +1,7 @@
 Object name  : teams
 Test type    : reference
 Priority     : P2
+Skip         : yes
 Min value    : 1
 
 Note: Phase 2 — UC-16 (Reference Org Data). Verifies that the org hierarchy

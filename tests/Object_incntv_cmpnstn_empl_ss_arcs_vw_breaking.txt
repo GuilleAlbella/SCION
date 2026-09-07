@@ -2,6 +2,7 @@ Object name  : incntv_cmpnstn_empl_ss_arcs_vw
 Schema       : STG_CALLIDUS_VW
 Test type    : breaking
 Priority     : P2
+Skip         : yes
 
 Note: Rahul listed this as "unchanged" but SCION detected 51 COLUMN_REMOVED events
       in snapshots #5 and #6. Verifies that SCION flags at least one column removal

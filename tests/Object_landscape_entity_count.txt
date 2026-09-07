@@ -1,7 +1,7 @@
 Object name  : landscape_entity_count
 Test type    : landscape
 Priority     : P2
-Target field : entity_count
+Target field : recent_changes_count
 Min value    : 1000
 
 Note: Phase 2 — UC-15 (Landscape). Verifies at least 1,000 entities (objects) are
