@@ -1,6 +1,7 @@
 Object name  : componentDiscovery_Base
 Test type    : lineage
 Priority     : P1
+Snapshot     : 1
 Lineage flow : componentDiscovery_Base -> componentDiscovery_seq -> events_v
 
 Note: LINEAGE REGRESSION — The componentDiscovery chain is the primary lineage

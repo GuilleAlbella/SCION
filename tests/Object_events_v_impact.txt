@@ -1,6 +1,7 @@
 Object name  : events_v
 Test type    : impact
 Priority     : P1
+Snapshot     : 1
 Min downstream : 3
 
 Note: IMPACT — events_v is a central view used as a source by many downstream

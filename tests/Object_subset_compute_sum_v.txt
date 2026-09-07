@@ -1,5 +1,6 @@
 
 Object name : subset_compute_sum_v
+Snapshot     : 1
 
 Lineage flow : subset_avail_final_min_v -> subset_compute_v -> subset_compute_sum_v -> subset_v3
 

@@ -96,18 +96,21 @@ def parse_test_file(path: Path) -> dict:
     min_value     = int(min_value_raw) if min_value_raw and min_value_raw.isdigit() else 0
     skip_raw  = field("Skip")
     skip      = skip_raw is not None and skip_raw.lower() in ("yes", "true", "1")
+    snapshot_override_raw = field("Snapshot")
+    snapshot_override = int(snapshot_override_raw) if snapshot_override_raw and snapshot_override_raw.strip().isdigit() else None
 
     return {
-        "file":           path.name,
-        "object_name":    object_name,
-        "schema_name":    schema_name,
-        "test_type":      test_type,
-        "lineage_chain":  chain,
-        "min_downstream": min_downstream,
-        "priority":       priority,
-        "target_field":   target_field,
-        "min_value":      min_value,
-        "skip":           skip,
+        "file":              path.name,
+        "object_name":       object_name,
+        "schema_name":       schema_name,
+        "test_type":         test_type,
+        "lineage_chain":     chain,
+        "min_downstream":    min_downstream,
+        "priority":          priority,
+        "target_field":      target_field,
+        "min_value":         min_value,
+        "skip":              skip,
+        "snapshot_override": snapshot_override,
     }
 
 
@@ -923,6 +926,7 @@ def run_reference_test(base_url: str, test: dict) -> dict:
 
 def run_test(base_url: str, snapshot_id: int, snap_from: int, snap_to: int,
              test: dict, hops: int) -> dict:
+    effective_snapshot = test.get("snapshot_override") or snapshot_id
     if test.get("skip"):
         r = _result(test, "SKIP", note="Pending setup — see fixture file Note for details.")
         r["snapshot_id"] = snapshot_id
@@ -930,32 +934,32 @@ def run_test(base_url: str, snapshot_id: int, snap_from: int, snap_to: int,
         return r
     test_type = test.get("test_type", "lineage")
     if test_type == "lineage":
-        r = run_lineage_test(base_url, snapshot_id, test, hops)
+        r = run_lineage_test(base_url, effective_snapshot, test, hops)
     elif test_type in ("changed", "unchanged", "added", "dropped"):
         r = run_diff_test(base_url, snap_from, snap_to, test)
     elif test_type == "usage":
-        r = run_usage_test(base_url, snapshot_id, test)
+        r = run_usage_test(base_url, effective_snapshot, test)
     elif test_type == "impact":
-        r = run_impact_test(base_url, snapshot_id, test, hops)
+        r = run_impact_test(base_url, effective_snapshot, test, hops)
     elif test_type == "breaking":
         r = run_breaking_test(base_url, test)
     elif test_type == "exists":
-        r = run_exists_test(base_url, snapshot_id, test)
+        r = run_exists_test(base_url, effective_snapshot, test)
     elif test_type == "absent":
-        r = run_absent_test(base_url, snapshot_id, test)
+        r = run_absent_test(base_url, effective_snapshot, test)
     elif test_type == "snapshot_health":
-        r = run_snapshot_health_test(base_url, snapshot_id, test)
+        r = run_snapshot_health_test(base_url, effective_snapshot, test)
     elif test_type == "criticality":
-        r = run_criticality_test(base_url, snapshot_id, test)
+        r = run_criticality_test(base_url, effective_snapshot, test)
     elif test_type == "diff_count":
         r = run_diff_count_test(base_url, snap_from, snap_to, test)
     elif test_type == "landscape":
-        r = run_landscape_test(base_url, snapshot_id, test)
+        r = run_landscape_test(base_url, effective_snapshot, test)
     elif test_type == "reference":
         r = run_reference_test(base_url, test)
     else:
         r = _result(test, "SKIP", f"Unknown test type '{test_type}'.")
-    r["snapshot_id"] = snapshot_id
+    r["snapshot_id"] = effective_snapshot
     r["priority"]    = test.get("priority", "P3")
     return r
 
@@ -1594,11 +1598,13 @@ def main():
 
         # Header line
         type_padded = f"[{test_type:<14}]"
+        snap_override = test.get("snapshot_override")
+        snap_tag = f" {CYAN}[snap #{snap_override}]{RESET}" if snap_override and snap_override != snapshot_id else ""
         obj_padded  = f"{obj_name:<40}"
         if test.get("skip"):
             print(f"  {DIM}► {type_padded} {obj_padded} ({priority}){RESET}")
         else:
-            print(f"  {CYAN}►{RESET} {type_padded} {obj_padded} {DIM}({priority}){RESET}")
+            print(f"  {CYAN}►{RESET} {type_padded} {obj_padded}{snap_tag} {DIM}({priority}){RESET}")
 
         t0 = time.time()
         r  = run_test(args.base_url, snapshot_id, snap_from, snap_to, test, args.hops)

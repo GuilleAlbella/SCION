@@ -1,5 +1,6 @@
 
 Object name : subset_avail_final_min_v
+Snapshot     : 1
 
 Lineage flow : subset_avail_metrics_min_max_v -> subset_avail_metrics_beg_btw_end_v -> subset_avail_final_min_v -> subset_v3
 

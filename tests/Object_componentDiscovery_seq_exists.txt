@@ -1,6 +1,7 @@
 Object name  : componentDiscovery_seq
 Test type    : exists
 Priority     : P3
+Snapshot     : 1
 
 Note: Confirms that componentDiscovery_seq exists in the lineage snapshot (#7).
       This is a prerequisite check — if this fails, lineage tests for this object

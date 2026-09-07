@@ -1,6 +1,7 @@
 Object name  : subset_avail_metrics_min_max_v
 Test type    : impact
 Priority     : P2
+Snapshot     : 1
 Min downstream : 1
 
 Note: subset_avail_metrics_min_max_v is the upstream source in the availability lineage chain:

@@ -1,6 +1,7 @@
 Object name  : oprtnty_relship_hist
 Test type    : impact
 Priority     : P2
+Snapshot     : 1
 Min downstream : 1
 
 Note: IMPACT — oprtnty_relship_hist is known to have breaking changes (tested

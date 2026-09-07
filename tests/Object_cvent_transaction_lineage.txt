@@ -1,6 +1,7 @@
 Object name  : cvent_transaction
 Test type    : impact
 Priority     : P3
+Snapshot     : 1
 Min downstream : 1
 
 Note: LINEAGE — cvent_transaction is a source table for event-tracking reports.
