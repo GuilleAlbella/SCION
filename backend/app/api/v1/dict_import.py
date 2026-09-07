@@ -198,12 +198,24 @@ def _stream_upload_to_disk(upload: UploadFile) -> Path:
     fd, tmp_name = tempfile.mkstemp(suffix=".dat")
     os.close(fd)
     tmp_path = Path(tmp_name)
-    with tmp_path.open("wb") as out:
-        while True:
-            chunk = upload.file.read(_UPLOAD_CHUNK_SIZE)
-            if not chunk:
-                break
-            out.write(chunk)
+    try:
+        with tmp_path.open("wb") as out:
+            while True:
+                chunk = upload.file.read(_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                out.write(chunk)
+    except OSError as exc:
+        tmp_path.unlink(missing_ok=True)
+        if exc.errno == 28:  # ENOSPC
+            raise HTTPException(
+                status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+                detail=(
+                    "The server has run out of disk space and cannot process this import. "
+                    "Please contact the administrator to free up space and try again."
+                ),
+            ) from exc
+        raise
     return tmp_path
 
 
