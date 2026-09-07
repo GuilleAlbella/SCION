@@ -1,0 +1,11 @@
+Object name  : events_v
+Test type    : impact
+Priority     : P1
+Min downstream : 3
+
+Note: IMPACT — events_v is a central view used as a source by many downstream
+      aggregation and reporting objects. SCION should detect at least 3 downstream
+      consumers in the graph, confirming the FEEDS edges from events_v are populated.
+      If Min downstream fails, it means either: (a) events_v has no FEEDS edges
+      (parser did not detect the downstream SQLs), or (b) the graph is disconnected.
+      This is a key demo metric: "a change to events_v would cascade to N objects."

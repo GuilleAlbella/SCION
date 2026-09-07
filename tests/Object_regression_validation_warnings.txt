@@ -1,0 +1,12 @@
+Object name  : scion_instance
+Test type    : snapshot_health
+Priority     : P1
+Min downstream : 50000
+
+Note: REGRESSION — v2.09.16 TypeScript CI failure: validation_warnings field was
+      referenced in snapshots/page.tsx but not declared in the Snapshot interface in
+      frontend/src/lib/api/types.ts (commit 116e1ff fixed it).
+      This snapshot_health test verifies the SCION backend returns a snapshot with
+      a large object count (>50K), confirming that a correctly-built frontend is
+      serving a properly connected backend — if the CI regression broke the build,
+      no data would appear.

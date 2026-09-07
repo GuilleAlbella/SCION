@@ -1,0 +1,12 @@
+Object name  : landscape_high_risk
+Test type    : landscape
+Priority     : P1
+Target field : high_risk_count
+Min value    : 1
+
+Note: Phase 2 — UC-15 (Landscape). Verifies that the Landscape backend has computed
+      at least one high-risk object in the current snapshot. A "high-risk" object is
+      one with either: (a) a criticality_level of HIGH or CRITICAL, or (b) recent
+      breaking changes in its timeline. If this fails with min_value=1, the criticality
+      scoring pipeline has not run or the snapshot has no critical objects, which
+      would make the Landscape page appear empty to business users.

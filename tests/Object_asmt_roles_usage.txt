@@ -1,0 +1,7 @@
+Object name  : asmt_roles_config_vw
+Test type    : usage
+Priority     : P3
+
+Note: USAGE — asmt_roles_config_vw is used in access control queries.
+      It should appear in PDCR data if security queries are captured.
+      P3 priority: nice-to-verify but not business-critical.

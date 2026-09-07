@@ -1,0 +1,10 @@
+Object name  : teams
+Test type    : reference
+Priority     : P2
+Min value    : 1
+
+Note: Phase 2 — UC-16 (Reference Org Data). Verifies that the org hierarchy
+      (teams) has been uploaded to SCION. Without reference data, the Landscape
+      page cannot show "Owner: Engineering" labels on schema tiles, and the
+      business-user view loses context. Upload via the Reference page CSV import.
+      Minimum: 1 team record (conservative — real org has 10+ teams).

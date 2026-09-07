@@ -1,0 +1,10 @@
+Object name  : subset_v3
+Test type    : criticality
+Priority     : P2
+
+Note: CRITICALITY — subset_v3 is the terminal output table of the availability
+      metering pipeline (subset_avail_metrics_min_max_v -> ... -> subset_v3).
+      It is fed by multiple upstream views and written by INSERT jobs.
+      As the final sink of a long chain, it should have a non-null criticality level.
+      This also validates that graph-based criticality (node centrality / PageRank)
+      is computed correctly for objects that are graph leaves (many inputs, no outputs).

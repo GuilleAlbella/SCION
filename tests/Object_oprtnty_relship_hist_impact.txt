@@ -1,0 +1,10 @@
+Object name  : oprtnty_relship_hist
+Test type    : impact
+Priority     : P2
+Min downstream : 1
+
+Note: IMPACT — oprtnty_relship_hist is known to have breaking changes (tested
+      separately) AND downstream consumers. This test verifies SCION can quantify
+      the blast radius of those breaking changes — a core value proposition of the
+      product for the Meeting 37 demo. If this passes alongside the breaking test,
+      it demonstrates the full "detect -> quantify -> alert" workflow.

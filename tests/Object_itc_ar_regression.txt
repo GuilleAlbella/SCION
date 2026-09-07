@@ -1,0 +1,9 @@
+Object name  : itc_ar_historical_global_report
+Test type    : exists
+Priority     : P2
+
+Note: REGRESSION — itc_ar_historical_global_report was used in early SCION demos
+      (Reunión 21). Verifying it still exists in the current snapshot confirms that
+      the parser continues to detect views of this pattern (complex multi-schema joins).
+      If absent, the object may have been dropped from the PDCR snapshot or the parser
+      failed to parse its DDL structure (SQL with EXPAND ON PERIOD or complex CTEs).

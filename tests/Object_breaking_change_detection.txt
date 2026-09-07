@@ -1,0 +1,11 @@
+Object name  : incntv_cmpnstn_empl_ss_arcs_vw
+Test type    : breaking
+Priority     : P1
+Min downstream : 1
+
+Note: BREAKING CHANGE — Phase 2 core capability. Verifies SCION can identify
+      changes classified as "breaking" (e.g., COLUMN_DROPPED, TYPE_CHANGED)
+      vs. non-breaking (COLUMN_ADDED). The is_breaking flag drives alert routing
+      and impact prioritization in the SCION workflow.
+      If this fails, SCION's change classification model is not working —
+      all changes would show as structural but none as explicitly breaking.

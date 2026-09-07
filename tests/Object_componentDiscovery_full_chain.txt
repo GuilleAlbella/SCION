@@ -1,0 +1,11 @@
+Object name  : componentDiscovery_Base
+Test type    : lineage
+Priority     : P1
+Lineage flow : componentDiscovery_Base -> componentDiscovery_seq -> events_v
+
+Note: LINEAGE REGRESSION — The componentDiscovery chain is the primary lineage
+      demonstration object for the Transcend ecosystem. This 3-node chain was
+      validated in the first SCION demo (Reunión 21) and must remain intact.
+      If this fails, the parser may have lost the DDL/SQL definitions for one
+      of these objects, or the BFS graph traversal regressed.
+      Priority P1: used in every stakeholder demo.

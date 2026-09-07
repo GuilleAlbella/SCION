@@ -1,0 +1,13 @@
+Object name  : snapshot_diff_comprehensive
+Test type    : diff_count
+Priority     : P1
+Min downstream : 1000
+
+Note: Phase 2 — UC-03 (Large Snapshot Diff). Verifies that the diff between
+      the two most recent snapshots returns at least 1,000 changes, demonstrating
+      that SCION's change detection works at Transcend scale (240K+ objects).
+      The 1,000-change threshold represents ~0.4% change rate, which is conservative
+      for a system this large.
+      If this passes, SCION can credibly say: "We track every schema change
+      across a 240,000-object data warehouse, snapshot to snapshot."
+      DEMO METRIC: use the actual count in the Meeting 37 presentation.

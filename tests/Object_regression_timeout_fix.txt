@@ -1,0 +1,12 @@
+Object name  : snapshot_diff
+Test type    : diff_count
+Priority     : P1
+Min downstream : 100
+
+Note: REGRESSION — v2.09.14 bug: Run Diff button got stuck on "Running..." because the
+      axios client had a 60s timeout that was too short for large-scale diffs (240K objects).
+      Fix: added { timeout: 0 } in frontend/src/lib/api/diff.ts (commit 14055c8).
+      This test verifies the diff endpoint returns substantial results, implying the
+      computation completed rather than timing out. A count < 100 suggests the diff
+      was not computed or a timeout occurred at the infrastructure level.
+      Run with: --snapshot-from 1 --snapshot 2

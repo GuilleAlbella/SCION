@@ -1,0 +1,10 @@
+Object name  : cvent_transaction
+Test type    : impact
+Priority     : P3
+Min downstream : 1
+
+Note: LINEAGE — cvent_transaction is a source table for event-tracking reports.
+      At minimum it should have 1 downstream consumer in the SCION graph,
+      demonstrating that the FEEDS edge from a transactional table to an aggregate
+      view is captured. A failure here is non-critical but worth tracking
+      as the graph grows with more snapshot pairs.

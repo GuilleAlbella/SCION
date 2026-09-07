@@ -41,8 +41,10 @@ Usage:
 import argparse
 import csv
 import json
+import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -58,6 +60,16 @@ API = "/api/v1"
 
 # ── Priority labels (for reporting) ──────────────────────────────────────────
 PRIORITY_LABELS = {"P1": "Critical", "P2": "High", "P3": "Medium", "P4": "Low"}
+
+# ── ANSI color constants ──────────────────────────────────────────────────────
+_CLR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+GREEN  = "\033[32m"   if _CLR else ""
+YELLOW = "\033[33m"   if _CLR else ""
+RED    = "\033[31m"   if _CLR else ""
+CYAN   = "\033[36m"   if _CLR else ""
+BOLD   = "\033[1m"    if _CLR else ""
+DIM    = "\033[2m"    if _CLR else ""
+RESET  = "\033[0m"    if _CLR else ""
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -985,6 +997,525 @@ def export(results: list, out_base: Path) -> tuple[Path, Path]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# HTML report generation
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _detail_html(r: dict) -> str:
+    """Render a per-test detail line as HTML."""
+    tt = r.get("test_type", "")
+
+    if tt == "lineage":
+        ncs = r.get("node_checks", [])
+        if not ncs:
+            return ""
+        parts = []
+        for i, nc in enumerate(ncs):
+            tick = "✓" if nc["found"] else "✗"
+            cls  = "ok" if nc["found"] else "bad"
+            parts.append(f'<span class="{cls}">{tick}</span>&nbsp;<code>{nc["object"]}</code>')
+            if i < len(ncs) - 1:
+                ec = r.get("edge_checks", [{}] * len(ncs))
+                edge_ok = ec[i]["found"] if i < len(ec) else True
+                arrow_cls = "ok" if edge_ok else "bad"
+                parts.append(f'<span class="{arrow_cls}">──▶</span>')
+        return '<div class="detail chain">' + " ".join(parts) + "</div>"
+
+    if tt == "impact":
+        d = r.get("impact_detail", {})
+        cnt = d.get("direct_downstream_count", 0)
+        direct = d.get("direct_downstream", [])
+        sample = ", ".join(str(x).split(".")[-1] for x in direct[:3])
+        return (f'<div class="detail">💥 Blast radius: <strong>{cnt}</strong> downstream objects'
+                + (f'  <span class="dim">(direct: {sample})</span>' if sample else "")
+                + "</div>")
+
+    if tt == "usage":
+        d = r.get("usage_detail", {})
+        qc  = f"{d.get('query_count', 0):,}"
+        uc  = d.get("user_count", 0)
+        la  = d.get("last_accessed", "—")
+        crit = d.get("criticality_level", "—")
+        return (f'<div class="detail">📊 <strong>{qc}</strong> queries  ·  '
+                f'<strong>{uc}</strong> users  ·  last: {la}  ·  '
+                f'criticality: <strong>{crit}</strong></div>')
+
+    if tt == "criticality":
+        d = r.get("criticality_detail", {})
+        lvl = d.get("criticality_level", "—")
+        g   = d.get("graph_score", 0)
+        u   = d.get("usage_score", 0)
+        c   = d.get("combined_score", 0)
+        return (f'<div class="detail">⭐ Level: <strong>{lvl}</strong>  |  '
+                f'graph={g:.3f}  usage={u:.3f}  combined={c:.3f}</div>')
+
+    if tt == "diff_count":
+        d = r.get("diff_count_detail", {})
+        cnt  = d.get("changes_returned", 0)
+        sfr  = d.get("snapshot_from", "?")
+        sto  = d.get("snapshot_to", "?")
+        typs = ", ".join(d.get("sample_types", [])[:5])
+        return (f'<div class="detail">🔍 <strong>{cnt:,}</strong> changes across '
+                f'snapshot #{sfr} → #{sto}  |  types: {typs}</div>')
+
+    if tt == "breaking":
+        d = r.get("breaking_detail", {})
+        bc   = d.get("breaking_events", 0)
+        typs = ", ".join(d.get("breaking_types", [])[:4])
+        snps = str(d.get("breaking_snaps", []))
+        return (f'<div class="detail">⚡ <strong>{bc}</strong> breaking change(s) detected: '
+                f'{typs}  in snapshots {snps}</div>')
+
+    if tt == "snapshot_health":
+        checks = "  ·  ".join(r.get("health_checks", []))
+        return f'<div class="detail">🏥 {checks}  ·  all checks passed</div>'
+
+    if tt == "landscape":
+        d = r.get("landscape_detail", {})
+        hr  = d.get("high_risk", 0)
+        ec  = d.get("entity_count", 0)
+        rc  = d.get("recent_changes", 0)
+        return (f'<div class="detail">🗺 high_risk_count=<strong>{hr}</strong>  ·  '
+                f'entity_count=<strong>{ec:,}</strong>  ·  '
+                f'recent_changes=<strong>{rc:,}</strong></div>')
+
+    if tt == "reference":
+        d = r.get("reference_detail", {})
+        res  = d.get("resource", "")
+        cnt  = d.get("count", 0)
+        samp = ", ".join(d.get("sample", [])[:3])
+        return (f'<div class="detail">📋 {res}: <strong>{cnt}</strong> records'
+                + (f'  ·  sample: [{samp}]' if samp else "") + "</div>")
+
+    # changed / unchanged / added / dropped — show note
+    note = r.get("note") or ""
+    if note:
+        return f'<div class="detail dim">{note}</div>'
+    return ""
+
+
+def export_html(results: list, out_path: Path,
+                snapshot_id: int, snap_from: int, snap_to: int,
+                base_url: str, elapsed: float) -> Path:
+    """Generate a self-contained HTML test report."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    run_at   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total    = len(results)
+    passed   = sum(1 for r in results if r["status"] == "PASS")
+    partial  = sum(1 for r in results if r["status"] == "PARTIAL")
+    failed   = sum(1 for r in results if r["status"] == "FAIL")
+    skipped  = sum(1 for r in results if r["status"] == "SKIP")
+    pass_pct = round(passed / total * 100) if total else 0
+
+    # Group by test type
+    by_type: dict[str, list] = {}
+    for r in results:
+        by_type.setdefault(r.get("test_type", "lineage"), []).append(r)
+
+    # Build rows
+    rows_html = []
+    for ttype, tresults in sorted(by_type.items()):
+        rows_html.append(
+            f'<tr class="group-header"><td colspan="5">{ttype.upper()}</td></tr>'
+        )
+        for r in tresults:
+            status = r["status"]
+            badge_cls = {"PASS": "badge-pass", "FAIL": "badge-fail",
+                         "PARTIAL": "badge-partial", "SKIP": "badge-skip"}.get(status, "")
+            detail_html = _detail_html(r)
+            elapsed_r   = r.get("elapsed", "")
+            elapsed_str = f"{elapsed_r:.1f}s" if isinstance(elapsed_r, float) else ""
+            note_html   = ""
+            if r.get("error"):
+                note_html = f'<div class="error-msg">✗ {r["error"]}</div>'
+            rows_html.append(f"""
+            <tr>
+              <td><code>{r['object_name']}</code></td>
+              <td><span class="priority">{r.get('priority','P3')}</span></td>
+              <td>{detail_html}{note_html}</td>
+              <td class="time">{elapsed_str}</td>
+              <td><span class="badge {badge_cls}">{status}</span></td>
+            </tr>""")
+
+    rows_joined = "\n".join(rows_html)
+
+    # Summary table by type
+    sum_rows = []
+    for ttype, tresults in sorted(by_type.items()):
+        p  = sum(1 for r in tresults if r["status"] == "PASS")
+        pa = sum(1 for r in tresults if r["status"] == "PARTIAL")
+        f  = sum(1 for r in tresults if r["status"] == "FAIL")
+        s  = sum(1 for r in tresults if r["status"] == "SKIP")
+        tot = p + pa + f + s
+        sum_rows.append(f"""
+        <tr>
+          <td>{ttype}</td>
+          <td>{tot}</td>
+          <td class="c-pass">{p if p else ''}</td>
+          <td class="c-partial">{pa if pa else ''}</td>
+          <td class="c-fail">{f if f else ''}</td>
+          <td class="c-skip">{s if s else ''}</td>
+        </tr>""")
+    sum_rows_joined = "\n".join(sum_rows)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCION Validation Report · {run_at}</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    background: #0f1117;
+    color: #e2e8f0;
+    line-height: 1.5;
+  }}
+  a {{ color: #63b3ed; }}
+
+  /* ── Header ── */
+  .header {{
+    background: linear-gradient(135deg, #1a1f36 0%, #0d1b2e 100%);
+    border-bottom: 2px solid #2d3a55;
+    padding: 28px 40px 22px;
+  }}
+  .header h1 {{
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #fff;
+  }}
+  .header h1 span {{ color: #63b3ed; }}
+  .header .meta {{
+    margin-top: 6px;
+    color: #94a3b8;
+    font-size: 13px;
+  }}
+  .header .meta b {{ color: #cbd5e1; }}
+
+  /* ── Stats row ── */
+  .stats {{
+    display: flex;
+    gap: 16px;
+    padding: 20px 40px;
+    background: #141820;
+    border-bottom: 1px solid #1e2535;
+    flex-wrap: wrap;
+  }}
+  .stat-card {{
+    background: #1e2535;
+    border-radius: 10px;
+    padding: 14px 22px;
+    min-width: 110px;
+    text-align: center;
+  }}
+  .stat-card .num {{
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+  }}
+  .stat-card .lbl {{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #64748b;
+    margin-top: 4px;
+  }}
+  .num-pass    {{ color: #4ade80; }}
+  .num-fail    {{ color: #f87171; }}
+  .num-partial {{ color: #fbbf24; }}
+  .num-skip    {{ color: #64748b; }}
+  .num-pct     {{ color: #60a5fa; }}
+  .num-total   {{ color: #e2e8f0; }}
+
+  /* ── Summary table ── */
+  .section {{ padding: 24px 40px; }}
+  .section h2 {{ font-size: 14px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: 0.8px; color: #64748b; margin-bottom: 12px; }}
+
+  .sum-table, .results-table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }}
+  .sum-table th, .results-table th {{
+    background: #1e2535;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #2d3a55;
+  }}
+  .sum-table td, .results-table td {{
+    padding: 8px 12px;
+    border-bottom: 1px solid #1a2030;
+    vertical-align: top;
+  }}
+  .sum-table tr:hover td, .results-table tr:hover td {{
+    background: #1a2233;
+  }}
+  .c-pass    {{ color: #4ade80; font-weight: 600; }}
+  .c-fail    {{ color: #f87171; font-weight: 600; }}
+  .c-partial {{ color: #fbbf24; font-weight: 600; }}
+  .c-skip    {{ color: #64748b; }}
+  .sum-table tfoot td {{
+    font-weight: 700;
+    border-top: 2px solid #2d3a55;
+    color: #e2e8f0;
+  }}
+
+  /* ── Results table ── */
+  .group-header td {{
+    background: #1a2030;
+    color: #60a5fa;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 12px;
+    border-top: 1px solid #2d3a55;
+  }}
+  .badge {{
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }}
+  .badge-pass    {{ background: #14532d; color: #4ade80; }}
+  .badge-fail    {{ background: #450a0a; color: #f87171; }}
+  .badge-partial {{ background: #451a03; color: #fbbf24; }}
+  .badge-skip    {{ background: #1e2535; color: #64748b; }}
+  .priority {{
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    background: #1e2535;
+    color: #94a3b8;
+  }}
+  .detail {{ color: #cbd5e1; margin-top: 4px; font-size: 12px; line-height: 1.6; }}
+  .detail.chain {{ font-size: 12px; }}
+  .detail code {{ background: #1a2030; padding: 1px 5px; border-radius: 3px;
+                  font-family: "Cascadia Code", "Fira Code", monospace; font-size: 11px; }}
+  .ok   {{ color: #4ade80; }}
+  .bad  {{ color: #f87171; }}
+  .dim  {{ color: #64748b; }}
+  .error-msg {{ color: #f87171; font-size: 12px; margin-top: 4px; }}
+  .time {{ color: #475569; font-size: 12px; white-space: nowrap; }}
+
+  /* ── Footer ── */
+  .footer {{
+    padding: 20px 40px;
+    color: #334155;
+    font-size: 12px;
+    border-top: 1px solid #1a2030;
+    margin-top: 16px;
+  }}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>SCION</span> · Automated Validation Suite</h1>
+  <div class="meta">
+    <b>{run_at}</b> &nbsp;·&nbsp;
+    Phase 1 + Phase 2 · PDCR · Lineage · Changes &nbsp;·&nbsp;
+    Server: <b>{base_url}</b> &nbsp;·&nbsp;
+    Snapshot: <b>#{snapshot_id}</b> &nbsp;·&nbsp;
+    Diff: <b>#{snap_from}→#{snap_to}</b> &nbsp;·&nbsp;
+    Total time: <b>{elapsed:.1f}s</b>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="num num-total">{total}</div>
+    <div class="lbl">Tests</div>
+  </div>
+  <div class="stat-card">
+    <div class="num num-pct">{pass_pct}%</div>
+    <div class="lbl">Pass rate</div>
+  </div>
+  <div class="stat-card">
+    <div class="num num-pass">{passed}</div>
+    <div class="lbl">Pass</div>
+  </div>
+  <div class="stat-card">
+    <div class="num num-partial">{partial}</div>
+    <div class="lbl">Partial</div>
+  </div>
+  <div class="stat-card">
+    <div class="num num-fail">{failed}</div>
+    <div class="lbl">Fail</div>
+  </div>
+  <div class="stat-card">
+    <div class="num num-skip">{skipped}</div>
+    <div class="lbl">Skip</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>By Test Category</h2>
+  <table class="sum-table">
+    <thead>
+      <tr>
+        <th>Category</th><th>Total</th>
+        <th>Pass</th><th>Partial</th><th>Fail</th><th>Skip</th>
+      </tr>
+    </thead>
+    <tbody>
+      {sum_rows_joined}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>TOTAL</td>
+        <td>{total}</td>
+        <td class="c-pass">{passed}</td>
+        <td class="c-partial">{partial if partial else ''}</td>
+        <td class="c-fail">{failed if failed else ''}</td>
+        <td class="c-skip">{skipped if skipped else ''}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<div class="section">
+  <h2>All Test Results</h2>
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Object</th><th>Priority</th>
+        <th>Detail</th><th>Time</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_joined}
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  Generated by SCION Test Runner &nbsp;·&nbsp;
+  {run_at} &nbsp;·&nbsp;
+  {total} tests &nbsp;·&nbsp; {passed} passed &nbsp;·&nbsp; {failed} failed
+</div>
+
+</body>
+</html>"""
+
+    out_path.write_text(html, encoding="utf-8")
+    return out_path
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Rich display helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _print_lineage_chain(r: dict) -> None:
+    ncs = r.get("node_checks", [])
+    ecs = r.get("edge_checks", [])
+    if not ncs:
+        return
+    parts = []
+    for i, nc in enumerate(ncs):
+        tick = f"{GREEN}✓{RESET}" if nc["found"] else f"{RED}✗{RESET}"
+        parts.append(f"{tick} {nc['object']}")
+        if i < len(ncs) - 1:
+            edge_ok = ecs[i]["found"] if i < len(ecs) else True
+            arrow = f"{GREEN}──✓──▶{RESET}" if edge_ok else f"{RED}──✗──▶{RESET}"
+            parts.append(arrow)
+    print("    " + " ".join(parts))
+
+
+def _print_detail(r: dict) -> None:
+    """Print a type-specific detail line after running a test."""
+    tt = r.get("test_type", "")
+
+    if tt == "lineage":
+        _print_lineage_chain(r)
+
+    elif tt == "impact":
+        d = r.get("impact_detail", {})
+        cnt   = d.get("direct_downstream_count", 0)
+        names = d.get("direct_downstream", [])
+        sample = [str(x).split(".")[-1] for x in names[:3]]
+        print(f"    💥 Blast radius: {BOLD}{cnt}{RESET} downstream objects"
+              + (f"  {DIM}(direct: {', '.join(sample)}){RESET}" if sample else ""))
+
+    elif tt == "usage":
+        d   = r.get("usage_detail", {})
+        qc  = f"{d.get('query_count', 0):,}"
+        uc  = d.get("user_count", 0)
+        la  = d.get("last_accessed", "—")
+        crit = d.get("criticality_level", "—")
+        print(f"    📊 {BOLD}{qc}{RESET} queries  ·  "
+              f"{BOLD}{uc}{RESET} users  ·  "
+              f"last accessed: {la}  ·  "
+              f"criticality: {BOLD}{crit}{RESET}")
+
+    elif tt == "criticality":
+        d = r.get("criticality_detail", {})
+        lvl = d.get("criticality_level", "—")
+        g   = d.get("graph_score", 0)
+        u   = d.get("usage_score", 0)
+        c   = d.get("combined_score", 0)
+        print(f"    ⭐ Level: {BOLD}{lvl}{RESET}  |  "
+              f"graph={g:.3f}  usage={u:.3f}  combined={c:.3f}")
+
+    elif tt == "diff_count":
+        d    = r.get("diff_count_detail", {})
+        cnt  = d.get("changes_returned", 0)
+        sfr  = d.get("snapshot_from", "?")
+        sto  = d.get("snapshot_to", "?")
+        typs = ", ".join(d.get("sample_types", [])[:5])
+        print(f"    🔍 {BOLD}{cnt:,}{RESET} changes across snapshot "
+              f"#{sfr} → #{sto}  |  types: {typs}")
+
+    elif tt == "breaking":
+        d    = r.get("breaking_detail", {})
+        bc   = d.get("breaking_events", 0)
+        typs = ", ".join(d.get("breaking_types", [])[:4])
+        snps = d.get("breaking_snaps", [])
+        print(f"    ⚡ {BOLD}{bc}{RESET} breaking change(s) detected: "
+              f"{typs}  in snapshots {snps}")
+
+    elif tt == "snapshot_health":
+        checks = "  ·  ".join(r.get("health_checks", []))
+        print(f"    🏥 {checks}  ·  all checks passed")
+
+    elif tt == "landscape":
+        d  = r.get("landscape_detail", {})
+        hr = d.get("high_risk", 0)
+        ec = d.get("entity_count", 0)
+        rc = d.get("recent_changes", 0)
+        print(f"    🗺  high_risk_count={BOLD}{hr}{RESET}  ·  "
+              f"entity_count={BOLD}{ec:,}{RESET}  ·  "
+              f"recent_changes={BOLD}{rc:,}{RESET}")
+
+    elif tt == "reference":
+        d    = r.get("reference_detail", {})
+        res  = d.get("resource", "")
+        cnt  = d.get("count", 0)
+        samp = ", ".join(d.get("sample", [])[:3])
+        print(f"    📋 {res}: {BOLD}{cnt}{RESET} records"
+              + (f"  ·  sample: [{samp}]" if samp else ""))
+
+    else:
+        # changed / unchanged / added / dropped — show note if available
+        note = r.get("note") or ""
+        if note:
+            print(f"    {DIM}{note}{RESET}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1000,55 +1531,130 @@ def main():
                     help="BFS depth for lineage / impact traversal (default: 5)")
     ap.add_argument("--output", default=None,
                     help="Output path without extension (default: tests/results/<timestamp>)")
+    ap.add_argument("--no-html", action="store_true", default=False,
+                    help="Skip HTML report generation")
     args = ap.parse_args()
+
+    # ── Banner ──
+    banner = (
+        "╔══════════════════════════════════════════════════════════════╗\n"
+        "║       SCION  ·  Automated Validation Suite                   ║\n"
+        "║       Phase 1 + Phase 2  ·  PDCR  ·  Lineage  ·  Changes   ║\n"
+        "╚══════════════════════════════════════════════════════════════╝"
+    )
+    print(f"{BOLD}{CYAN}{banner}{RESET}")
+    print()
 
     test_files = sorted(TESTS_DIR.glob("Object_*.txt"))
     if not test_files:
-        print("No test files found (expected tests/Object_*.txt).")
+        print(f"{RED}No test files found (expected tests/Object_*.txt).{RESET}")
         sys.exit(1)
 
-    print("SCION Test Runner  (Phase 1 + Phase 2)")
-    print(f"  Base URL   : {args.base_url}")
-    print(f"  Test files : {len(test_files)}")
+    print(f"  {DIM}Base URL   :{RESET} {args.base_url}")
+    print(f"  {DIM}Test files :{RESET} {len(test_files)}")
 
     try:
-        snapshot_id      = args.snapshot or get_latest_snapshot(args.base_url)
+        snapshot_id        = args.snapshot or get_latest_snapshot(args.base_url)
         snap_from, snap_to = get_snapshot_pair(args.base_url, args.snapshot_from, snapshot_id)
     except Exception as e:
-        print(f"\nERROR: Cannot reach SCION at {args.base_url}\n  {e}")
+        print(f"\n{RED}{BOLD}ERROR:{RESET}{RED} Cannot reach SCION at {args.base_url}{RESET}\n  {e}")
         sys.exit(1)
 
-    print(f"  Snapshot   : #{snapshot_id}  (lineage / usage / impact)")
-    print(f"  Diff pair  : #{snap_from} -> #{snap_to}  (changed / unchanged / added / dropped)")
+    all_snaps  = get_snapshots(args.base_url)
+    snap_count = len(all_snaps)
+
+    print(f"  {DIM}Snapshot   :{RESET} #{snapshot_id}  {DIM}(lineage / usage / impact){RESET}")
+    print(f"  {DIM}Diff pair  :{RESET} #{snap_from} → #{snap_to}  "
+          f"{DIM}(changed / unchanged / added / dropped){RESET}")
+    print(f"  {DIM}Snapshots  :{RESET} {snap_count} total")
     print()
 
-    results = []
+    # ── Headline stats accumulators ──
+    hl_objects      = None   # from snapshot_health
+    hl_diff_count   = None   # (count, snap_from, snap_to) from diff_count
+    hl_blast_obj    = None   # (object_name, count) — highest impact
+    hl_max_usage    = None   # (query_count, object_name) — highest usage
+
+    results      = []
+    suite_start  = time.time()
+
     for tf in test_files:
         test      = parse_test_file(tf)
         test_type = test.get("test_type", "lineage")
-        priority = test.get("priority", "P3")
-        print(f"[{tf.name}]  type={test_type}  priority={priority}")
-        print(f"  Object : {test['object_name']}" +
-              (f"  (schema hint: {test['schema_name']})" if test.get("schema_name") else ""))
-        if test.get("lineage_chain"):
-            print(f"  Chain  : {' -> '.join(test['lineage_chain'])}")
+        priority  = test.get("priority", "P3")
+        obj_name  = test["object_name"]
 
-        r = run_test(args.base_url, snapshot_id, snap_from, snap_to, test, args.hops)
+        # Header line
+        type_padded = f"[{test_type:<14}]"
+        obj_padded  = f"{obj_name:<40}"
+        print(f"  {CYAN}►{RESET} {type_padded} {obj_padded} {DIM}({priority}){RESET}")
+
+        t0 = time.time()
+        r  = run_test(args.base_url, snapshot_id, snap_from, snap_to, test, args.hops)
+        elapsed_test = time.time() - t0
+        r["elapsed"] = elapsed_test
         results.append(r)
 
-        for nc in r.get("node_checks", []):
-            print(f"  {'[OK]' if nc['found'] else '[!!]'} node  {nc['object']}")
-        for ec in r.get("edge_checks", []):
-            print(f"  {'[OK]' if ec['found'] else '[!!]'} edge  {ec['source']} -> {ec['target']}")
+        # Type-specific detail
+        _print_detail(r)
 
-        icon = {"PASS": "[PASS]", "FAIL": "[FAIL]", "PARTIAL": "[PART]", "SKIP": "[SKIP]"}.get(
-            r["status"], "?")
-        print(f"  {icon}" + (f": {r['error']}" if r.get("error") else ""))
-        if r.get("note"):
-            print(f"    [i] {r['note']}")
-        print()
+        # Accumulate headline stats
+        if test_type == "snapshot_health" and r["status"] in ("PASS", "PARTIAL"):
+            metrics = r.get("snapshot_metrics", {})
+            for k in ("table_count", "object_count", "node_count", "total_objects"):
+                v = metrics.get(k)
+                if isinstance(v, int) and v > 0:
+                    hl_objects = v
+                    break
 
-    # ── Summary ──
+        if test_type == "diff_count" and r["status"] == "PASS":
+            d   = r.get("diff_count_detail", {})
+            cnt = d.get("changes_returned", 0)
+            if hl_diff_count is None or cnt > hl_diff_count[0]:
+                hl_diff_count = (cnt, d.get("snapshot_from"), d.get("snapshot_to"))
+
+        if test_type == "impact" and r["status"] == "PASS":
+            d   = r.get("impact_detail", {})
+            cnt = d.get("direct_downstream_count", 0)
+            if hl_blast_obj is None or cnt > hl_blast_obj[1]:
+                hl_blast_obj = (obj_name, cnt)
+
+        if test_type == "usage" and r["status"] == "PASS":
+            d  = r.get("usage_detail", {})
+            qc = d.get("query_count", 0)
+            if hl_max_usage is None or qc > hl_max_usage[0]:
+                hl_max_usage = (qc, obj_name)
+
+        # Result line
+        status = r["status"]
+        if status == "PASS":
+            icon = f"{GREEN}✓ PASS{RESET}"
+        elif status == "FAIL":
+            icon = f"{RED}✗ FAIL{RESET}"
+        elif status == "PARTIAL":
+            icon = f"{YELLOW}~ PARTIAL{RESET}"
+        else:
+            icon = f"{DIM}- SKIP{RESET}"
+
+        time_str = f"{elapsed_test:.1f}s"
+        if status == "FAIL":
+            err_str = f": {r['error']}" if r.get("error") else ""
+            print(f"      {icon}{RED}{err_str}{RESET}  {DIM}({time_str}){RESET}")
+        elif status == "PARTIAL":
+            err_str = f": {r['error']}" if r.get("error") else ""
+            print(f"      {icon}{YELLOW}{err_str}{RESET}  {DIM}({time_str}){RESET}")
+        else:
+            print(f"      {icon}  {DIM}({time_str}){RESET}")
+
+        print()  # blank line between tests
+
+    total_elapsed = time.time() - suite_start
+
+    # ── Progress separator ──
+    print(f"  {DIM}{'━' * 62}{RESET}")
+    print()
+
+    # ── Count totals ──
     passed  = sum(1 for r in results if r["status"] == "PASS")
     partial = sum(1 for r in results if r["status"] == "PARTIAL")
     failed  = sum(1 for r in results if r["status"] == "FAIL")
@@ -1060,28 +1666,107 @@ def main():
         by_type.setdefault(t, {"PASS": 0, "PARTIAL": 0, "FAIL": 0, "SKIP": 0})
         by_type[t][r["status"]] = by_type[t].get(r["status"], 0) + 1
 
-    print("=" * 65)
-    print(f"RESULTS  {passed} PASS  /  {partial} PARTIAL  /  {failed} FAIL  /  "
-          f"{skipped} SKIP  /  {len(results)} total")
-    print()
-    print("By category:")
-    for t, counts in sorted(by_type.items()):
-        p = counts.get("PASS", 0)
-        pa = counts.get("PARTIAL", 0)
-        f = counts.get("FAIL", 0)
-        s = counts.get("SKIP", 0)
-        total_t = p + pa + f + s
-        print(f"  {t:12s}: {p}/{total_t} PASS" +
-              (f"  {pa} PARTIAL" if pa else "") +
-              (f"  {f} FAIL" if f else ""))
+    # ── Summary table ──
+    col_cat  = 21
+    col_tot  = 7
+    col_pass = 7
+    col_part = 9
+    col_fail = 6
+    col_skip = 9
 
-    # ── Export ──
+    def _row(cat, tot, p, pa, f, s, header=False):
+        cc  = BOLD if header else ""
+        pc  = f"{GREEN}{p}{RESET}" if (p and not header) else (str(p) if p else "")
+        pac = f"{YELLOW}{pa}{RESET}" if (pa and not header) else (str(pa) if pa else "")
+        fc  = f"{RED}{f}{RESET}" if (f and not header) else (str(f) if f else "")
+        sc  = f"{DIM}{s}{RESET}" if (s and not header) else (str(s) if s else "")
+        return (f"  │ {cc}{cat:<{col_cat}}{RESET}"
+                f"│ {tot:>{col_tot-2}} "
+                f"│ {pc:>{col_pass-2}} "
+                f"│ {pac:>{col_part-2}} "
+                f"│ {fc:>{col_fail-2}} "
+                f"│ {sc:>{col_skip-2}} │")
+
+    hr_top  = "  ┌" + "─"*col_cat + "┬" + "─"*col_tot + "┬" + "─"*col_pass + "┬" + "─"*col_part + "┬" + "─"*col_fail + "┬" + "─"*col_skip + "┐"
+    hr_mid  = "  ├" + "─"*col_cat + "┼" + "─"*col_tot + "┼" + "─"*col_pass + "┼" + "─"*col_part + "┼" + "─"*col_fail + "┼" + "─"*col_skip + "┤"
+    hr_bot  = "  └" + "─"*col_cat + "┴" + "─"*col_tot + "┴" + "─"*col_pass + "┴" + "─"*col_part + "┴" + "─"*col_fail + "┴" + "─"*col_skip + "┘"
+
+    hdr = (f"  │ {'Test Category':<{col_cat}}"
+           f"│ {'Total':>{col_tot-2}} "
+           f"│ {GREEN}{'PASS':>{col_pass-2}}{RESET} "
+           f"│ {YELLOW}{'PARTIAL':>{col_part-2}}{RESET} "
+           f"│ {RED}{'FAIL':>{col_fail-2}}{RESET} "
+           f"│ {DIM}{'SKIP':>{col_skip-2}}{RESET} │")
+
+    print(hr_top)
+    print(hdr)
+    print(hr_mid)
+    for ttype, counts in sorted(by_type.items()):
+        p  = counts.get("PASS", 0)
+        pa = counts.get("PARTIAL", 0)
+        f  = counts.get("FAIL", 0)
+        s  = counts.get("SKIP", 0)
+        tot = p + pa + f + s
+        print(_row(ttype, tot, p or "", pa or "", f or "", s or ""))
+    print(hr_mid)
+    print(_row("TOTAL", len(results), passed or "", partial or "", failed or "", skipped or "", header=True))
+    print(hr_bot)
+    print()
+
+    # ── Headline stats box ──
+    hl_lines = []
+    if hl_objects is not None:
+        hl_lines.append(
+            f"  ║  Objects tracked:    {hl_objects:,}  across  {snap_count} snapshots           ║"
+        )
+    if hl_diff_count is not None:
+        cnt, sf, st = hl_diff_count
+        hl_lines.append(
+            f"  ║  Changes detected:   {cnt:,}  (largest diff, snapshots {sf}→{st})   ║"
+        )
+    if hl_blast_obj is not None:
+        obj, cnt = hl_blast_obj
+        hl_lines.append(
+            f"  ║  Highest blast radius: {obj}  ({cnt} nodes) ║"
+        )
+    if hl_max_usage is not None:
+        qc, obj = hl_max_usage
+        hl_lines.append(
+            f"  ║  Max usage:          {qc:,} queries ({obj})        ║"
+        )
+
+    if hl_lines:
+        box_top = "  ╔══════════════════════════════════════════════════════════════╗"
+        box_ttl = "  ║  SCION PLATFORM HIGHLIGHTS                                   ║"
+        box_sep = "  ║  ─────────────────────────────────────────────────────────  ║"
+        box_bot = "  ╚══════════════════════════════════════════════════════════════╝"
+        print(f"{BOLD}{CYAN}{box_top}{RESET}")
+        print(f"{BOLD}{CYAN}{box_ttl}{RESET}")
+        print(f"{BOLD}{CYAN}{box_sep}{RESET}")
+        for line in hl_lines:
+            print(f"{BOLD}{CYAN}{line}{RESET}")
+        print(f"{BOLD}{CYAN}{box_bot}{RESET}")
+        print()
+
+    # ── Export JSON + CSV ──
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out_base  = Path(args.output) if args.output else RESULTS_DIR / timestamp
     jp, cp    = export(results, out_base)
-    print(f"\nExported:")
-    print(f"  JSON : {jp}")
-    print(f"  CSV  : {cp}")
+    print(f"  {DIM}Exported:{RESET}")
+    print(f"    JSON : {jp}")
+    print(f"    CSV  : {cp}")
+
+    # ── Export HTML ──
+    if not args.no_html:
+        html_path = out_base.with_suffix(".html")
+        export_html(results, html_path,
+                    snapshot_id, snap_from, snap_to,
+                    args.base_url, total_elapsed)
+        print(f"    HTML : {html_path}")
+
+    print()
+    print(f"  Total time: {total_elapsed:.1f}s")
+    print()
 
     sys.exit(0 if failed == 0 else 1)
 

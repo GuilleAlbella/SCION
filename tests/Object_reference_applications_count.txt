@@ -1,0 +1,9 @@
+Object name  : applications
+Test type    : reference
+Priority     : P3
+Min value    : 1
+
+Note: Phase 2 — UC-16 (Reference Org Data — Applications). Verifies that the
+      applications register has been uploaded. Applications link database objects
+      to business systems (e.g., "Salesforce", "SAP") for the Landscape view.
+      This is a Phase 2 nice-to-have; failure here does not block core functions.

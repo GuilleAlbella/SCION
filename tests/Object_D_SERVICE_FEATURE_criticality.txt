@@ -1,0 +1,9 @@
+Object name  : D_SERVICE_FEATURE
+Test type    : criticality
+Priority     : P2
+
+Note: CRITICALITY — D_SERVICE_FEATURE is a dimension table in the PDCR ecosystem.
+      Dimension tables are typically referenced by many fact queries, so the usage-
+      based criticality score should be non-null. This also serves as a cross-check:
+      if the lineage test for D_SERVICE_FEATURE passes but criticality is null,
+      it means graph traversal works but usage data is missing for this object.

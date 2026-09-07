@@ -1,0 +1,10 @@
+Object name  : landscape_entity_count
+Test type    : landscape
+Priority     : P2
+Target field : entity_count
+Min value    : 1000
+
+Note: Phase 2 — UC-15 (Landscape). Verifies at least 1,000 entities (objects) are
+      visible in the Landscape view, confirming the object-to-schema mapping is populated.
+      Production Transcend data has 200K+ objects, so 1,000 is a minimal smoke threshold.
+      If this fails, the Landscape page would show empty schema tiles.

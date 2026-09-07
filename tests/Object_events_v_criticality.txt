@@ -1,0 +1,10 @@
+Object name  : events_v
+Test type    : criticality
+Priority     : P1
+
+Note: CRITICALITY — events_v is one of the most-queried views in the Transcend ecosystem
+      (PDCR shows it appears in thousands of Transcend queries). It should score HIGH
+      or CRITICAL in SCION's criticality model. If it scores LOW or null, it likely
+      means PDCR usage data was not ingested for the snapshot under test.
+      Used in regression monitoring: a drop in criticality level signals the usage
+      pipeline stopped loading data.

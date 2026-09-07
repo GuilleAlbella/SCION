@@ -1,0 +1,11 @@
+Object name  : landscape_schema_count
+Test type    : landscape
+Priority     : P2
+Target field : total_schemas
+Min value    : 3
+
+Note: Phase 2 — UC-15 (Landscape). Verifies the Landscape summary endpoint reports
+      at least 3 distinct schemas, meaning the schema-grid on the Landscape page will
+      actually show content. A real Transcend/PDCR snapshot has 100+ schemas; the
+      threshold of 3 is conservative to handle partial test environments.
+      In production (ps-ubuntu-0043) expect 50+ schemas.

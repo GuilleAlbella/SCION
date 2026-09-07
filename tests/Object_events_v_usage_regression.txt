@@ -1,0 +1,9 @@
+Object name  : events_v
+Test type    : usage
+Priority     : P1
+
+Note: USAGE REGRESSION — events_v must have PDCR usage data in SCION. This is
+      the highest-confidence usage test: events_v appears in virtually every
+      Transcend summary query. If this fails, the entire PDCR ingest pipeline
+      has a problem (not just a single object).
+      Used as the canary: "if events_v has no usage data, nothing does."

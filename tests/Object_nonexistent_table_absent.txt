@@ -1,0 +1,9 @@
+Object name  : scion_nonexistent_object_xyz_12345
+Test type    : absent
+Priority     : P2
+
+Note: NEGATIVE TEST — Verifies that SCION does NOT return false positives for a
+      clearly nonexistent object name. If this test FAILS (object "found"), it
+      signals a search API bug where partial-match or wildcard behavior returns
+      unrelated objects. This is a regression guard for the /objects/search endpoint.
+      The object name is intentionally nonsensical to ensure no accidental match.
