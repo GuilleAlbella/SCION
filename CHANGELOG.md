@@ -8,6 +8,31 @@ This file replaces the in-README changelog as of v1.14.04. The
 
 ---
 
+### v2.09.15 (2026-09-07) — fix(infra+encoding+import): prod stability fixes
+
+- **fix(infra)** (`backend/app/api/v1/snapshots.py`, `share_import.py`): CURRENT_TIMESTAMP → `func.now()`, share import case-sensitivity fix, PostgreSQL PK sequence reset after bulk DELETE.
+- **fix(encoding)** (28 backend files): replaced smart/curly quotes (U+201C/U+201D) and Windows-1252 mojibake (`â€"`, `â"€`, `âœ"`) with ASCII equivalents — crash loop on production Python 3.12 caused by SyntaxError when curly quotes were used as string delimiters.
+- **fix(import)** (`backend/app/api/v1/dict_import.py`): HTTP 507 Insufficient Storage with human-readable message when disk is full (OSError errno 28), replacing generic 500 "Import failed".
+
+---
+
+### v2.09.14 (2026-09-02) — feat(ui): rename + entity view + validation warnings UI
+
+- **Rename "Impact Analysis" → "Object Change Analysis"** (Jon Brightling, Reunión 36): cambiado en Sidebar, home page, `/impact` title/subtitle, `/impact/[changeId]` title, tooltip en Changes page, tooltip en Lineage page. El nombre "Impact Analysis" queda solo en comentarios internos de código.
+- **§2.15.c Entity-Centric View** (`frontend/src/app/entity/[id]/page.tsx`): reestructurada según Progressive Disclosure — "Owned by" / "Used by" suben al tope (siempre visibles), KPIs reformulados en lenguaje de negocio ("Criticality", "Structural changes"), sparklines + tablas de historia + metadata técnica quedan colapsados bajo "Technical details ▶ Show trends & history".
+- **§2.15.d Progressive Disclosure** — piloto implementado en `/entity/[id]`; marcado como iniciado en roadmap. Extensión a Changes/Intelligence/Timeline pendiente de validación Chris/Ripley.
+- **§2.16.c Conflict detail UI** (`frontend/src/app/snapshots/page.tsx`): tabla expandible (`<details>`) en el panel de detalle de cada snapshot con las `validation_warnings` — severity (ERROR/WARNING), type, message, object_name. Backend (`backend/app/api/v1/snapshots.py`) ahora incluye `validation_warnings` en el listado; tipo TypeScript actualizado en `frontend/src/lib/api/types.ts`.
+
+---
+
+### v2.09.13 (2026-09-02) — feat(ui): §2.15.b Executive Summary Dashboard
+
+- **Executive Summary Dashboard** (`frontend/src/app/landscape/page.tsx`): nuevo componente `ExecutiveSummaryDashboard` integrado en la página Landscape. Muestra portfolio health score (0–100 %, color-coded verde/naranja/rojo), distribución de riesgo HIGH/MEDIUM/LOW con barras, y widget "X cambios en el último snapshot que afectan Y aplicaciones registradas y Z equipos" (datos de §2.10). Reemplaza los bloques previos separados "Attention required" + "Risk distribution bar" con un panel ejecutivo unificado.
+- **LandscapeSummary type** (`frontend/src/lib/api/landscape.ts`): añadidos campos `teams_count` y `applications_count` que el backend ya devolvía desde v2.07.00 (§2.10) pero no estaban tipados en el cliente TypeScript.
+- **dev.ps1 fix**: limpieza automática de `.next/dev/` antes del arranque del frontend para evitar el error "Another next dev server is already running" causado por lock files de sesiones anteriores del IDE.
+
+---
+
 ### v2.09.11 (2026-08-31) — fix(graph): VIEW object type + duplicate node prevention
 
 - **Graph — object type fix**: VIEW nodes whose schema name ends in `_VW` / `_VIEW` (Teradata naming convention) were incorrectly shown as TABLE. Fixed in `_serialize_graph` via `_infer_lineage_type()`: reads schema suffix instead of defaulting all UNKNOWN no-colon nodes to TABLE. No re-ingest required — takes effect immediately on next graph load.
