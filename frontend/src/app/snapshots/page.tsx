@@ -196,11 +196,12 @@ export default function SnapshotsPage() {
   // show a blank page with no indication that an import is running.
   //
   // Fix: we persist the active import_id + phase start time in
-  // sessionStorage. On mount we check for a saved entry; if found we
-  // reopen the panel, switch to "processing" phase and restart the
-  // polling channel — the server-side progress is still available as
-  // long as the server is running.  When the import finishes (or the
-  // user cancels / an error occurs) the entry is removed.
+  // localStorage (survives reloads AND tab close). The entry stores an
+  // optional `finalStatus` field:
+  //   - absent → import still running; reconnect and resume polling
+  //   - "error" → import ended with error; reopen panel in error state
+  //     so the user knows to retry (entry auto-expires after 2 hours)
+  //   - "done" / "cancelled" → clean up silently on next mount
   //
   // The pollAbort ref lets the cleanup function stop the resumed poll
   // channel when the component unmounts again.
@@ -209,16 +210,39 @@ export default function SnapshotsPage() {
   const _STORAGE_KEY = "scion_active_import";
 
   useEffect(() => {
-    const raw = sessionStorage.getItem(_STORAGE_KEY);
+    let raw: string | null = null;
+    try { raw = localStorage.getItem(_STORAGE_KEY); } catch { return; }
     if (!raw) return;
-    let parsed: { importId: string; startedAt: number };
+    let parsed: { importId: string; startedAt: number; finalStatus?: string; finishedAt?: number };
     try {
       parsed = JSON.parse(raw);
     } catch {
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
       return;
     }
-    const { importId, startedAt } = parsed;
+    const { importId, startedAt, finalStatus, finishedAt } = parsed;
+
+    // Expire entries older than 2 hours so stale errors don't resurface.
+    const twoHours = 2 * 60 * 60 * 1000;
+    if (finishedAt && Date.now() - finishedAt > twoHours) {
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
+      return;
+    }
+
+    // Restore a finished-with-error state without polling.
+    if (finalStatus === "error") {
+      setDictPanelOpen(true);
+      setDictPhase("error");
+      setDictUploading(false);
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
+      return;
+    }
+
+    // Clean up silently for done/cancelled.
+    if (finalStatus === "done" || finalStatus === "cancelled") {
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
+      return;
+    }
 
     // Re-open the panel in processing state — we don't have the file
     // list any more but the checklist (driven by server progress) gives
@@ -241,7 +265,14 @@ export default function SnapshotsPage() {
           state.status === "error" ||
           state.status === "cancelled"
         ) {
-          sessionStorage.removeItem(_STORAGE_KEY);
+          // Persist final status so reload shows the outcome.
+          try {
+            if (state.status === "error") {
+              localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() }));
+            } else {
+              localStorage.removeItem(_STORAGE_KEY);
+            }
+          } catch { /* ignore */ }
           setDictPhase(state.status === "done" ? "done" : "error");
           setDictUploading(false);
           setDictActiveImportId(null);
@@ -302,7 +333,13 @@ export default function SnapshotsPage() {
           state.status === "error" ||
           state.status === "cancelled"
         ) {
-          sessionStorage.removeItem(_STORAGE_KEY);
+          try {
+            if (state.status === "error") {
+              localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() }));
+            } else {
+              localStorage.removeItem(_STORAGE_KEY);
+            }
+          } catch { /* ignore */ }
           setDictPhase(state.status === "done" ? "done" : "error");
           setDictUploading(false);
           setDictActiveImportId(null);
@@ -329,17 +366,14 @@ export default function SnapshotsPage() {
     setDictActiveImportId(importId);
     setDictCancelling(false);
 
-    sessionStorage.setItem(
-      _STORAGE_KEY,
-      JSON.stringify({ importId, startedAt }),
-    );
+    try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt })); } catch { /* ignore */ }
 
     try {
       const result = await importFromShare(false, sharePath || undefined, importId);
       setShareResult(result);
       setDictResult(result.dict_result);
       setDictPhase("done");
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
       await mutate("snapshots");
       setActiveSnapshotId(result.snapshot_id);
       const lineagePart = result.lineage_attached
@@ -357,7 +391,7 @@ export default function SnapshotsPage() {
       setShareError(msg);
       setDictError(msg);
       setDictPhase("error");
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() })); } catch { /* ignore */ }
     } finally {
       pollAbort.abort();
       setShareImporting(false);
@@ -396,7 +430,13 @@ export default function SnapshotsPage() {
           state.status === "error" ||
           state.status === "cancelled"
         ) {
-          sessionStorage.removeItem(_STORAGE_KEY);
+          try {
+            if (state.status === "error") {
+              localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() }));
+            } else {
+              localStorage.removeItem(_STORAGE_KEY);
+            }
+          } catch { /* ignore */ }
           setDictPhase(state.status === "done" ? "done" : "error");
           setDictUploading(false);
           setDictActiveImportId(null);
@@ -422,17 +462,14 @@ export default function SnapshotsPage() {
     setDictActiveImportId(importId);
     setDictCancelling(false);
 
-    sessionStorage.setItem(
-      _STORAGE_KEY,
-      JSON.stringify({ importId, startedAt }),
-    );
+    try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt })); } catch { /* ignore */ }
 
     try {
       const result = await importFromShare(false, entry.path, importId);
       setArchiveResults((prev) => ({ ...prev, [entry.path]: result }));
       setDictResult(result.dict_result);
       setDictPhase("done");
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
       await mutate("snapshots");
       setActiveSnapshotId(result.snapshot_id);
       const lineagePart = result.lineage_attached
@@ -450,7 +487,7 @@ export default function SnapshotsPage() {
       setArchiveErrors((prev) => ({ ...prev, [entry.path]: msg }));
       setDictError(msg);
       setDictPhase("error");
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() })); } catch { /* ignore */ }
     } finally {
       pollAbort.abort();
       setArchiveImporting(null);
@@ -810,10 +847,7 @@ export default function SnapshotsPage() {
     setDictCancelling(false);
 
     // Persist so we can resume if the user navigates away and returns.
-    sessionStorage.setItem(
-      _STORAGE_KEY,
-      JSON.stringify({ importId, startedAt }),
-    );
+    try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt })); } catch { /* ignore */ }
 
     try {
       const r = await importDictBatch(dictFiles, false, (e) => {
@@ -838,7 +872,7 @@ export default function SnapshotsPage() {
       }, importId);
       setDictResult(r);
       setDictPhase("done");
-      sessionStorage.removeItem(_STORAGE_KEY);
+      try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
       // Refresh snapshot list so the new snapshot shows up below.
       // Keep panel open so user sees the success card with counts.
       await mutate("snapshots");
@@ -872,7 +906,7 @@ export default function SnapshotsPage() {
       // handleDictCancel already told the user what's happening.
       if (httpStatus === 499) {
         setDictPhase("idle");
-        sessionStorage.removeItem(_STORAGE_KEY);
+        try { localStorage.removeItem(_STORAGE_KEY); } catch { /* ignore */ }
         toast("Import cancelled. No data was persisted.", "info");
         // Wipe the panel back to "ready to drop new files" so the
         // user can retry without any leftover progress UI.
@@ -882,7 +916,7 @@ export default function SnapshotsPage() {
       } else {
         setDictError(msg);
         setDictPhase("error");
-        sessionStorage.removeItem(_STORAGE_KEY);
+        try { localStorage.setItem(_STORAGE_KEY, JSON.stringify({ importId, startedAt, finalStatus: "error", finishedAt: Date.now() })); } catch { /* ignore */ }
       }
     } finally {
       // Always stop the parallel polling channel — without this the
@@ -2103,6 +2137,53 @@ function SnapshotDetailPanel({ detail, snapshot }: { detail: SnapshotDetail; sna
               {(snapshot.cumulative_object_count ?? detail.tables).toLocaleString()} objects
             </div>
           </div>
+        </div>
+      )}
+
+      {/* §2.16.c: validation warnings detail */}
+      {snapshot?.validation_warnings && snapshot.validation_warnings.length > 0 && (
+        <div className="w-full mt-1">
+          <details className="group">
+            <summary className="flex items-center gap-1.5 text-xs text-amber-700 cursor-pointer select-none list-none">
+              <AlertTriangle size={12} className="text-amber-500 shrink-0" />
+              <span className="font-medium">
+                {snapshot.validation_warnings.length} validation{" "}
+                {snapshot.validation_warnings.length === 1 ? "warning" : "warnings"} — click to expand
+              </span>
+            </summary>
+            <div className="mt-2 border border-amber-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-amber-50 border-b border-amber-100">
+                    <th className="px-3 py-1.5 text-left font-semibold text-amber-800 w-24">Severity</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-amber-800 w-24">Type</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-amber-800">Message</th>
+                    <th className="px-3 py-1.5 text-left font-semibold text-amber-800">Object</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshot.validation_warnings.map((w, i) => (
+                    <tr key={i} className="border-b border-amber-50 last:border-0 bg-white hover:bg-amber-50/30">
+                      <td className="px-3 py-1.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                          w.severity === "ERROR"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {w.severity}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-td-gray-dark">{w.type}</td>
+                      <td className="px-3 py-1.5 text-td-navy">{w.message}</td>
+                      <td className="px-3 py-1.5 font-mono text-td-gray-dark truncate max-w-[200px]">
+                        {w.object_name ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         </div>
       )}
     </div>

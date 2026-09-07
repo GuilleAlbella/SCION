@@ -264,6 +264,11 @@ export function pollImportProgress(
 ): void {
   const intervalMs = 1000;
   const requestTimeoutMs = 10_000;
+  // If we get this many consecutive 404s the server has lost the job
+  // (e.g. container restarted mid-import). Treat it as an error so the
+  // UI doesn't hang forever in "processing" state.
+  const max404s = 30;
+  let consecutive404s = 0;
 
   const tick = async () => {
     if (signal.aborted) return;
@@ -273,6 +278,7 @@ export function pollImportProgress(
         { timeout: requestTimeoutMs },
       );
       if (signal.aborted) return;
+      consecutive404s = 0;
       onUpdate(data);
       if (
         data.status === "done" ||
@@ -282,13 +288,21 @@ export function pollImportProgress(
         return;
       }
     } catch (err) {
-      // 404 before the backend has registered the import is benign
-      // (race between this poll and the POST reaching `init()`).
-      // Anything else (timeout, 5xx, network blip) we log so we
-      // stop guessing why polling looks stuck in production runs.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const status = (err as any)?.response?.status;
-      if (status !== 404) {
+      if (status === 404) {
+        consecutive404s++;
+        if (consecutive404s >= max404s) {
+          // Server lost the job (likely restarted). Surface an error
+          // so the user knows to retry rather than waiting indefinitely.
+          onUpdate({
+            status: "error",
+            error: "Import status lost — the server may have restarted. Please try again.",
+            steps: [],
+          } as unknown as ImportProgressState);
+          return;
+        }
+      } else {
         // eslint-disable-next-line no-console
         console.warn(
           `[dict-import] progress poll error (will retry):`,
