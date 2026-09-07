@@ -1,6 +1,7 @@
 Object name  : asmt_roles_config_vw
 Schema       : APP_ANTHROPIC_SPEND_MGMT
 Test type    : added
+Priority     : P3
 
 Note: Provided by Rahul Kulkarni as an "added or dropped object" (email 2026-06-10).
       CreateTimestamp 2026-06-02 15:28:28, LastAlterTimestamp 2026-06-02 15:28:28.

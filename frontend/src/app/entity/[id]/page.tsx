@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import PageShell from "@/components/layout/PageShell";
 import KpiCard from "@/components/shared/KpiCard";
@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ErrorAlert from "@/components/shared/ErrorAlert";
 import { useEntity, useEntityHistory, useEntityContext } from "@/lib/hooks/useEntity";
 import type { CriticalityPoint, UsagePoint } from "@/lib/api/types";
-import { Database, CheckCircle, XCircle, Briefcase, Users } from "lucide-react";
+import { Database, CheckCircle, XCircle, Briefcase, Users, ChevronDown, ChevronRight } from "lucide-react";
 
 // ── inline SVG sparkline ────────────────────────────────────────────────────
 
@@ -208,6 +208,12 @@ export default function EntityDetailPage({
   const critScores = history?.criticality_history.map((r) => r.combined_score) ?? [];
   const queryTrend = history?.usage_history.map((r) => r.query_count) ?? [];
 
+  // §2.15.c Progressive Disclosure: technical details collapsed by default
+  const [showTechnical, setShowTechnical] = useState(false);
+
+  const hasBusinessContext =
+    context && (context.owning_apps.length > 0 || context.using_teams.length > 0);
+
   return (
     <PageShell title={entity.object_name}>
       {/* breadcrumb */}
@@ -222,7 +228,7 @@ export default function EntityDetailPage({
       </nav>
 
       {/* header row */}
-      <div className="flex flex-wrap items-center gap-3 mb-8">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <Database size={20} className="text-primary" />
         <h1 className="text-2xl font-bold text-foreground">{entity.object_name}</h1>
         <span className="text-sm text-td-gray-dark px-2 py-0.5 rounded bg-surface border border-border">
@@ -240,53 +246,9 @@ export default function EntityDetailPage({
         {latestCrit && <CritBadge level={latestCrit.criticality_level} />}
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <KpiCard
-          label="Criticality score"
-          value={latestCrit ? latestCrit.combined_score.toFixed(3) : "—"}
-        />
-        <KpiCard
-          label="Queries (latest)"
-          value={latestUsage ? latestUsage.query_count.toLocaleString() : "—"}
-        />
-        <KpiCard
-          label="Changes"
-          value={history?.change_count ?? 0}
-        />
-        <KpiCard
-          label="Snapshots seen"
-          value={history?.snapshots_seen ?? 0}
-        />
-      </div>
-
-      {/* sparklines */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Criticality trend</h2>
-          <Sparkline points={critScores} color="#F59E0B" />
-        </div>
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Query volume trend</h2>
-          <Sparkline points={queryTrend} color="#3B82F6" />
-        </div>
-      </div>
-
-      {/* detail tables */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Criticality history</h2>
-          <CriticalityTable rows={history?.criticality_history ?? []} />
-        </div>
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Usage history</h2>
-          <UsageTable rows={history?.usage_history ?? []} />
-        </div>
-      </div>
-
-      {/* Business context panel */}
-      {context && (context.owning_apps.length > 0 || context.using_teams.length > 0) && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* §2.15.c — Business context FIRST (always visible) */}
+      {hasBusinessContext && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {context.owning_apps.length > 0 && (
             <div className="card p-5">
               <div className="flex items-center gap-2 mb-4">
@@ -326,13 +288,78 @@ export default function EntityDetailPage({
         </div>
       )}
 
-      {/* metadata footer */}
-      <div className="mt-8 p-4 rounded-lg bg-surface border border-border text-xs text-td-gray-dark flex flex-wrap gap-6">
-        <span>Entity ID: <strong className="text-foreground">{entity.entity_id}</strong></span>
-        <span>Schema: <strong className="text-foreground">{entity.schema_name}</strong></span>
-        <span>First seen snapshot: <strong className="text-foreground">{entity.first_seen_snapshot_id}</strong></span>
-        <span>Last seen snapshot: <strong className="text-foreground">{entity.last_seen_snapshot_id}</strong></span>
-        <span>Created: <strong className="text-foreground">{entity.created_at.slice(0, 10)}</strong></span>
+      {/* KPI row — criticality + usage summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <KpiCard
+          label="Criticality"
+          value={latestCrit ? latestCrit.criticality_level : "—"}
+        />
+        <KpiCard
+          label="Queries (latest snapshot)"
+          value={latestUsage ? latestUsage.query_count.toLocaleString() : "—"}
+        />
+        <KpiCard
+          label="Structural changes"
+          value={history?.change_count ?? 0}
+        />
+        <KpiCard
+          label="Snapshots seen"
+          value={history?.snapshots_seen ?? 0}
+        />
+      </div>
+
+      {/* §2.15.c — Technical details (collapsible) */}
+      <div className="border border-border rounded-lg overflow-hidden">
+        <button
+          onClick={() => setShowTechnical((v) => !v)}
+          className="w-full flex items-center justify-between px-5 py-3 bg-surface hover:bg-surface/80 transition-colors text-left"
+        >
+          <span className="text-sm font-semibold text-foreground">Technical details</span>
+          <span className="flex items-center gap-1 text-xs text-td-gray-dark">
+            {showTechnical ? (
+              <><ChevronDown size={14} /> Hide</>
+            ) : (
+              <><ChevronRight size={14} /> Show trends &amp; history</>
+            )}
+          </span>
+        </button>
+
+        {showTechnical && (
+          <div className="p-5 space-y-6 border-t border-border">
+            {/* sparklines */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-4">Criticality trend</h3>
+                <Sparkline points={critScores} color="#F59E0B" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-4">Query volume trend</h3>
+                <Sparkline points={queryTrend} color="#3B82F6" />
+              </div>
+            </div>
+
+            {/* detail tables */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-4">Criticality history</h3>
+                <CriticalityTable rows={history?.criticality_history ?? []} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-4">Usage history</h3>
+                <UsageTable rows={history?.usage_history ?? []} />
+              </div>
+            </div>
+
+            {/* metadata footer */}
+            <div className="p-4 rounded-lg bg-surface border border-border text-xs text-td-gray-dark flex flex-wrap gap-6">
+              <span>Entity ID: <strong className="text-foreground">{entity.entity_id}</strong></span>
+              <span>Schema: <strong className="text-foreground">{entity.schema_name}</strong></span>
+              <span>First seen: <strong className="text-foreground">snapshot #{entity.first_seen_snapshot_id}</strong></span>
+              <span>Last seen: <strong className="text-foreground">snapshot #{entity.last_seen_snapshot_id}</strong></span>
+              <span>Created: <strong className="text-foreground">{entity.created_at.slice(0, 10)}</strong></span>
+            </div>
+          </div>
+        )}
       </div>
     </PageShell>
   );

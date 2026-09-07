@@ -142,6 +142,13 @@ $backend = Start-Process -NoNewWindow -PassThru -FilePath $venvPython `
   -WorkingDirectory $backendDir
 
 Write-Info "Starting frontend (Next.js dev, port 3000)..."
+# Clear any stale Next.js dev-server lock files left by a previous session
+# (e.g. the Claude Code IDE preview server). Without this, Next.js detects
+# a "ghost" PID in .next/dev/ and refuses to start, exiting immediately.
+$nextDevDir = Join-Path $frontendDir ".next\dev"
+if (Test-Path $nextDevDir) {
+    Remove-Item -Recurse -Force $nextDevDir -ErrorAction SilentlyContinue
+}
 # Run node directly with the Next.js JS entry point, bypassing both
 # cmd.exe and the bash-shebang wrapper in node_modules\.bin\next.
 # cmd.exe would print "Terminate batch job?" on Ctrl+C, capturing stdin

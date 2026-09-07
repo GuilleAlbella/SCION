@@ -70,8 +70,8 @@ export default function ImpactDetailPage({
 
   return (
     <PageShell
-      title={`Impact Analysis — Change #${cid}`}
-      subtitle="Object-level impact detail"
+      title={`Object Change Analysis — Change #${cid}`}
+      subtitle="Upstream and downstream objects affected by this change"
     >
       {/* ──── Column-level "resolved via parent table" banner ────
           v1.10.03: column changes don't have their own graph node, so

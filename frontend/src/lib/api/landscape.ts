@@ -16,6 +16,8 @@ export interface LandscapeSummary {
   high_risk_count: number;
   recent_changes_count: number;
   top_risk_objects: RiskObject[];
+  teams_count: number;
+  applications_count: number;
 }
 
 export interface RiskDistribution {

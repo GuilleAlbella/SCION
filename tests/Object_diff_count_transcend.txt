@@ -1,5 +1,6 @@
 Object name  : snapshot_diff
 Test type    : diff_count
+Priority     : P1
 Min downstream : 10
 
 Note: Verifies UC-03 (Large Snapshot Diff). Checks that the diff between the configured

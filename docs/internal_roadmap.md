@@ -1,4 +1,4 @@
-﻿# SCION — Internal Engineering Roadmap
+# SCION — Internal Engineering Roadmap
 
 **Audience:** SCION dev team (Guillermo + Claude Code, anyone joining).
 **Not:** product strategy (`docs/Hoja de Ruta del Producto.txt`), demo script
@@ -7,7 +7,7 @@
 who owns each piece, and the gates that have to clear before we ship to a
 real customer.
 
-Last updated: 2026-09-02 · Current version: **v2.09.12 (BETA)** (`main`).
+Last updated: 2026-09-02 · Current version: **v2.09.14 (BETA)** (`main`).
 
 ---
 
@@ -89,61 +89,61 @@ Decision gate resolved: SQLite performing within targets on current dataset; Pos
 
 ## Phase 2 — Scale & Hardening + ED Integration  🟡 IN PROGRESS
 
-**Trigger:** Phase 1 benchmark results. Phase 2 scope confirmed en Reunión 21 (2026-06-19) y ampliado en Reunión 28 (2026-07-15).
-**Owner:** Guillermo. Deadline estimación: **lunes 2026-07-21**. Presentación a Chris/Pilar: **jueves 2026-07-24**.
+**Trigger:** Phase 1 benchmark results. Phase 2 scope confirmed in Meeting 21 (2026-06-19) and expanded in Meeting 28 (2026-07-15).
+**Owner:** Guillermo. Deadline estimate: **Monday 2026-07-21**. Presentation to Chris/Pilar: **Thursday 2026-07-24**.
 
-> ⚠️ **Scope de trabajo — SOLO LAB hasta nueva indicación.**
-> Todo el desarrollo, testing y validación de Phase 2 se hace contra el entorno lab
-> (`docker-compose.lab.yml`, Postgres en `localhost:8080`). El deploy de producción
-> (`ps-ubuntu-0043`, `docker-compose.yml`) NO se toca hasta que Phase 2 esté validada
-> en lab. Las comprobaciones funcionales, los benchmarks y los tests se ejecutan en lab.
+> ⚠️ **Work scope — LAB ONLY until further notice.**
+> All Phase 2 development, testing and validation is done against the lab environment
+> (`docker-compose.lab.yml`, Postgres on `localhost:8080`). The production deployment
+> (`ps-ubuntu-0043`, `docker-compose.yml`) is NOT touched until Phase 2 is validated
+> in lab. Functional checks, benchmarks and tests run in lab.
 >
-> **Base de datos activa en lab:** Postgres 16 — volumen `scion-lab_pgdata`.
-> Todo el stack (importer, graph engine, impact, TAISA, usage) apunta a Postgres
+> **Active database in lab:** Postgres 16 — volume `scion-lab_pgdata`.
+> The full stack (importer, graph engine, impact, TAISA, usage) points to Postgres
 > via `DATABASE_URL=postgresql+psycopg://scion:scion_lab@postgres:5432/scion`.
-> Los archivos SQLite en el container (`kalido_lite.db`, `scion_source.db`) son inertes.
+> The SQLite files in the container (`kalido_lite.db`, `scion_source.db`) are inert.
 
-> **DataDNA Lite v1.0 declared complete by Rahul (Reunión 21, 2026-06-19).** SCION reemplaza tanto Kalido (integración de metadata) como Click (visualización). Phase 2 expande el scope a integration model completo + reference data + AI classification.
+> **DataDNA Lite v1.0 declared complete by Rahul (Meeting 21, 2026-06-19).** SCION replaces both Kalido (metadata integration) and Click (visualization). Phase 2 expands the scope to full integration model + reference data + AI classification.
 
 ---
 
-### Resumen de estimación Phase 2
+### Phase 2 Estimation Summary
 
-Asunción: **1 developer (Guillermo) + Claude Code (AI-assisted)**, semanas de 5 días.
-Con AI-assisted development la velocidad efectiva es ~1.8–2x. Los días son **días calendario reales**.
+Assumption: **1 developer (Guillermo) + Claude Code (AI-assisted)**, 5-day weeks.
+With AI-assisted development, effective velocity is ~1.8–2x. Days are **real calendar days**.
 
-Reestructurado post-reunión con Pilar (2026-07-17): entrega única en vez de dos, SQLite→Postgres como primer item obligatorio (fundación para Integration Model), seguido por las 3 capas de Jon Brightling.
+Restructured after the Pilar meeting (2026-07-17): single delivery instead of two, SQLite→Postgres as the first mandatory item (foundation for the Integration Model), followed by Jon Brightling's 3 layers.
 
-#### Entrega única — Phase 2 completo
+#### Single delivery — Phase 2 complete
 
-| # | Ítem | Descripción breve | Est. (días) | Notas |
+| # | Item | Brief description | Est. (days) | Notes |
 |---|------|--------------------|------------|-------|
-| **2.5** | **SQLite → Postgres** | DB engine migration — fundación de performance | **4** | Primer item; ya no condicional |
-| ↳ 2.6 | Graph engine perf | Lazy-load nodos + indexing | **2** | Sub-task de 2.5 |
-| ↳ 2.7 | Frontend pagination | Server-side + lazy graph fetch | **2** | Sub-task de 2.5 |
-| **2.16** | **Staging Layer** | Validación + resolución cross-source antes de Integration | **5** | NUEVO — arquitectura Jon Brightling |
-| **2.9** | **Integration Model** | Entity layer + backfill + trend UI | **7** | Requiere §2.16 |
-| **2.15** | **Access Layer** | Business Discovery + Executive Dashboard + Entity view | **4** | Requiere §2.9 + §2.10 |
+| **2.5** | **SQLite → Postgres** | DB engine migration — performance foundation | **4** | First item; no longer conditional |
+| ↳ 2.6 | Graph engine perf | Lazy-load nodes + indexing | **2** | Sub-task of 2.5 |
+| ↳ 2.7 | Frontend pagination | Server-side + lazy graph fetch | **2** | Sub-task of 2.5 |
+| **2.16** | **Staging Layer** | Validation + cross-source resolution before Integration | **5** | NEW — Jon Brightling architecture |
+| **2.9** | **Integration Model** | Entity layer + backfill + trend UI | **7** | Requires §2.16 |
+| **2.15** | **Access Layer** | Business Discovery + Executive Dashboard + Entity view | **4** | Requires §2.9 + §2.10 |
 | **2.8** | Production runtime | Systemd units + JSON logging | **1** | — |
-| **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactivo~~ | **✅** | v2.05.00 |
-| **2.12** | ~~AI column classification~~ | ~~PII / non-PII por nombre, tipo y comentario~~ | **✅** | v2.06.00 |
+| **2.11** | ~~Col-lineage navigation~~ | ~~Downstream + upstream interactive~~ | **✅** | v2.05.00 |
+| **2.12** | ~~AI column classification~~ | ~~PII / non-PII by name, type and comment~~ | **✅** | v2.06.00 |
 | **2.10** | ~~Reference data~~ | ~~User hierarchy + app metadata + dashboards~~ | **✅** | v2.07.00 |
-| **2.2** | ~~Incremental loading~~ | ~~CDC contra baseline day zero~~ | **✅** | v2.08.00 |
-| **2.13** | ~~Manifest timestamps~~ | ~~Timestamps del extractor en snapshot screen~~ | **✅** | v2.09.00 |
-| **2.4** | DDL timestamp merge | Mantener versión más reciente en ingest | **1** | — |
-| **2.14** | Buffer (contingency) | Reservado para imprevistos | **5** | — |
-| | **TOTAL BRUTO** | | **49** | |
-| | *Ganancia AI-assisted (~20%)* | | *−10* | |
-| | **TOTAL NETO** | | **~39 días** | ~8 semanas |
+| **2.2** | ~~Incremental loading~~ | ~~CDC against baseline day zero~~ | **✅** | v2.08.00 |
+| **2.13** | ~~Manifest timestamps~~ | ~~Extractor timestamps on snapshot screen~~ | **✅** | v2.09.00 |
+| **2.4** | DDL timestamp merge | Keep most recent version on ingest | **1** | — |
+| **2.14** | Buffer (contingency) | Reserved for unforeseen items | **5** | — |
+| | **GROSS TOTAL** | | **49** | |
+| | *AI-assisted gain (~20%)* | | *−10* | |
+| | **NET TOTAL** | | **~39 days** | ~8 weeks |
 
-> ⚠️ §2.10 bloqueado hasta que el extractor de Rahul provea username por fila (hoy solo `user_count`).
-> §2.16 Staging Layer es prerequisito de §2.9. §2.15 Access Layer requiere §2.9 + §2.10 completos.
+> ⚠️ §2.10 blocked until Rahul's extractor provides username per row (today only `user_count`).
+> §2.16 Staging Layer is prerequisite for §2.9. §2.15 Access Layer requires §2.9 + §2.10 complete.
 
 ---
 
-Subject to what the real-data numbers tell us. Ítems:
+Subject to what the real-data numbers tell us. Items:
 
-### 2.0 Column-level lineage enhancements (Reunión 21 feature requests)
+### 2.0 Column-level lineage enhancements (Meeting 21 feature requests)
 
 Three concrete requests from Rahul after the live demo of column-level lineage:
 
@@ -156,7 +156,7 @@ Three concrete requests from Rahul after the live demo of column-level lineage:
 - [x] **Indirect impacts cleanup** — removed "no expression" literal (tier 2 parser never populates expression); deduplicate identical rows into `· N queries` count badge. *(v1.21.42)*
 - [x] **Edge label dedup fix** — dedup key changed from `source_column_key` to `(source_column_key, target_column_key)` pair; same source column mapping to multiple targets now all visible. *(v1.21.43)*
 
-### 2.1 Ecosystem Decoded (ED) integration  *(new — Reunión 21)*
+### 2.1 Ecosystem Decoded (ED) integration  *(new — Meeting 21)*
 
 **Idea:** Combine SCION's strengths (structure, change intelligence, column-level lineage) with Ecosystem Decoded's strengths (rich usage metrics, business context / user-group mapping).
 
@@ -172,7 +172,7 @@ Ecosystem Decoded is an existing but dormant Teradata service that analyzes CPU 
 | Usage | 🟡 Basic | ✅ Strong |
 | Business context | ❌ Limited | ✅ Strong |
 
-**Use cases proposed for Phase 2 (from Reunión 21 + ED use-case spreadsheet):**
+**Use cases proposed for Phase 2 (from Meeting 21 + ED use-case spreadsheet):**
 
 - [ ] **ED-06 — PII data identification**: AI-based classification of columns as likely PII (name, address, credit card, etc.) + lineage propagation (if source column is PII → downstream columns inherit PII tag).
 - [ ] **ED-05 — Duplicate / unused data**: Fuzzy-logic detection of redundant datasets (ED flagged this as SCION-suited).
@@ -186,150 +186,150 @@ Ecosystem Decoded is an existing but dormant Teradata service that analyzes CPU 
 - ED data format / availability not yet confirmed — Rahul studying with a second person.
 - PII propagation via lineage requires column-level lineage to be stable (just shipped v1.21.23).
 
-### 2.2 Incremental snapshot handling *(confirmed Reunión 18)* ✅ COMPLETO (v2.08.00, 2026-07-21)
+### 2.2 Incremental snapshot handling *(confirmed Meeting 18)* ✅ COMPLETE (v2.08.00, 2026-07-21)
 
 - [x] SCION must compare incremental batches against a "day zero" baseline (not the previous incremental).
 - [x] Track cumulative object count across batches.
 - [x] On full reset (gap in data), create a new day zero and reset baseline.
 
-### 2.3 Dict view-definition parsing *(confirmed Reunión 18 — parser team)*
+### 2.3 Dict view-definition parsing *(confirmed Meeting 18 — parser team)*
 
 - [ ] Code Parser to parse view DDLs from the data dictionary (not just DBQL).
 - [ ] Covers views created before the extraction window (lineage gaps in DBQL-only mode).
 - [ ] Output: same JSON lineage format; SCION ingests alongside existing dict batch.
 - [ ] Execution model: run once on "day zero", then incremental via DBQL.
 
-### 2.4 DDL timestamp merge *(confirmed Reunión 19)*
+### 2.4 DDL timestamp merge *(confirmed Meeting 19)*
 
 - [ ] Same object can arrive from DBQL extract AND dict extract with different timestamps.
 - [ ] SCION must keep the *latest* version (compare DDL timestamps on ingest).
 - [ ] Applies to: views, stored procedures, macros, triggers.
 
-### 2.5 SQLite → Postgres  *(primer item — post-reunión Pilar, 2026-07-17)*  **Est: 4 días**
+### 2.5 SQLite → Postgres  *(first item — post-Pilar meeting, 2026-07-17)*  **Est: 4 days**
 
-Antes marcado como condicional. Decisión post-reunión con Pilar: se hace primero como fundación
-de performance antes de construir el Integration Model sobre ella. Graph engine perf y
-Frontend pagination son sub-tareas que se completan en paralelo con la migración.
+Previously marked as conditional. Post-Pilar meeting decision: done first as the performance
+foundation before building the Integration Model on top of it. Graph engine perf and
+Frontend pagination are sub-tasks completed in parallel with the migration.
 
-**Sub-tareas:**
+**Sub-tasks:**
 
-#### 2.5a — Migración de motor (2.5 core — 4 días)  ✅ LAB COMPLETO (2026-07-20)
-- SQLAlchemy abstrae el engine — el grueso del trabajo es operacional, no código.
+#### 2.5a — Engine migration (2.5 core — 4 days)  ✅ LAB COMPLETE (2026-07-20)
+- SQLAlchemy abstracts the engine — the bulk of the work is operational, not code.
 - [x] Connection-string + driver switch — `psycopg[binary]==3.2.13` (v3); dialect `postgresql+psycopg://`.
-- [x] Todas las Alembic migrations corren contra Postgres — `alembic/env.py` actualizado para leer `DATABASE_URL` y registrar todos los modelos ORM via `app.db.base`.
-- [x] FK/cascade behaviour verificado — SQLite no enforcea FKs; Postgres sí. Mitigado con `ALTER TABLE … DISABLE TRIGGER ALL` en el script de migración.
-- [x] `docker-compose.lab.yml` creado con servicio Postgres 16-alpine (puerto 5432 interno, SCION en 8080).
-- [x] `DATABASE_URL` env var en docker-compose.lab.yml; producción usa `sqlite:////data/scion.db` hasta migración.
-- [x] 47 819 filas migradas a Postgres en lab. API verificada: `GET /api/v1/snapshots` devuelve 10 snapshots correctamente.
+- [x] All Alembic migrations run against Postgres — `alembic/env.py` updated to read `DATABASE_URL` and register all ORM models via `app.db.base`.
+- [x] FK/cascade behaviour verified — SQLite does not enforce FKs; Postgres does. Mitigated with `ALTER TABLE … DISABLE TRIGGER ALL` in the migration script.
+- [x] `docker-compose.lab.yml` created with Postgres 16-alpine service (internal port 5432, SCION on 8080).
+- [x] `DATABASE_URL` env var in docker-compose.lab.yml; production uses `sqlite:////data/scion.db` until migration.
+- [x] 47,819 rows migrated to Postgres in lab. API verified: `GET /api/v1/snapshots` returns 10 snapshots correctly.
 
-##### Archivos clave
-| Archivo | Descripción |
+##### Key files
+| File | Description |
 |---|---|
-| `docker-compose.lab.yml` | Entorno lab con Postgres 16-alpine + SCION en puerto 8080 |
-| `alembic/env.py` | Lee `DATABASE_URL` env var; importa `app.db.base` (todos los modelos) |
-| `backend/tools/migrate_sqlite_to_postgres.py` | Script de migración one-shot SQLite → Postgres |
+| `docker-compose.lab.yml` | Lab environment with Postgres 16-alpine + SCION on port 8080 |
+| `alembic/env.py` | Reads `DATABASE_URL` env var; imports `app.db.base` (all models) |
+| `backend/tools/migrate_sqlite_to_postgres.py` | One-shot migration script SQLite → Postgres |
 
-##### Procedimiento de migración — lab (template para producción)
+##### Migration procedure — lab (template for production)
 
-> Ejecutar **dentro del container backend** (`docker exec scion-lab-backend …`).
+> Run **inside the backend container** (`docker exec scion-lab-backend …`).
 
 ```bash
-# Paso 1 — Copiar SQLite al container
-#   (lab: kalido_lite.db  |  prod: el volumen ya está montado en /data/scion.db)
+# Step 1 — Copy SQLite to the container
+#   (lab: kalido_lite.db  |  prod: volume is already mounted at /data/scion.db)
 docker cp kalido_lite.db scion-lab-backend:/tmp/scion_source.db
 
-# Paso 2 — Ajustar permisos (docker cp deja el archivo como root)
+# Step 2 — Fix permissions (docker cp leaves the file owned by root)
 docker exec --user root scion-lab-backend chown scion:scion /tmp/scion_source.db
 
-# Paso 3 — Actualizar fuente SQLite a alembic HEAD
-#   (necesario si el backup fue tomado antes de la última migration)
+# Step 3 — Update SQLite source to alembic HEAD
+#   (needed if the backup was taken before the latest migration)
 docker exec scion-lab-backend python backend/tools/db_init.py init \
     --db-url sqlite:////tmp/scion_source.db
 
-# Paso 4 — Dry-run: verificar conteo de filas por tabla
+# Step 4 — Dry-run: verify row counts per table
 docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py --dry-run
 
-# Paso 5 — Migración completa
+# Step 5 — Full migration
 docker exec scion-lab-backend python backend/tools/migrate_sqlite_to_postgres.py
 ```
 
-> **En producción**, reemplazar `scion-lab-backend` por `scion-backend` y `--source` por
-> `sqlite:////data/scion.db` (el volumen ya está montado ahí).
-> El `DATABASE_URL` del container apuntará al Postgres de producción por la configuración del
-> `docker-compose.yml` (sin necesidad de `--target` explícito).
+> **In production**, replace `scion-lab-backend` with `scion-backend` and `--source` with
+> `sqlite:////data/scion.db` (the volume is already mounted there).
+> The container's `DATABASE_URL` will point to the production Postgres via the
+> `docker-compose.yml` configuration (no explicit `--target` needed).
 
-##### Gotchas documentados
+##### Documented gotchas
 
-| Problema | Causa | Solución |
+| Problem | Cause | Fix |
 |---|---|---|
-| `attempt to write a readonly database` | `docker cp` copia con owner root | `docker exec --user root … chown scion:scion …` |
-| `alembic_version mismatch` | Backup tomado 2 migrations antes de HEAD | Correr `db_init.py init --db-url sqlite:///…` en la fuente |
-| `ForeignKeyViolation` al insertar | SQLite no enforcea FKs — filas huérfanas en fuente | `ALTER TABLE … DISABLE TRIGGER ALL` por batch (ya en el script) |
-| `InFailedSqlTransaction` en reset de sequences | Secuencia no existe para columnas FK o UUID PK | Cada reset usa su propia transacción `engine.begin()` — las fallidas se ignoran |
-| Comandos multilínea en PowerShell con `docker exec` | PowerShell interpreta `"..."` de forma distinta | Usar heredoc `$script = @'...'@; $script \| docker exec -i container python` |
+| `attempt to write a readonly database` | `docker cp` copies with root owner | `docker exec --user root … chown scion:scion …` |
+| `alembic_version mismatch` | Backup taken 2 migrations before HEAD | Run `db_init.py init --db-url sqlite:///…` on the source |
+| `ForeignKeyViolation` on insert | SQLite does not enforce FKs — orphan rows in source | `ALTER TABLE … DISABLE TRIGGER ALL` per batch (already in the script) |
+| `InFailedSqlTransaction` on sequence reset | Sequence does not exist for FK or UUID PK columns | Each reset uses its own `engine.begin()` transaction — failed ones are ignored |
+| Multi-line commands in PowerShell with `docker exec` | PowerShell interprets `"..."` differently | Use heredoc `$script = @'...'@; $script \| docker exec -i container python` |
 
-#### 2.5b — Graph engine performance (§2.6 — 2 días)  ✅ COMPLETO (2026-07-20)
-- [x] **Lazy-load graph nodes on demand** — `compute_node_metrics` reemplazado: en vez de cargar todos los nodes+edges en Python RAM (~700 MB en Transcend), usa dos `GROUP BY` en SQL. Solo se transfieren los conteos de grado, no las filas de edges. *(v2.01.00)*
-- [x] **Computed metrics persistidas en DB** — `node_metadata` JSON en `graph_node` ya almacenaba `{in_degree, out_degree, fragility, is_hub}`; `persist_node_metrics` sigue escribiendo post-ingest. Dead code en `blast_radius.py` eliminado (cargaba todos los `GraphNode` por snapshot para construir `node_names`/`node_schemas` que nunca se usaban). *(v2.01.00)*
-- [x] **Index on `change_event(snapshot_to, object_identifier)`** — migration `a1b2c3d4e5f6` añade `ix_change_event_snapshot_to_object`. También mergea los dos heads de Alembic que existían (`f1a2b3c4d5e6` + `d61e9f7a2b34`). *(v2.01.00)*
+#### 2.5b — Graph engine performance (§2.6 — 2 days)  ✅ COMPLETE (2026-07-20)
+- [x] **Lazy-load graph nodes on demand** — `compute_node_metrics` replaced: instead of loading all nodes+edges into Python RAM (~700 MB on Transcend), uses two SQL `GROUP BY` queries. Only degree counts are transferred, not edge rows. *(v2.01.00)*
+- [x] **Computed metrics persisted in DB** — `node_metadata` JSON in `graph_node` already stored `{in_degree, out_degree, fragility, is_hub}`; `persist_node_metrics` continues writing post-ingest. Dead code in `blast_radius.py` removed (loaded all `GraphNode` rows per snapshot to build `node_names`/`node_schemas` that were never used). *(v2.01.00)*
+- [x] **Index on `change_event(snapshot_to, object_identifier)`** — migration `a1b2c3d4e5f6` adds `ix_change_event_snapshot_to_object`. Also merges the two existing Alembic heads (`f1a2b3c4d5e6` + `d61e9f7a2b34`). *(v2.01.00)*
 
-#### 2.5c — Frontend pagination (§2.7 — 2 días)  ✅ COMPLETO (v2.02.00, 2026-07-20)
-- [x] Server-side pagination en /changes — infinite scroll con IntersectionObserver; reemplaza Previous/Next. `fetchPage` ya tenía modo `"append"`; ahora conectado a sentinel div + observer (rootMargin 400 px). Status row muestra `N / total cargados`. *(v2.02.00)*
-- [x] Lazy graph fetch — `/graph/{snapshot_id}` trunca a 5 000 nodos y devuelve `truncated: true`; frontend muestra banner para elegir anchor de focus mode. `/graph/focus` hace BFS server-side (cap 1 000 nodos). Ya operativo desde v1.11.00. *(v2.02.00)*
+#### 2.5c — Frontend pagination (§2.7 — 2 days)  ✅ COMPLETE (v2.02.00, 2026-07-20)
+- [x] Server-side pagination on /changes — infinite scroll with IntersectionObserver; replaces Previous/Next. `fetchPage` already had `"append"` mode; now wired to sentinel div + observer (rootMargin 400 px). Status row shows `N / total loaded`. *(v2.02.00)*
+- [x] Lazy graph fetch — `/graph/{snapshot_id}` truncates to 5,000 nodes and returns `truncated: true`; frontend shows banner to select focus mode anchor. `/graph/focus` does server-side BFS (cap 1,000 nodes). Already live since v1.11.00. *(v2.02.00)*
 
-### 2.6 Graph engine performance  ✅ COMPLETO (v2.01.00, 2026-07-20)
-- [x] Lazy-load graph nodes on demand — SQL GROUP BY en `compute_node_metrics`.
-- [x] Computed metrics persistidas en DB — `node_metadata` JSON en `graph_node`.
+### 2.6 Graph engine performance  ✅ COMPLETE (v2.01.00, 2026-07-20)
+- [x] Lazy-load graph nodes on demand — SQL GROUP BY in `compute_node_metrics`.
+- [x] Computed metrics persisted in DB — `node_metadata` JSON in `graph_node`.
 - [x] Index on `change_event(snapshot_to, object_identifier)` — migration `a1b2c3d4e5f6`.
-- [ ] Cython / Rust para `compute_impact` — descartado por ahora; CTEs SQL son suficientes al escalar.
+- [ ] Cython / Rust for `compute_impact` — discarded for now; SQL CTEs are sufficient at scale.
 
-### 2.7 Frontend rendering  ✅ COMPLETO (v2.02.00, 2026-07-20)
+### 2.7 Frontend rendering  ✅ COMPLETE (v2.02.00, 2026-07-20)
 - [x] Focus mode for /graph (v1.11.00).
 - [x] Server-side infinite scroll on /changes — IntersectionObserver replaces Previous/Next; append mode wired to sentinel div. *(v2.02.00)*
 - [x] Lazy graph fetch — truncation at 5 000 nodes + focus-mode BFS already in place since v1.11.00. *(v2.02.00)*
 
-### 2.8 Production runtime  ✅ COMPLETO (v2.04.00, 2026-07-20)
+### 2.8 Production runtime  ✅ COMPLETE (v2.04.00, 2026-07-20)
 - [x] `docker-compose.yml` — backend + frontend (production build) + nginx reverse proxy. Live on ps-ubuntu-0043 since v1.21.x. GHCR image publish wired.
 - [x] Health check endpoints (`/healthz`, `/readyz`). *(v1.21.x)*
-- [x] Linux systemd units — `deploy/systemd/scion.service` + `deploy/install_systemd.sh`. `docker/install.sh` paso 7 instala y habilita el unit automáticamente en Linux. Type=oneshot+RemainAfterExit; restart on-failure; EnvironmentFile desde `.env`. *(v2.04.00)*
-- [x] Structured JSON logging — `backend/app/logging_config.py` (dictConfig JSON/text, controlado por `LOG_FORMAT` env var). `python-json-logger==2.0.7`. nginx `log_format json_access escape=json` + security headers. `main.py` migrado a `lifespan`, `print()→logger.info()`, CORS desde `ALLOWED_ORIGINS` env var. *(v2.04.00)*
+- [x] Linux systemd units — `deploy/systemd/scion.service` + `deploy/install_systemd.sh`. `docker/install.sh` step 7 installs and enables the unit automatically on Linux. Type=oneshot+RemainAfterExit; restart on-failure; EnvironmentFile from `.env`. *(v2.04.00)*
+- [x] Structured JSON logging — `backend/app/logging_config.py` (dictConfig JSON/text, controlled by `LOG_FORMAT` env var). `python-json-logger==2.0.7`. nginx `log_format json_access escape=json` + security headers. `main.py` migrated to `lifespan`, `print()→logger.info()`, CORS from `ALLOWED_ORIGINS` env var. *(v2.04.00)*
 
-### 2.16 Staging Layer  *(nuevo — arquitectura Jon Brightling, 2026-07-17)*  **Est: 5 días**  ✅ COMPLETO (v2.03.00, 2026-07-20)
+### 2.16 Staging Layer  *(new — Jon Brightling architecture, 2026-07-17)*  **Est: 5 days**  ✅ COMPLETE (v2.03.00, 2026-07-20)
 
-**Origin:** Jon Brightling email 2026-07-17. La arquitectura formal de 3 capas es:
-**Staging → Integration → Access**. El Staging Layer es el prerequisito directo del Integration
-Model (§2.9) — los datos deben pasar por validación y normalización antes de entrar a la
-capa de entidades persistentes.
+**Origin:** Jon Brightling email 2026-07-17. The formal 3-layer architecture is:
+**Staging → Integration → Access**. The Staging Layer is the direct prerequisite for the
+Integration Model (§2.9) — data must pass through validation and normalization before entering
+the persistent entity layer.
 
-**Qué hace:** Recibe los extracts crudos del cliente (`.dat`, `.json`), los valida, resuelve
-conflictos cross-source, y los "promueve" al Integration Model cuando están limpios. Hoy SCION
-persiste directo desde el import — el Staging Layer agrega una capa intermedia controlada.
+**What it does:** Receives the raw client extracts (`.dat`, `.json`), validates them, resolves
+cross-source conflicts, and "promotes" them to the Integration Model once clean. Today SCION
+persists directly from import — the Staging Layer adds a controlled intermediate step.
 
-**Componentes:**
+**Components:**
 
-#### 2.16.a — Tablas de staging + status tracking
-- [x] Nuevas tablas: `staging_table_import`, `staging_column_import` — migration `b2c3d4e5f6a7`. *(v2.03.00)*
-- [x] Campo `import_status` en `snapshot`: `pending → staged → committed → failed` — migration `b2c3d4e5f6a7` + `snapshot.validation_warnings` JSON field. *(v2.03.00)*
+#### 2.16.a — Staging tables + status tracking
+- [x] New tables: `staging_table_import`, `staging_column_import` — migration `b2c3d4e5f6a7`. *(v2.03.00)*
+- [x] Field `import_status` in `snapshot`: `pending → staged → committed → failed` — migration `b2c3d4e5f6a7` + `snapshot.validation_warnings` JSON field. *(v2.03.00)*
 - [x] Alembic migration `b2c3d4e5f6a7` — revises `a1b2c3d4e5f6`. *(v2.03.00)*
 
-#### 2.16.b — Pipeline de validación
-- [x] Validar completitud: `schema_name` no-null, tipos de datos reconocidos — `staging_validator.py` rules: NULL_SCHEMA + UNKNOWN_TYPE. *(v2.03.00)*
-- [x] Detectar y loggear duplicados cross-source — DUPLICATE_TABLE hard error; sets `import_status='failed'`. *(v2.03.00)*
-- [x] Regla de resolución: mantener versión más reciente por `DDL_timestamp` (absorbe §2.4) — UNKNOWN_TYPE/NULL_SCHEMA as warnings, DUPLICATE_TABLE as hard error. §2.4 absorbed. *(v2.03.00)*
-- [x] Resultado: reporte de import con filas aceptadas / rechazadas / resueltas — stored in `snapshot.validation_warnings` JSON + `staging_table_import.row_status`. *(v2.03.00)*
+#### 2.16.b — Validation pipeline
+- [x] Validate completeness: `schema_name` non-null, recognized data types — `staging_validator.py` rules: NULL_SCHEMA + UNKNOWN_TYPE. *(v2.03.00)*
+- [x] Detect and log cross-source duplicates — DUPLICATE_TABLE hard error; sets `import_status='failed'`. *(v2.03.00)*
+- [x] Resolution rule: keep most recent version by `DDL_timestamp` (absorbs §2.4) — UNKNOWN_TYPE/NULL_SCHEMA as warnings, DUPLICATE_TABLE as hard error. §2.4 absorbed. *(v2.03.00)*
+- [x] Result: import report with accepted / rejected / resolved rows — stored in `snapshot.validation_warnings` JSON + `staging_table_import.row_status`. *(v2.03.00)*
 
-#### 2.16.c — UI: import status en Snapshots page
-- [x] Mostrar estado `staged / committed / failed` por snapshot — badge column en tabla de snapshots (verde/azul/rojo). *(v2.03.00)*
-- [ ] Detalle de conflictos resueltos (qué source ganó y por qué) — pendiente UI (datos ya están en `validation_warnings` JSON).
+#### 2.16.c — UI: import status on Snapshots page
+- [x] Show `staged / committed / failed` status per snapshot — badge column in snapshots table (green/blue/red). *(v2.03.00)*
+- [x] Resolved conflict details — expandable table in each snapshot's detail panel; backend now includes `validation_warnings` in `GET /snapshots`; shows severity, type, message, object_name. *(v2.09.13)*
 
-**Nota:** §2.4 DDL timestamp merge queda absorbido por §2.16.b — ya no es ítem separado.
+**Note:** §2.4 DDL timestamp merge is absorbed by §2.16.b — no longer a separate item.
 
 ---
 
-### 2.9 Integration Model — Cross-Snapshot Entity Layer  *(Reunión 27 + Reunión 28)*  ✅ BACKEND COMPLETO (v2.03.00, 2026-07-20)
+### 2.9 Integration Model — Cross-Snapshot Entity Layer  *(Meeting 27 + Meeting 28)*  ✅ BACKEND COMPLETE (v2.03.00, 2026-07-20)
 
-**Origin:** Jon Brightling (Data DNA team) identified in Reunión 27 (2026-07-15). Confirmed
-in Reunión 28 by Rahul Kulkarni: this is the equivalent of the **Kalido BIM model** —
+**Origin:** Jon Brightling (Data DNA team) identified in Meeting 27 (2026-07-15). Confirmed
+in Meeting 28 by Rahul Kulkarni: this is the equivalent of the **Kalido BIM model** —
 applies data warehousing principles to metadata: persistent, ongoing history of every entity
 across snapshots. This layer is also the prerequisite for §2.10 (reference data must link
 INTO this model). The full integration model includes: storage (data dictionary), processing
@@ -400,203 +400,200 @@ Resolution uses the `(entity_type, schema_name, object_name)` natural key throug
 - [x] `GET /entity/{id}/history` endpoint — criticality + usage + change history across snapshots. *(v2.03.00)*
 - [x] `GET /entity/resolve` endpoint — lookup by natural key (type + FQ name). *(v2.03.00)*
 - [x] `GET /entity/` list endpoint — paginated, filterable by schema/type/active. *(v2.03.00)*
-- [x] UI: criticality trend chart — sparkline en `/entity/[id]` page + `useEntityResolve` hook. *(v2.09.x)*
-- [x] UI: usage trend per object — sparkline + usage history table en `/entity/[id]` page. *(v2.09.x)*
-- [x] UI: "Entity history" link en Usage page drill-down panel + tabla de drill-down. *(v2.09.x)*
+- [x] UI: criticality trend chart — sparkline on `/entity/[id]` page + `useEntityResolve` hook. *(v2.09.x)*
+- [x] UI: usage trend per object — sparkline + usage history table on `/entity/[id]` page. *(v2.09.x)*
+- [x] UI: "Entity history" link on Usage page drill-down panel + drill-down table. *(v2.09.x)*
 
-### 2.10 Reference Data Support  ✅ COMPLETO (v2.07.00, 2026-07-20)
+### 2.10 Reference Data Support  ✅ COMPLETE (v2.07.00, 2026-07-20)
 
-**Origin:** Rahul Kulkarni, Reunión 28. Prerequisito: §2.9 Integration Model.
+**Origin:** Rahul Kulkarni, Meeting 28. Prerequisite: §2.9 Integration Model.
 
-SCION hoy solo maneja metadata técnica (structure, lineage, usage). Los clientes necesitan
-vincular esa metadata con su contexto de negocio: qué usuarios/equipos usan cada objeto,
-qué aplicación de negocio "es dueña" de cada base de datos/tabla.
+SCION today only handles technical metadata (structure, lineage, usage). Customers need
+to link that metadata with their business context: which users/teams use each object,
+which business application "owns" each database/table.
 
-**Sub-ítems:**
+**Sub-items:**
 
 #### 2.10.a — User hierarchy ingestion  ✅
-- [x] Nuevas tablas: `user_entity`, `team_entity`, `department_entity` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
-- [x] Pipeline de ingest: upload Excel/CSV vía `POST /api/v1/reference-import/users` — headers flexibles, upsert idempotente. *(v2.07.00)*
-- [x] Campo `username` nullable en `usage_event` — linkeo con `user_entity` listo en la DB. *(v2.07.00)*
+- [x] New tables: `user_entity`, `team_entity`, `department_entity` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
+- [x] Ingest pipeline: upload Excel/CSV via `POST /api/v1/reference-import/users` — flexible headers, idempotent upsert. *(v2.07.00)*
+- [x] Nullable `username` field in `usage_event` — linkage to `user_entity` ready in DB. *(v2.07.00)*
 
-> ⚠️ **Cambio en extractor pendiente:** hasta que el PDCR extractor provea `username` por fila,
-> la columna `usage_event.username` queda NULL y el dashboard de teams muestra `—` en queries.
-> El campo en DB ya existe — sólo requiere re-ingest cuando Rahul actualice el extractor.
+> ⚠️ **Extractor change pending:** until the PDCR extractor provides `username` per row,
+> the `usage_event.username` column stays NULL and the teams dashboard shows `—` for queries.
+> The DB field already exists — only requires re-ingest when Rahul updates the extractor.
 
 #### 2.10.b — Business Application metadata  ✅
-- [x] Nuevas tablas: `application_entity`, `database_application_mapping`, `table_application_mapping` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
-- [x] Pipeline de ingest: upload Excel/CSV vía `POST /api/v1/reference-import/applications`. *(v2.07.00)*
-- [x] Linkeo via `schema_name`/`table_name` (no requiere cambio en extractor). *(v2.07.00)*
+- [x] New tables: `application_entity`, `database_application_mapping`, `table_application_mapping` — migration `e5f6a7b8c9d0`. *(v2.07.00)*
+- [x] Ingest pipeline: upload Excel/CSV via `POST /api/v1/reference-import/applications`. *(v2.07.00)*
+- [x] Linkage via `schema_name`/`table_name` (no extractor change required). *(v2.07.00)*
 
 #### 2.10.c — UI dashboards  ✅
-- [x] Página `/reference` — KPI row + import cards + tabs Org/Applications. *(v2.07.00)*
-- [x] Dashboard "Teams" — tabla con dept, user count, queries, objects accessed; aviso ámbar cuando no hay per-user data. *(v2.07.00)*
-- [x] Dashboard "Applications" — tabla con owner team, schema count, table count, query count. *(v2.07.00)*
-- [x] API `/landscape/summary` enriquecida con `teams_count` + `applications_count`. *(v2.07.00)*
-- [ ] Filtros por team/dept en páginas Usage e Intelligence — pendiente post-extractor upgrade
-- [ ] TAISA: exponer user/app metadata en el contexto de Q&A — pendiente
+- [x] Page `/reference` — KPI row + import cards + tabs Org/Applications. *(v2.07.00)*
+- [x] Dashboard "Teams" — table with dept, user count, queries, objects accessed; amber warning when no per-user data. *(v2.07.00)*
+- [x] Dashboard "Applications" — table with owner team, schema count, table count, query count. *(v2.07.00)*
+- [x] API `/landscape/summary` enriched with `teams_count` + `applications_count`. *(v2.07.00)*
+- [ ] Filters by team/dept on Usage and Intelligence pages — pending post-extractor upgrade
+- [ ] TAISA: expose user/app metadata in Q&A context — pending
 
 ---
 
-### 2.11 Column-Level Lineage Navigation  ✅ COMPLETO (v2.05.00 — 2026-07-20)
+### 2.11 Column-Level Lineage Navigation  ✅ COMPLETE (v2.05.00 — 2026-07-20)
 
-**Origin:** Rahul Kulkarni, Reunión 28 (min 21-25). Jon Brightling lo mencionó múltiples
-veces: column-to-column flow es más importante que table-to-table desde la perspectiva del
-negocio.
+**Origin:** Rahul Kulkarni, Meeting 28 (min 21-25). Jon Brightling mentioned it multiple
+times: column-to-column flow is more important than table-to-table from the business
+perspective.
 
-**Implementación:**
+**Implementation:**
 
-- **Backend** `GET /api/v1/lineage/columns/traverse` — BFS desde una columna específica
-  siguiendo `attribute_lineage`, hasta `max_depth=20` hops. Omite sentinelas `NOT APPLICABLE`.
-  Devuelve `ColumnTraverseResponse` con `nodes[]` (depth, path[], transformation_type, tier).
-- **Frontend API** — `traverseColumnLineage()` en `graph.ts`; tipos `TraverseNode` /
-  `ColumnTraverseResponse` en `types.ts`.
-- **Nav state** — `colNavStack: string[]` + `colNavHighlight: string | null` en `LineagePage`.
-- **Navigate buttons** — cada fila de Sources/Feeds Into tiene `←/→` (violet) que llama a
-  `navigateToColumn(tableKey, columnName)`: push al stack + jump.
-- **Breadcrumb** — aparece con `colNavStack.length > 0`; cada paso es clicable, botón Back.
-- **Column card highlight** — tarjeta del `colNavHighlight` resaltada en violeta.
-- **Graph node ring** — `isNavPath: true` aplica anillo `#DDD6FE` sobre el nodo en ReactFlow.
-- `focusOn()` limpia el nav stack al navegar manualmente.
+- **Backend** `GET /api/v1/lineage/columns/traverse` — BFS from a specific column
+  following `attribute_lineage`, up to `max_depth=20` hops. Omits `NOT APPLICABLE` sentinels.
+  Returns `ColumnTraverseResponse` with `nodes[]` (depth, path[], transformation_type, tier).
+- **Frontend API** — `traverseColumnLineage()` in `graph.ts`; types `TraverseNode` /
+  `ColumnTraverseResponse` in `types.ts`.
+- **Nav state** — `colNavStack: string[]` + `colNavHighlight: string | null` in `LineagePage`.
+- **Navigate buttons** — each Sources/Feeds Into row has `←/→` (violet) that calls
+  `navigateToColumn(tableKey, columnName)`: push to stack + jump.
+- **Breadcrumb** — appears when `colNavStack.length > 0`; each step is clickable, Back button.
+- **Column card highlight** — `colNavHighlight` card highlighted in violet.
+- **Graph node ring** — `isNavPath: true` applies `#DDD6FE` ring to the node in ReactFlow.
+- `focusOn()` clears the nav stack when navigating manually.
 
-**Tareas:**
+**Tasks:**
 - [x] Backend: `GET /api/v1/lineage/columns/traverse?snapshot_id=N&column_key=X&direction=downstream|upstream`
-- [x] Frontend: columnas en el panel con botón `→` / `←`; breadcrumb de navegación
-- [x] Estado de navegación en el componente (stack de columnas visitadas, "back")
-- [x] Highlight del path completo en el ReactFlow graph principal
+- [x] Frontend: columns in the panel with `→` / `←` button; navigation breadcrumb
+- [x] Navigation state in the component (visited columns stack, "back")
+- [x] Full path highlight in the main ReactFlow graph
 
 ---
 
-### 2.12 AI-Based Column Classification (PII)  ✅ COMPLETO (v2.06.00)
+### 2.12 AI-Based Column Classification (PII)  ✅ COMPLETE (v2.06.00)
 
-**Origin:** Rahul Kulkarni, Reunión 28 (min 25-28).
+**Origin:** Rahul Kulkarni, Meeting 28 (min 25-28).
 
-Usar AI (TAISA) para clasificar automáticamente columnas como **PII / non-PII** y asignar
-un peso de importancia, basándose en: nombre de columna, data type, y (si disponible)
-comentario/descripción de la columna desde el dict.
+Use AI (TAISA) to automatically classify columns as **PII / non-PII** and assign
+an importance weight, based on: column name, data type, and (if available)
+column comment/description from the dict.
 
-**Futura extensión (NO en este release):** Propagación por lineage — si ACCOUNT_ID es PII,
-todas las columnas downstream heredan el tag. Rahul lo mencionó pero lo marcó como post-v2.
+**Future extension (NOT in this release):** Propagation via lineage — if ACCOUNT_ID is PII,
+all downstream columns inherit the tag. Rahul mentioned it but marked it as post-v2.
 
-**Tareas:**
-- [ ] Dict extractor: incluir `column_comment` / `column_title` si disponible (coordinar con Rahul)
-- [ ] Alembic migration: agregar `pii_classification TEXT`, `pii_confidence REAL`, `importance_score REAL` a `column_snapshot`
-- [ ] Backend: `POST /api/v1/columns/classify?snapshot_id=N` — batch AI classification usando TAISA; prompt con nombre + type + comentario
-- [ ] Resultado cacheado en `column_snapshot` — no recalcula salvo `force=true`
-- [ ] UI: badge PII/non-PII en col-lineage panel + column view del System Graph
-- [ ] UI: filtro "Show PII columns only" en col-lineage
-
----
-
-### 2.13 Manifest-Derived Timestamps  *(confirmado Reunión 28)*  **Est: 1 día** ✅ COMPLETO (v2.09.00, 2026-07-21)
-
-**Origin:** Parked desde releases previos, confirmado como in-scope en Reunión 28.
-
-En la pantalla de Snapshots (combined-snapshot view), los timestamps que se muestran hoy
-vienen del momento de ingest en SCION, no del manifest que acompaña a los archivos `.dat`.
-El manifest tiene el timestamp de cuando el extractor corrió en el cliente, que es el dato
-relevante para el negocio.
-
-- [x] Leer campo de timestamp del manifest — el prefijo UTC de `extract_run_id` (`YYYYMMDDTHHMMSSz`) ya contiene la hora del extractor; no requiere archivo separado.
-- [x] Persistir `extract_timestamp` en tabla `snapshot` (migration `a7b8c9d0e1f2`).
-- [x] UI: Snapshots page muestra "Extracted: {extract_timestamp}" con fallback a "ingest time" para snapshots sin `extract_run_id`.
+**Tasks:**
+- [ ] Dict extractor: include `column_comment` / `column_title` if available (coordinate with Rahul)
+- [ ] Alembic migration: add `pii_classification TEXT`, `pii_confidence REAL`, `importance_score REAL` to `column_snapshot`
+- [ ] Backend: `POST /api/v1/columns/classify?snapshot_id=N` — batch AI classification using TAISA; prompt with name + type + comment
+- [ ] Result cached in `column_snapshot` — does not recalculate unless `force=true`
+- [ ] UI: PII/non-PII badge in col-lineage panel + column view of the System Graph
+- [ ] UI: "Show PII columns only" filter in col-lineage
 
 ---
 
-### 2.14 Fixed Effort Buffer  *(Reunión 28)*  **5 días reservados (actualizado)**
+### 2.13 Manifest-Derived Timestamps  *(confirmed Meeting 28)*  **Est: 1 day** ✅ COMPLETE (v2.09.00, 2026-07-21)
 
-Placeholder en la estimación para ítems de prioridad alta que surjan durante el desarrollo
-de Phase 2. Rahul propuso explícitamente incluir ~1 semana como colchón.
+**Origin:** Parked from previous releases, confirmed as in-scope in Meeting 28.
 
-No mapea a tareas específicas hoy.
+On the Snapshots screen (combined-snapshot view), the timestamps shown today come from
+the SCION ingest time, not from the manifest that accompanies the `.dat` files.
+The manifest has the timestamp of when the extractor ran on the client, which is the
+business-relevant piece of information.
+
+- [x] Read timestamp field from manifest — the UTC prefix of `extract_run_id` (`YYYYMMDDTHHMMSSz`) already contains the extractor run time; no separate file required.
+- [x] Persist `extract_timestamp` in `snapshot` table (migration `a7b8c9d0e1f2`).
+- [x] UI: Snapshots page shows "Extracted: {extract_timestamp}" with fallback to "ingest time" for snapshots without `extract_run_id`.
 
 ---
 
-### 2.15 Access Layer — Business-Friendly Views  *(Jon Brightling email, 2026-07-17)*  **Est: 4 días**  ✅ FASE 1 COMPLETA (v2.03.00, 2026-07-20)
+### 2.14 Fixed Effort Buffer  *(Meeting 28)*  **5 days reserved (updated)**
 
-**Origin:** Jon Brightling (Data DNA team), email formal 2026-07-17 a Rahul Kulkarni + Kindy
-Flyvholm. Describió la arquitectura de 3 capas de DataDNA Lite 2.0: Staging → Integration
+Placeholder in the estimate for high-priority items that arise during Phase 2 development.
+Rahul explicitly proposed including ~1 week as a buffer.
+
+Does not map to specific tasks today.
+
+---
+
+### 2.15 Access Layer — Business-Friendly Views  *(Jon Brightling email, 2026-07-17)*  **Est: 4 days**  ✅ PHASE 1 COMPLETE (v2.03.00, 2026-07-20)
+
+**Origin:** Jon Brightling (Data DNA team), formal email 2026-07-17 to Rahul Kulkarni + Kindy
+Flyvholm. He described the 3-layer architecture of DataDNA Lite 2.0: Staging → Integration
 Layer → **Access Layer**.
 
-**Prerequisitos obligatorios:** §2.9 Integration Model (entity IDs estables) + §2.10 Reference
-Data (aplicaciones y jerarquía de usuarios existentes en la base de datos). Sin esos dos,
-la Access Layer no tiene datos de negocio con qué construir sus vistas.
+**Mandatory prerequisites:** §2.9 Integration Model (stable entity IDs) + §2.10 Reference
+Data (applications and user hierarchy already in the database). Without those two,
+the Access Layer has no business data to build its views from.
 
-**El problema de SCION hoy:** Toda la navegación es técnica por naturaleza. El usuario debe
-conocer qué es un snapshot, un schema, un graph_node. Jon lo describió como: *"users should
+**The problem with SCION today:** All navigation is technical by nature. The user must
+know what a snapshot, a schema, a graph_node is. Jon described it as: *"users should
 be able to discover and leverage metadata without requiring detailed technical knowledge of
 the underlying source systems."*
 
-**Diferencia con lo ya planificado:**
+**Difference from what was already planned:**
 
-| Capa | Qué construye | Sección |
+| Layer | What it builds | Section |
 |------|--------------|---------|
-| Integration Layer | Entidad unificada y persistente por objeto real | §2.9 |
-| Reference Data | Contexto de negocio: aplicaciones, jerarquía de users | §2.10 |
-| **Access Layer** | **Presentación business-friendly de todo lo anterior** | **§2.15** |
+| Integration Layer | Unified, persistent entity per real object | §2.9 |
+| Reference Data | Business context: applications, user hierarchy | §2.10 |
+| **Access Layer** | **Business-friendly presentation of all the above** | **§2.15** |
 
-**La Access Layer NO elimina las vistas técnicas** — las complementa. Un DBA sigue usando
-el System Graph; un VP de Finance usa la Access Layer.
+**The Access Layer does NOT remove the technical views** — it complements them. A DBA still uses
+the System Graph; a Finance VP uses the Access Layer.
 
 ---
 
 #### 2.15.a — Business Discovery Entry Point
-Reemplazar la home page centrada en snapshots por una vista centrada en el negocio:
-- Resumen: "Your data landscape: 12 Applications · 8 Teams · 4 High-risk objects · 2 recent changes"
-- Tres puntos de entrada: por **Aplicación de negocio** / por **Equipo** / por **Dominio**
-- Búsqueda cross-source: "customer" encuentra `CUSTOMER_DIM`, `CUST_PROFILE`, `DIM_ACCOUNT`
-  en todos los schemas, sin saber el schema name
+Replace the snapshot-centric home page with a business-centric view:
+- Summary: "Your data landscape: 12 Applications · 8 Teams · 4 High-risk objects · 2 recent changes"
+- Three entry points: by **Business Application** / by **Team** / by **Domain**
+- Cross-source search: "customer" finds `CUSTOMER_DIM`, `CUST_PROFILE`, `DIM_ACCOUNT`
+  across all schemas, without knowing the schema name
 
 - [x] `GET /api/v1/landscape/summary` — entity_count, active_entity_count, high_risk_count, recent_changes, top_risk_objects. *(v2.03.00)*
-- [x] Página `/landscape` — nueva ruta con KPI cards, risk distribution bar, top critical objects, high-risk + recently changed panels. *(v2.03.00)*
-- [x] Sidebar: entrada "Landscape" con Globe2 icon entre Intelligence y Timeline. *(v2.03.00)*
-- [ ] Búsqueda cross-source via `object_entity.object_name LIKE` — pendiente UI input component.
-- [ ] Alembic migration: ninguna (usa tablas de §2.9 + §2.10)
+- [x] Page `/landscape` — new route with KPI cards, risk distribution bar, top critical objects, high-risk + recently changed panels. *(v2.03.00)*
+- [x] Sidebar: "Landscape" entry with Globe2 icon between Intelligence and Timeline. *(v2.03.00)*
+- [ ] Cross-source search via `object_entity.object_name LIKE` — pending UI input component.
+- [ ] Alembic migration: none (uses §2.9 + §2.10 tables)
 
 #### 2.15.b — Executive Summary Dashboard
-Vista de alto nivel para stakeholders no técnicos:
+High-level view for non-technical stakeholders:
 
 - [x] `GET /api/v1/landscape/risk-overview` — risk distribution (HIGH/MEDIUM/LOW), top_critical, recently_changed_high_risk. *(v2.03.00)*
-- [ ] Componente `ExecutiveSummaryDashboard` con portfolio health score — pendiente (requiere §2.10 para datos de aplicaciones).
-- [ ] Widget "cambios de esta semana que afectan [X] aplicaciones" — bloqueado por §2.10.
+- [x] `ExecutiveSummaryDashboard` component with portfolio health score — integrated in `/landscape` page. *(v2.09.x)*
+- [x] Widget "this week's changes affecting [X] applications" — uses `applications_count` + `teams_count` from `LandscapeSummary`. *(v2.09.x)*
 
 #### 2.15.c — Entity-Centric Object View
-- [ ] Refactor `ObjectDetailPage` — business context primero, technical details colapsables.
-- [ ] Panel "Owned by / Used by" — bloqueado por §2.10 (application_entity + team_entity).
-- [ ] Criticality trend chart — `/entity/{id}/history` endpoint listo; pendiente frontend chart component.
-- [ ] Business name / alias: campo opcional en `object_entity` — pendiente.
+- [x] Refactor `/entity/[id]` — business context first ("Owned by / Used by"), KPIs in business language ("Criticality", "Structural changes"), technical details (sparklines, tables, metadata) collapsible via toggle. *(v2.09.13)*
+- [x] "Owned by / Used by" panel — data from §2.10, already complete (v2.07.00). *(v2.09.13)*
+- [x] Criticality + query volume trend sparklines — `/entity/{id}/history` endpoint + inline SVG sparkline component. *(v2.09.x)*
+- [ ] Business name / alias: optional field in `object_entity` — pending.
 
-#### 2.15.d — Progressive Disclosure UI (Reunión 29, 2026-07-30)  🔴 PENDIENTE
-**Origen:** Reunión 29 (2026-07-30) — Kindy Flyvholm confirmó que la propuesta de valor real
-de SCION es lo que ningún DBA puede hacer hoy: análisis aggregado por departamento/aplicación,
-no la vista técnica de tablas y columnas. Chris Pilon: "it's not a race... but we are going to
+#### 2.15.d — Progressive Disclosure UI (Meeting 29, 2026-07-30)  🔴 PENDING
+**Origin:** Meeting 29 (2026-07-30) — Kindy Flyvholm confirmed that SCION's real value
+proposition is what no DBA can do today: aggregated analysis by department/application,
+not the technical view of tables and columns. Chris Pilon: "it's not a race... but we are going to
 try and drive each other to the best possible thing."
 
-**El problema:** La UI actual es completamente técnica — el usuario debe conocer qué es un
-snapshot, un graph_node, un schema. Esto bloquea la adopción por parte de consultores, sales
-(Lydia's team), y stakeholders de negocio.
+**The problem:** The current UI is entirely technical — the user must know what a
+snapshot, a graph_node, a schema is. This blocks adoption by consultants, sales
+(Lydia's team), and business stakeholders.
 
-**Propuesta:** Profundidad progresiva sin switch de "modo". Las páginas hablan en lenguaje
-de negocio por defecto; el detalle técnico aparece naturalmente al hacer drill-down. No es
-una segunda UI ni un toggle — es una jerarquía de información donde la capa superior es
-business-friendly y el DBA llega al nivel técnico haciendo click.
+**Proposal:** Progressive depth without a "mode" switch. Pages speak business language
+by default; technical detail appears naturally when drilling down. It is not
+a second UI or a toggle — it is an information hierarchy where the top layer is
+business-friendly and the DBA reaches the technical level by clicking.
 
-**Diferencia con §2.15.a/b/c:** Esos ítems añaden _datos_ de negocio. Este ítem cambia
-el _lenguaje y la estructura de navegación_ de toda la UI para que una persona no técnica
-pueda orientarse sin ayuda. Empieza por Landscape (ya tiene la infraestructura de criticality
-y risk) y se extiende al resto si funciona como demo.
+**Difference from §2.15.a/b/c:** Those items add business _data_. This item changes
+the _language and navigation structure_ of the entire UI so that a non-technical person
+can find their way without help. Starts with Landscape (already has the criticality
+and risk infrastructure) and extends to the rest if it works as a demo.
 
-- [ ] **Rediseño Landscape como piloto** — home page habla en términos de "X objetos críticos
-      en el esquema FINANCE — 3 cambiaron esta semana", no en "snapshot #12 · 847 objects".
-      El DBA que hace click llega al SQL name, columnas, query count, lineage graph.
-- [ ] **Validar con Chris/Ripley** — una demo de Landscape rediseñado como prueba de concepto
-      antes de extender al resto de páginas.
-- [ ] **Extender al resto de páginas** si la demo funciona — Changes, Intelligence, Timeline.
+- [x] **Pilot on Entity page** — `/entity/[id]` now shows business context first and hides technical details until the user requests them. *(v2.09.13)*
+- [ ] **Validate with Chris/Ripley** — demo of Landscape + Entity page before extending to the rest.
+- [ ] **Extend to remaining pages** if the demo works — Changes, Intelligence, Timeline.
 
-**Nota sobre terminología:** Jon usa "Access Layer" en sentido de data warehousing clásico
-(Staging → Integration → Access = "data mart consumible"). En SCION lo implementamos como
-capas de UI sobre el Integration Model, sin crear tablas separadas de "access" — la vista
-se genera on-the-fly desde `object_entity` + `application_entity` + `team_entity`.
+**Terminology note:** Jon uses "Access Layer" in the classical data warehousing sense
+(Staging → Integration → Access = "consumable data mart"). In SCION we implement it as
+UI layers on top of the Integration Model, without creating separate "access" tables — the view
+is generated on-the-fly from `object_entity` + `application_entity` + `team_entity`.
 
 ---
 
@@ -688,12 +685,12 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-04-23 | Benchmark with real JSON before SQLite/Postgres decision | Avoid premature optimization | This roadmap |
 | 2026-05-07 | Helton takes over while Guillermo on vacation | — | Meeting #8 |
 | 2026-05-29 | Pipeline 3 (PDCR usage) shipped — 6 PRs | Rahul request; real usage data for criticality engine | v1.21.6 |
-| 2026-06-18 | Column-level lineage exposed via `/lineage/columns` + full UI panel | Rahul explicit request in Reunión 20: "real distinguishing point from user perspective" | v1.21.23 |
+| 2026-06-18 | Column-level lineage exposed via `/lineage/columns` + full UI panel | Rahul explicit request in Meeting 20: "real distinguishing point from user perspective" | v1.21.23 |
 | 2026-06-18 | Column lineage dedup in API layer (not DB) | Parser intentionally stores one row per SQL step for audit trail; dedup at presentation layer preserves traceability | v1.21.24 |
 | 2026-06-18 | Share scan now checks already-imported before user clicks Import | UX: user should know before clicking, not after | v1.21.26 |
-| 2026-06-19 | DataDNA Lite v1.0 declared complete by Rahul (Reunión 21) | End-to-end testing passed with Ashish; one minor parser defect (Soham) non-blocking | Reunión 21 |
-| 2026-06-19 | Phase 2 expands to include Ecosystem Decoded (ED) integration | Combine SCION structure/lineage with ED usage/business context; Rahul presenting to Rahul Shiyekar 2026-06-23 | Reunión 21 |
-| 2026-06-19 | Three column-lineage enhancements queued (indirect lineage, type icons, step ID on edge) | Rahul requests after live demo; non-blocking for v1.0 rollout | Reunión 21 |
+| 2026-06-19 | DataDNA Lite v1.0 declared complete by Rahul (Meeting 21) | End-to-end testing passed with Ashish; one minor parser defect (Soham) non-blocking | Meeting 21 |
+| 2026-06-19 | Phase 2 expands to include Ecosystem Decoded (ED) integration | Combine SCION structure/lineage with ED usage/business context; Rahul presenting to Rahul Shiyekar 2026-06-23 | Meeting 21 |
+| 2026-06-19 | Three column-lineage enhancements queued (indirect lineage, type icons, step ID on edge) | Rahul requests after live demo; non-blocking for v1.0 rollout | Meeting 21 |
 | 2026-06-25 | Col-lineage edge labels moved from SVG `label` prop to `EdgeLabelRenderer` (HTML above SVG) | SVG hit-zones (20px invisible) overlap on dense graphs; HTML labels give precise per-label click targets | v1.21.39 |
 | 2026-06-25 | Indirect impacts dedup key = `(transformation_type, expression)` | Tier 2 parser stores one row per SQL step for audit trail; dedup at presentation collapses identical rows into a count badge | v1.21.42 |
 | 2026-06-26 | Col-lineage edge label dedup key = `(source_column_key, target_column_key)` | Same source column legitimately maps to multiple target columns (e.g. LOG_MIN→_COL6 Direct Copy + LOG_MIN→_COL7 Column Expression); dedup by src alone was collapsing these | v1.21.43 |
@@ -704,31 +701,31 @@ is a v1.x feature, not a v1.0 feature.
 | 2026-07-01 | `change_impact_summary.direct_count` = depth-1 downstream (was total downstream count) | Old semantics: direct=total downstream, indirect=upstream count. New: direct=depth-1, indirect=depth>1 — semantically correct and consistent with UI labels | v1.21.x |
 | 2026-07-01 | `object_criticality` total denominator = `SnapshotMetrics.total_objects` (was `len(ObjectCriticality rows)`) | ObjectCriticality rowcount inflated by ~845 duplicates at Transcend scale; SnapshotMetrics.total_objects = schema+table+view count is authoritative | v1.21.72 |
 | 2026-07-01 | Domain risk `impact_count` uses `change_ids_by_schema` reverse mapping (was querying by schema substring match) | Old approach over-counted objects from other schemas sharing a prefix; reverse mapping is exact | v1.21.72 |
-| 2026-07-15 | Integration Model (§2.9) added to Phase 2 scope | Jon Brightling (Data DNA team, Reunión 27) identified SCION as a "landing area" not an integration model; without it cross-snapshot aggregate analytics are impossible | Reunión 27 |
-| 2026-07-15 | Term "Impact Analysis" to be avoided in marketing / demos | Data DNA team recommendation — the term implies capabilities SCION does not yet have at scale; preferred: "impact of change at object level" | Reunión 27 |
-| 2026-07-15 | SCION scope confirmed as Kalido + Click replacement | Rahul Kulkarni in Reunión 28: SCION already replaces both Kalido (metadata integration) and Click (visualization layer); Phase 2 expands toward full Data DNA parity | Reunión 28 |
-| 2026-07-15 | Reference data sourced from customer Excel/CSV, not from extractors | User hierarchy and application metadata come from customer-provided spreadsheets; technical linkage via username (PDCR) and database name (dict) | Reunión 28 |
-| 2026-07-15 | PDCR extractor must provide per-user rows (not aggregated user_count) for §2.10 | Today's extractor only gives user_count; user-level usage analytics require username per row; extractor change needed from Rahul's team | Reunión 28 |
-| 2026-07-15 | Column PII propagation via lineage deferred post-Phase 2 | Rahul acknowledged the feature (Data DNA does it) but explicitly deferred; Phase 2 only includes initial AI classification, not downstream propagation | Reunión 28 |
-| 2026-07-15 | Phase 2 revised estimate: 3 semanas / 30 dev-days (was 2 semanas pre-Reunión 28) | Entrega 1 (30d): §2.2, §2.8, §2.9 lite, §2.11, §2.12, §2.13, §2.14. Entrega 2 (31d adicionales): §2.10 ref data + trend UI + perf items. §2.10 bloqueado por cambio en extractor | Reunión 28 |
-| 2026-07-17 | Access Layer (§2.15) added to Phase 2 Entrega 2 | Jon Brightling email (2026-07-17) to Rahul/Kindy formally described 3-layer architecture for DataDNA Lite 2.0: Staging → Integration → Access. Access Layer = business-friendly presentation of Integration Model — entry points by application/team/domain, executive summary, entity-centric view. Requires §2.9 + §2.10 as prerequisites. Entrega 2 total updated: 25d → 34d | Jon Brightling email 2026-07-17 |
+| 2026-07-15 | Integration Model (§2.9) added to Phase 2 scope | Jon Brightling (Data DNA team, Meeting 27) identified SCION as a "landing area" not an integration model; without it cross-snapshot aggregate analytics are impossible | Meeting 27 |
+| 2026-07-15 | Term "Impact Analysis" to be avoided in marketing / demos | Data DNA team recommendation — the term implies capabilities SCION does not yet have at scale; preferred: "impact of change at object level" | Meeting 27 |
+| 2026-07-15 | SCION scope confirmed as Kalido + Click replacement | Rahul Kulkarni in Meeting 28: SCION already replaces both Kalido (metadata integration) and Click (visualization layer); Phase 2 expands toward full Data DNA parity | Meeting 28 |
+| 2026-07-15 | Reference data sourced from customer Excel/CSV, not from extractors | User hierarchy and application metadata come from customer-provided spreadsheets; technical linkage via username (PDCR) and database name (dict) | Meeting 28 |
+| 2026-07-15 | PDCR extractor must provide per-user rows (not aggregated user_count) for §2.10 | Today's extractor only gives user_count; user-level usage analytics require username per row; extractor change needed from Rahul's team | Meeting 28 |
+| 2026-07-15 | Column PII propagation via lineage deferred post-Phase 2 | Rahul acknowledged the feature (Data DNA does it) but explicitly deferred; Phase 2 only includes initial AI classification, not downstream propagation | Meeting 28 |
+| 2026-07-15 | Phase 2 revised estimate: 3 weeks / 30 dev-days (was 2 weeks pre-Meeting 28) | Delivery 1 (30d): §2.2, §2.8, §2.9 lite, §2.11, §2.12, §2.13, §2.14. Delivery 2 (31d additional): §2.10 ref data + trend UI + perf items. §2.10 blocked pending extractor change | Meeting 28 |
+| 2026-07-17 | Access Layer (§2.15) added to Phase 2 Delivery 2 | Jon Brightling email (2026-07-17) to Rahul/Kindy formally described 3-layer architecture for DataDNA Lite 2.0: Staging → Integration → Access. Access Layer = business-friendly presentation of Integration Model — entry points by application/team/domain, executive summary, entity-centric view. Requires §2.9 + §2.10 as prerequisites. Delivery 2 total updated: 25d → 34d | Jon Brightling email 2026-07-17 |
 | 2026-07-17 | SCION today = Landing Area (Jon Brightling's formal characterization) | Jon described DataDNA Lite 1.0 as a "Landing Area that stores multiple snapshots" — inherently limits capabilities. Phase 2 moves to Integration Layer (§2.9) + Access Layer (§2.15). This is a strategic endorsement of the §2.9 direction, communicated formally to Rahul Kulkarni and Kindy Flyvholm | Jon Brightling email 2026-07-17 |
-| 2026-07-17 | Phase 2 restructured to single delivery; SQLite→Postgres promoted to first item | Post-Pilar meeting: removed Entrega 1/2 split; SQLite→Postgres is no longer conditional — it's the performance foundation needed before building Integration Model at scale; Graph engine perf + Frontend pagination become sub-tasks of §2.5 | Reunión Pilar 2026-07-17 |
-| 2026-07-17 | Staging Layer (§2.16) added as prerequisite to Integration Model (§2.9) | Jon Brightling 3-layer architecture: Staging → Integration → Access; §2.16 adds validation + cross-source conflict resolution before data enters the entity layer; §2.4 DDL timestamp merge absorbed into §2.16.b | Reunión Pilar 2026-07-17 |
-| 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Reunión Pilar 2026-07-17 |
-| 2026-07-20 | §2.5a SQLite→Postgres migración completa en entorno lab | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47 819 filas migradas, 12 secuencias reseteadas, API verificada en localhost:8080. Procedimiento documentado en §2.5a como template para producción. Gotchas capturados: permisos post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset por transacción aislada | Lab 2026-07-20 |
-| 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY en lugar de carga RAM de edges | `compute_node_metrics` cargaba todos los edges en Python RAM (~700 MB en Transcend). Reemplazado por dos `GROUP BY` SQL: solo los conteos de grado se transfieren. Dead code en `blast_radius` eliminado (cargaba todos los GraphNodes por snapshot pero nunca los usaba). Nuevo índice compuesto `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (también mergea los dos heads de Alembic) | v2.01.00 |
-| 2026-07-20 | §2.11 Col-lineage navigation completo en v2.05.00 | Traverse BFS endpoint + nav state (colNavStack/colNavHighlight) + breadcrumb + ←/→ buttons + graph ring highlight. Navigate buttons usan el endpoint existente `getColumnLineage`; `traverse` endpoint disponible para features futuras (highlight multi-hop). `focusOn()` limpia el stack. | v2.05.00 |
-| 2026-07-20 | §2.8 Production runtime completo en v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` paso 7 escribe unit al instalar. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrado a lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
-| 2026-07-30 | Progressive Disclosure UI añadida como §2.15.d — pendiente | Reunión 29 confirmó que el valor real es el análisis que ningún DBA puede hacer hoy (aggregado por dept/app). Kindy: "We never sell lineage — customers are always disappointed because it didn't solve anything." La UI debe hablar en lenguaje de negocio por defecto, con detalle técnico accesible via drill-down natural (sin switch de modo). Empieza como piloto en Landscape. | Reunión 29 (2026-07-30) |
-| 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implementados en v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` agrega `import_status`+`validation_warnings` a `snapshot`, crea `staging_table_import`/`staging_column_import`. Pipeline hook en `run_post_ingest_pipeline` llama `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` agrega `object_entity` (unique on entity_type+object_name) + FK nullable `entity_id` en 4 tablas. `resolve_entities()` wired como último step del pipeline. `backfill_entities.py` para snapshots existentes. APIs `/entity/` + `/landscape/`. Access Layer: nueva página `/landscape` con KPI cards + risk distribution bar + top critical objects. Sidebar entry "Landscape" agregado. | v2.03.00 |
-| 2026-07-21 | Branch `hotfix/rahul-round4` creada desde v1.21.73 para fixes urgentes en producción | Rahul (round 3-4) reportó: case normalization en búsqueda, change-ID search, TAISA active change-ID, criticality thresholds, VIEW object type, duplicate node prevention. Fixes se hacen en rama paralela a la lab (v1.21.74→v1.21.78) para no mezclar con el lab de Phase 2. Pendiente merge. | hotfix/rahul-round4 |
-| 2026-07-21 | Case normalization global + change-ID search (v1.21.74) | Búsqueda case-insensitive en todos los campos; change-ID ahora busca por prefijo además de exact match | v1.21.74 |
-| 2026-07-21 | TAISA active change-ID + clear session + criticality thresholds configurables (v1.21.75) | TAISA scope automático al change_id activo en pantalla; configuración de umbrales de criticality vía env vars | v1.21.75 |
-| 2026-07-21 | 5 fixes Rahul round-4: UI/API polish (v1.21.76) | Fixes de UI/API reportados por Rahul en round 4 de testing | v1.21.76 |
-| 2026-07-21 | VIEW object type + duplicate node prevention en graph (v1.21.77) | Parser emite VIEW nodes; graph builder deduplicaba nodos con el mismo key | v1.21.77 |
-| 2026-07-21 | Parser adapters Phase 2 + authoritative object_type desde TablesV (v1.21.78) | `object_type` resuelto desde `TablesV` en vez de inferencia; base parsers de Informatica y OpenLineage añadidos como stubs | v1.21.78 |
-| 2026-08-31 | Reuniones 32-33: scope Phase 2 ampliado con GROUP 4-5 (Affinity, Duplicates, col-impact, what-if, rollup) | Rahul Kulkarni email 2026-08-07 agrega affinity analysis (ED-09) y duplicate detection (ED-05). Reunión 31 (2026-08-14) agrega items 16-20 (col-level impact, what-if, rollup, usage hierarchy, proactive alerts) como "Y?" pending scope confirm | Reuniones 31-33 / Excel `SCION_Phase2_Estimate 2.xlsx` |
+| 2026-07-17 | Phase 2 restructured to single delivery; SQLite→Postgres promoted to first item | Post-Pilar meeting: removed Delivery 1/2 split; SQLite→Postgres is no longer conditional — it's the performance foundation needed before building Integration Model at scale; Graph engine perf + Frontend pagination become sub-tasks of §2.5 | Pilar meeting 2026-07-17 |
+| 2026-07-17 | Staging Layer (§2.16) added as prerequisite to Integration Model (§2.9) | Jon Brightling 3-layer architecture: Staging → Integration → Access; §2.16 adds validation + cross-source conflict resolution before data enters the entity layer; §2.4 DDL timestamp merge absorbed into §2.16.b | Pilar meeting 2026-07-17 |
+| 2026-07-17 | Time estimates revised (post-Pilar): §2.10 12d→5d, §2.15 9d→4d, §2.14 2d→5d, §2.11 4d→5d | Adjusted based on revised scope and Pilar feedback; §2.10 reduced significantly because dashboard scope was narrowed | Pilar meeting 2026-07-17 |
+| 2026-07-20 | §2.5a SQLite→Postgres migration complete in lab environment | docker-compose.lab.yml + alembic/env.py + migrate_sqlite_to_postgres.py. 47,819 rows migrated, 12 sequences reset, API verified on localhost:8080. Procedure documented in §2.5a as template for production. Gotchas captured: permissions post-docker-cp, alembic version alignment, FK orphans (DISABLE TRIGGER ALL), sequence reset per isolated transaction | Lab 2026-07-20 |
+| 2026-07-20 | §2.5b/§2.6 Graph engine perf — SQL GROUP BY instead of RAM edge loading | `compute_node_metrics` was loading all edges into Python RAM (~700 MB on Transcend). Replaced by two SQL `GROUP BY` queries: only degree counts are transferred. Dead code in `blast_radius` removed (loaded all GraphNodes per snapshot but never used them). New composite index `ix_change_event_snapshot_to_object (snapshot_to, object_identifier)` via migration `a1b2c3d4e5f6` (also merges the two Alembic heads) | v2.01.00 |
+| 2026-07-20 | §2.11 Col-lineage navigation complete in v2.05.00 | Traverse BFS endpoint + nav state (colNavStack/colNavHighlight) + breadcrumb + ←/→ buttons + graph ring highlight. Navigate buttons use the existing `getColumnLineage` endpoint; `traverse` endpoint available for future features (multi-hop highlight). `focusOn()` clears the stack. | v2.05.00 |
+| 2026-07-20 | §2.8 Production runtime complete in v2.04.00 | Systemd: `deploy/systemd/scion.service` + `install_systemd.sh`; `install.sh` step 7 writes unit on install. JSON logging: `logging_config.py` dictConfig JSON/text via `LOG_FORMAT`; `python-json-logger==2.0.7`; nginx `json_access` format + security headers; `main.py` migrated to lifespan + `logger.info()` + CORS env-driven. | v2.04.00 |
+| 2026-07-30 | Progressive Disclosure UI added as §2.15.d — pending | Meeting 29 confirmed that the real value is the analysis no DBA can do today (aggregated by dept/app). Kindy: "We never sell lineage — customers are always disappointed because it didn't solve anything." The UI must speak business language by default, with technical detail accessible via natural drill-down (no mode switch). Starts as a pilot on Landscape. | Meeting 29 (2026-07-30) |
+| 2026-07-20 | §2.16 + §2.9 + §2.15 Architecture Layers implemented in v2.03.00 | Staging Layer: migration `b2c3d4e5f6a7` adds `import_status`+`validation_warnings` to `snapshot`, creates `staging_table_import`/`staging_column_import`. Pipeline hook in `run_post_ingest_pipeline` calls `validate_import()` → `committed`/`failed`. Integration Model: migration `c3d4e5f6a7b8` adds `object_entity` (unique on entity_type+object_name) + nullable FK `entity_id` on 4 tables. `resolve_entities()` wired as last pipeline step. `backfill_entities.py` for existing snapshots. APIs `/entity/` + `/landscape/`. Access Layer: new `/landscape` page with KPI cards + risk distribution bar + top critical objects. Sidebar "Landscape" entry added. | v2.03.00 |
+| 2026-07-21 | Branch `hotfix/rahul-round4` created from v1.21.73 for urgent production fixes | Rahul (round 3-4) reported: case normalization in search, change-ID search, TAISA active change-ID, criticality thresholds, VIEW object type, duplicate node prevention. Fixes done in a parallel branch to lab (v1.21.74→v1.21.78) to avoid mixing with the Phase 2 lab. Merge pending. | hotfix/rahul-round4 |
+| 2026-07-21 | Global case normalization + change-ID search (v1.21.74) | Case-insensitive search across all fields; change-ID now searches by prefix in addition to exact match | v1.21.74 |
+| 2026-07-21 | TAISA active change-ID + clear session + configurable criticality thresholds (v1.21.75) | TAISA scope automatically set to the active change_id on screen; criticality threshold configuration via env vars | v1.21.75 |
+| 2026-07-21 | 5 fixes Rahul round-4: UI/API polish (v1.21.76) | UI/API fixes reported by Rahul in round 4 of testing | v1.21.76 |
+| 2026-07-21 | VIEW object type + duplicate node prevention in graph (v1.21.77) | Parser emits VIEW nodes; graph builder was deduplicating nodes with the same key | v1.21.77 |
+| 2026-07-21 | Parser adapters Phase 2 + authoritative object_type from TablesV (v1.21.78) | `object_type` resolved from `TablesV` instead of inference; Informatica and OpenLineage base parsers added as stubs | v1.21.78 |
+| 2026-08-31 | Meetings 32-33: Phase 2 scope expanded with GROUP 4-5 (Affinity, Duplicates, col-impact, what-if, rollup) | Rahul Kulkarni email 2026-08-07 adds affinity analysis (ED-09) and duplicate detection (ED-05). Meeting 31 (2026-08-14) adds items 16-20 (col-level impact, what-if, rollup, usage hierarchy, proactive alerts) as "Y?" pending scope confirm | Meetings 31-33 / Excel `SCION_Phase2_Estimate 2.xlsx` |
 
 ---
 

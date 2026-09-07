@@ -359,8 +359,8 @@ export default function ImpactPage() {
 
   return (
     <PageShell
-      title="Summary Impact Analysis"
-      subtitle="Full-diff impact assessment — how far each change ripples"
+      title="Object Change Analysis"
+      subtitle="Full-diff assessment — how far each structural change ripples across your data estate"
     >
       <Confetti active={showConfetti} />
 

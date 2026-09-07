@@ -1,0 +1,17 @@
+Object name  : landscape_summary
+Test type    : landscape
+Priority     : P1
+Target field : high_risk_count
+Min value    : 1
+
+Note: Phase 2 smoke test — verifies that the Landscape page backend is operational
+      and the current snapshot has at least 1 object visible to the Landscape view.
+
+      Steps:
+        1. Ensure at least one snapshot has been imported.
+        2. Run: python tests/run_tests.py --base-url http://<host>
+        3. Expect PASS: total_objects >= 1, total_schemas >= 1 in the API response.
+        4. In the UI: open the Landscape page and confirm the schema grid loads.
+        5. Verify that clicking a schema tile opens the object list for that schema.
+
+      UC coverage: UC-15 (Landscape — business-friendly entry point).

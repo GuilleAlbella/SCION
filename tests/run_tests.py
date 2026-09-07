@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
 """
 SCION Test Runner
-Validates SCION output across six test categories:
+Validates SCION output across all test categories (Phase 1 + Phase 2):
 
-  lineage   : BFS neighbourhood contains the expected object chain and edges
-  changed   : object appears in the diff between two snapshots (MODIFIED)
-  unchanged : object does NOT appear in the diff (no recent changes)
-  added     : object appears in the diff as newly ADDED
-  dropped   : object appears in the diff as DROPPED / REMOVED
-  usage     : object has PDCR query activity recorded in SCION
-  impact      : object has at least one downstream node in the lineage graph
-  criticality : object has a criticality score computed (graph or usage based)
-  diff_count  : snapshot diff produces at least N changes (smoke test for UC-03)
+  lineage       : BFS neighbourhood contains the expected object chain and edges
+  changed       : object appears in the diff between two snapshots (MODIFIED)
+  unchanged     : object does NOT appear in the diff (no recent changes)
+  added         : object appears in the diff as newly ADDED
+  dropped       : object appears in the diff as DROPPED / REMOVED
+  usage         : object has PDCR query activity recorded in SCION
+  impact        : object has at least one downstream node in the lineage graph
+  criticality   : object has a criticality score computed (graph or usage based)
+  diff_count    : snapshot diff produces at least N changes (smoke test for UC-03)
+  breaking      : SCION classifies at least one change for the object as breaking
+  exists        : object is present in the graph for the current snapshot
+  absent        : object is NOT present in the graph (expected absence)
+  snapshot_health : health + object count smoke test
+  landscape     : Phase 2 — Landscape summary endpoint returns data (UC-15)
+  reference     : Phase 2 — Reference org data (teams/applications) is loaded (UC-16)
 
 Test file format (Object_*.txt):
     Object name  : <bare_name>
     Schema       : <optional – helps resolve when multiple schemas match>
+    Priority     : P1 | P2 | P3 | P4  (default P3)
     Test type    : lineage | changed | unchanged | added | dropped | usage | impact
                    | criticality | diff_count | breaking | exists | absent | snapshot_health
+                   | landscape | reference
     Lineage flow : A -> B -> C -> D   (lineage tests only)
     Min downstream : 1                (impact/diff_count/snapshot_health – default 1)
+    Target field : total_objects      (landscape tests only – field to check)
+    Min value    : 1                  (landscape/reference – minimum count)
 
 Usage:
     python tests/run_tests.py
@@ -46,6 +56,9 @@ TESTS_DIR = Path(__file__).parent
 RESULTS_DIR = TESTS_DIR / "results"
 API = "/api/v1"
 
+# ── Priority labels (for reporting) ──────────────────────────────────────────
+PRIORITY_LABELS = {"P1": "Critical", "P2": "High", "P3": "Medium", "P4": "Low"}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Parsing
@@ -65,6 +78,10 @@ def parse_test_file(path: Path) -> dict:
     min_ds_raw    = field("Min downstream")
     chain         = [s.strip() for s in chain_raw.split("->")] if chain_raw else []
     min_downstream = int(min_ds_raw) if min_ds_raw and min_ds_raw.isdigit() else 1
+    priority      = (field("Priority") or "P3").upper()
+    target_field  = field("Target field")    # e.g. "total_objects" for landscape tests
+    min_value_raw = field("Min value")
+    min_value     = int(min_value_raw) if min_value_raw and min_value_raw.isdigit() else 0
 
     return {
         "file":           path.name,
@@ -73,6 +90,9 @@ def parse_test_file(path: Path) -> dict:
         "test_type":      test_type,
         "lineage_chain":  chain,
         "min_downstream": min_downstream,
+        "priority":       priority,
+        "target_field":   target_field,
+        "min_value":      min_value,
     }
 
 
@@ -399,10 +419,16 @@ def run_usage_test(base_url: str, snapshot_id: int, test: dict) -> dict:
     qualified  = None
     usage_data = None
 
+    schema_hint = test.get("schema_name")
     for sid in ordered:
         matches = resolve_object(base_url, sid, bare)
         if not matches:
             continue
+        # Prefer the schema-hinted match when multiple schemas carry the same object name.
+        if schema_hint and len(matches) > 1:
+            filtered = [m for m in matches if m.upper().startswith(schema_hint.upper() + ".")]
+            if filtered:
+                matches = filtered
         root = matches[0]
         data = _fetch_usage(base_url, sid, root)
         if data:
@@ -769,6 +795,114 @@ def run_diff_count_test(base_url: str, snap_from: int, snap_to: int, test: dict)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Landscape test  (Phase 2 — UC-15)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_landscape_test(base_url: str, snapshot_id: int, test: dict) -> dict:
+    """Verify that the Landscape summary endpoint returns populated data."""
+    result = _result(test, "PASS")
+    target_field = test.get("target_field") or "total_objects"
+    min_value    = test.get("min_value", 1)
+
+    try:
+        data = api_get(base_url, "/landscape/summary", snapshot_id=snapshot_id, timeout=30)
+    except requests.HTTPError as e:
+        return _result(test, "FAIL",
+                       f"Landscape summary endpoint error: {e.response.status_code}. "
+                       "Landscape may not be enabled or the snapshot has no data.")
+    except Exception as e:
+        return _result(test, "FAIL", f"Landscape endpoint unreachable: {e}")
+
+    # The summary endpoint may use different field names across versions.
+    # Try the caller-specified field first, then fall back to known alternatives.
+    _COUNT_CANDIDATES = [
+        target_field,
+        "high_risk_count", "entity_count", "active_entity_count",
+        "total_objects", "total_schemas", "object_count", "node_count",
+    ]
+    value = None
+    used_field = target_field
+    for candidate in _COUNT_CANDIDATES:
+        v = data.get(candidate)
+        if v is not None and isinstance(v, (int, float)) and v > 0:
+            value, used_field = v, candidate
+            break
+    # Fallback: count top_risk_objects if present
+    if value is None or value == 0:
+        top_risk = data.get("top_risk_objects")
+        if isinstance(top_risk, list) and len(top_risk) > 0:
+            value, used_field = len(top_risk), "top_risk_objects (count)"
+
+    entity_count   = data.get("entity_count") or data.get("total_objects") or value or 0
+    high_risk      = data.get("high_risk_count") or data.get("high_risk_objects") or 0
+    recent_changes = data.get("recent_changes_count", 0)
+
+    result["landscape_detail"] = {
+        "snapshot_id":    snapshot_id,
+        "entity_count":   entity_count,
+        "high_risk":      high_risk,
+        "recent_changes": recent_changes,
+        "checked_field":  used_field,
+        "field_value":    value,
+        "all_keys":       list(data.keys()),
+    }
+
+    if value is None:
+        result["status"] = "FAIL"
+        result["error"]  = (f"No numeric count field found in landscape/summary response. "
+                            f"Got keys: {list(data.keys())[:10]}")
+    elif value < min_value:
+        result["status"] = "FAIL"
+        result["error"]  = (f"Landscape '{used_field}' = {value} < min {min_value}. "
+                            "Snapshot may be empty or landscape not yet computed.")
+    else:
+        result["note"] = (f"{used_field}={value}  high_risk={high_risk}  "
+                          f"recent_changes={recent_changes}")
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reference data test  (Phase 2 — UC-16)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_reference_test(base_url: str, test: dict) -> dict:
+    """Verify that reference data (teams or applications) has been loaded."""
+    result   = _result(test, "PASS")
+    # object_name doubles as the sub-resource: "teams" or "applications"
+    resource = test.get("object_name", "teams").lower()
+    if resource not in ("teams", "applications"):
+        resource = "teams"
+    min_count = test.get("min_value", 1)
+
+    try:
+        data = api_get(base_url, f"/reference/{resource}", timeout=15)
+    except requests.HTTPError as e:
+        return _result(test, "FAIL",
+                       f"Reference /{resource} endpoint error: {e.response.status_code}. "
+                       "Reference data may not have been uploaded yet.")
+    except Exception as e:
+        return _result(test, "FAIL", f"Reference endpoint unreachable: {e}")
+
+    items = (data.get(resource) or data.get("items") or
+             data if isinstance(data, list) else [])
+    count = len(items)
+
+    result["reference_detail"] = {
+        "resource": resource,
+        "count":    count,
+        "sample":   [str(i.get("name", i)) for i in items[:3]] if items else [],
+    }
+
+    if count >= min_count:
+        result["note"] = f"{resource}: {count} record(s) found  sample={result['reference_detail']['sample']}"
+    else:
+        result["status"] = "FAIL"
+        result["error"]  = (f"Expected >={min_count} {resource} but found {count}. "
+                            "Upload org-hierarchy CSV via the Reference page first.")
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -795,9 +929,14 @@ def run_test(base_url: str, snapshot_id: int, snap_from: int, snap_to: int,
         r = run_criticality_test(base_url, snapshot_id, test)
     elif test_type == "diff_count":
         r = run_diff_count_test(base_url, snap_from, snap_to, test)
+    elif test_type == "landscape":
+        r = run_landscape_test(base_url, snapshot_id, test)
+    elif test_type == "reference":
+        r = run_reference_test(base_url, test)
     else:
         r = _result(test, "SKIP", f"Unknown test type '{test_type}'.")
     r["snapshot_id"] = snapshot_id
+    r["priority"]    = test.get("priority", "P3")
     return r
 
 
@@ -823,7 +962,7 @@ def export(results: list, out_base: Path) -> tuple[Path, Path]:
     csv_path = out_base.with_suffix(".csv")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["File", "Object", "Type", "Snapshot", "Status",
+        w.writerow(["File", "Object", "Type", "Priority", "Snapshot", "Status",
                     "Detail", "Nodes missing", "Edges missing", "Note", "Error"])
         for r in results:
             nodes_miss = "; ".join(
@@ -838,7 +977,7 @@ def export(results: list, out_base: Path) -> tuple[Path, Path]:
                       (str(r.get("impact_detail", {}).get("direct_downstream_count", "")) + " downstream"
                        if r.get("impact_detail") else "") or "")
             w.writerow([r["file"], r["object_name"], r.get("test_type", "lineage"),
-                        r.get("snapshot_id", ""), r["status"],
+                        r.get("priority", "P3"), r.get("snapshot_id", ""), r["status"],
                         detail, nodes_miss, edges_miss,
                         r.get("note", ""), r.get("error", "")])
 
@@ -868,7 +1007,7 @@ def main():
         print("No test files found (expected tests/Object_*.txt).")
         sys.exit(1)
 
-    print("SCION Test Runner")
+    print("SCION Test Runner  (Phase 1 + Phase 2)")
     print(f"  Base URL   : {args.base_url}")
     print(f"  Test files : {len(test_files)}")
 
@@ -887,7 +1026,8 @@ def main():
     for tf in test_files:
         test      = parse_test_file(tf)
         test_type = test.get("test_type", "lineage")
-        print(f"[{tf.name}]  type={test_type}")
+        priority = test.get("priority", "P3")
+        print(f"[{tf.name}]  type={test_type}  priority={priority}")
         print(f"  Object : {test['object_name']}" +
               (f"  (schema hint: {test['schema_name']})" if test.get("schema_name") else ""))
         if test.get("lineage_chain"):

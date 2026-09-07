@@ -1,8 +1,12 @@
-Object name  : events_v
+Object name  : DBP_MS_SITE_ON_OFF_USG_HIST_AWS_ALL
+Schema       : UAT_ACC_TED_CON_VW
 Test type    : usage
+Priority     : P2
 
-Note: events_v is an intermediate view in the componentDiscovery lineage chain
-      (componentDiscovery_seq -> events_v -> dbp_ms_site_pog_config_hist_aws_us_east_2).
-      As a key integration view in the Transcend pipeline, it is expected to have
-      significant PDCR query activity. Source: Ashish Suryawanshi lineage test files
-      (email 2026-06-10), DataDNA DBQL extract Medium 20260607.
+Note: High-usage view in the Transcend billing pipeline (UAT_ACC_TED_CON_VW schema).
+      This is one of the top-queried objects in the PDCR usage export: ~45k queries,
+      2 distinct users as of the June 2026 extract. Validates that PDCR usage data
+      is correctly surfaced by SCION for objects in the UAT_ACC_TED_CON_VW schema.
+
+      Previous object (events_v / TEDW.EVENTS_V) had no PDCR usage in this environment.
+      Updated 2026-09-07 to an object confirmed to have usage via /export/usage.

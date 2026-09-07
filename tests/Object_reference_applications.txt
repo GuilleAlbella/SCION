@@ -1,0 +1,18 @@
+Object name  : applications
+Test type    : reference
+Priority     : P2
+Min value    : 1
+
+Note: Phase 2 test — verifies that business application reference data has been
+      loaded into SCION via the Reference page CSV upload.
+
+      Steps:
+        1. Open SCION -> Reference page.
+        2. Upload the business apps CSV (columns: app_name, owner_team, criticality).
+        3. Run: python tests/run_tests.py --base-url http://<host>
+        4. Expect PASS: /api/v1/reference/applications returns >= 1 application record.
+        5. In the UI: verify the Reference page shows the application list.
+        6. Navigate to an object's entity page and confirm the "Business App" tag is visible
+           when that object's table is mapped to an application.
+
+      UC coverage: UC-16 (Reference Data — application context for object pages).

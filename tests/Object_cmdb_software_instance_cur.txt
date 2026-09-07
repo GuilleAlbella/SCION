@@ -1,6 +1,7 @@
 Object name  : cmdb_software_instance_cur
 Schema       : DEV_ACC_SERVICENOW_VW
 Test type    : changed
+Priority     : P3
 
 Note: Provided by Rahul Kulkarni as a "known changed table" (email 2026-06-10).
       CreateTimestamp 2023-11-03 05:25:05, LastAlterTimestamp 2026-05-14 15:23:06.

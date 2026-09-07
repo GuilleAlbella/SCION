@@ -297,6 +297,157 @@ function KpiCard({
   );
 }
 
+// ── §2.15.b: Executive Summary Dashboard ─────────────────────────
+
+function ExecutiveSummaryDashboard({
+  summary,
+  riskOverview,
+  globalDist,
+}: {
+  summary: LandscapeSummary;
+  riskOverview: LandscapeRiskOverview | null;
+  globalDist: { HIGH: number; MEDIUM: number; LOW: number };
+}) {
+  const total = (globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) || 1;
+  const healthPct = Math.round(
+    ((globalDist.LOW + globalDist.MEDIUM * 0.5) / total) * 100,
+  );
+  const healthLabel =
+    healthPct >= 80 ? "Stable" : healthPct >= 50 ? "At risk" : "Critical";
+  const healthColor =
+    healthPct >= 80
+      ? "text-td-downstream"
+      : healthPct >= 50
+        ? "text-td-orange"
+        : "text-red-600";
+  const healthBorderBg =
+    healthPct >= 80
+      ? "border-green-200 bg-green-50"
+      : healthPct >= 50
+        ? "border-orange-200 bg-orange-50"
+        : "border-red-200 bg-red-50";
+
+  const changedHighRisk = riskOverview?.recently_changed_high_risk ?? [];
+  const dist: [string, number, string][] = [
+    ["HIGH", globalDist.HIGH, "bg-red-400"],
+    ["MEDIUM", globalDist.MEDIUM, "bg-td-orange"],
+    ["LOW", globalDist.LOW, "bg-td-downstream"],
+  ];
+
+  return (
+    <section className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+      {/* Health score + risk distribution */}
+      <div className="flex items-stretch gap-4">
+        <div
+          className={`rounded-lg border p-3 flex flex-col items-center justify-center min-w-[110px] ${healthBorderBg}`}
+        >
+          <p className="text-[9px] font-semibold text-td-gray-dark uppercase tracking-widest mb-1">
+            Portfolio health
+          </p>
+          <p
+            className={`text-4xl font-bold tabular-nums leading-none ${healthColor}`}
+          >
+            {healthPct}%
+          </p>
+          <p className={`text-[10px] font-semibold mt-1 ${healthColor}`}>
+            {healthLabel}
+          </p>
+        </div>
+
+        <div className="flex-1">
+          <p className="text-[10px] font-semibold text-td-gray-dark uppercase tracking-wide mb-2">
+            Risk distribution
+          </p>
+          <div className="space-y-1.5">
+            {dist.map(([level, count, color]) => (
+              <div key={level} className="flex items-center gap-3">
+                <span className="w-14 text-xs font-medium text-right text-td-gray-dark">
+                  {level}
+                </span>
+                <div className="flex-1 bg-gray-100 rounded-full h-3">
+                  <div
+                    className={`${color} h-3 rounded-full transition-all`}
+                    style={{ width: `${(count / total) * 100}%` }}
+                  />
+                </div>
+                <span className="w-24 text-xs text-td-gray-dark tabular-nums">
+                  {count.toLocaleString()} ({Math.round((count / total) * 100)}
+                  %)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Changes affecting applications widget */}
+      {(summary.applications_count > 0 || summary.teams_count > 0) && (
+        <div className="flex items-center gap-2 bg-gray-50 rounded border border-gray-200 px-3 py-2">
+          <Activity size={12} className="text-td-orange shrink-0" />
+          <p className="text-xs text-td-navy">
+            <span className="font-semibold">
+              {summary.recent_changes_count.toLocaleString()} recent change
+              {summary.recent_changes_count !== 1 ? "s" : ""}
+            </span>{" "}
+            in the latest snapshot, affecting your{" "}
+            {summary.applications_count > 0 && (
+              <span className="font-semibold">
+                {summary.applications_count.toLocaleString()} registered
+                application
+                {summary.applications_count !== 1 ? "s" : ""}
+              </span>
+            )}
+            {summary.applications_count > 0 && summary.teams_count > 0 &&
+              " and "}
+            {summary.teams_count > 0 && (
+              <span className="font-semibold">
+                {summary.teams_count.toLocaleString()} team
+                {summary.teams_count !== 1 ? "s" : ""}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* Attention required */}
+      {changedHighRisk.length > 0 && (
+        <div className="border-t border-gray-100 pt-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Flame size={12} className="text-red-600" />
+            <h2 className="text-xs font-semibold text-red-800">
+              Attention required
+            </h2>
+            <span className="text-[10px] text-red-600">
+              {changedHighRisk.length} high-risk object
+              {changedHighRisk.length !== 1 ? "s" : ""} changed this snapshot
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {changedHighRisk.map((obj) => {
+              const bare = obj.object_name.includes(".")
+                ? obj.object_name.split(".").slice(1).join(".")
+                : obj.object_name;
+              return (
+                <Link
+                  key={obj.object_name}
+                  href={`/changes?object=${encodeURIComponent(obj.object_name)}`}
+                  className="flex items-center gap-1.5 bg-white border border-red-200 rounded px-2 py-1 text-xs hover:bg-red-50 hover:border-red-400 transition-colors"
+                >
+                  <span className="font-mono text-td-navy">{bare}</span>
+                  <span className="text-[9px] text-red-600 font-semibold tabular-nums">
+                    {Math.round(obj.combined_score * 100)}%
+                  </span>
+                  <ExternalLink size={10} className="text-red-400" />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── main page ─────────────────────────────────────────────────────
 
 export default function LandscapePage() {
@@ -504,76 +655,13 @@ export default function LandscapePage() {
               />
             </div>
 
-            {/* ── §2.15.b: Executive spotlight ─────────────────────── */}
-            {riskOverview?.recently_changed_high_risk &&
-              riskOverview.recently_changed_high_risk.length > 0 && (
-                <section className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Flame size={14} className="text-red-600" />
-                    <h2 className="text-sm font-semibold text-red-800">Attention required</h2>
-                    <span className="text-[10px] text-red-600">
-                      {riskOverview.recently_changed_high_risk.length} high-risk object
-                      {riskOverview.recently_changed_high_risk.length > 1 ? "s" : ""} changed this snapshot
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {riskOverview.recently_changed_high_risk.map((obj) => {
-                      const bare = obj.object_name.includes(".")
-                        ? obj.object_name.split(".").slice(1).join(".")
-                        : obj.object_name;
-                      return (
-                        <Link
-                          key={obj.object_name}
-                          href={`/changes?object=${encodeURIComponent(obj.object_name)}`}
-                          className="flex items-center gap-1.5 bg-white border border-red-200 rounded px-2 py-1 text-xs hover:bg-red-50 hover:border-red-400 transition-colors"
-                        >
-                          <span className="font-mono text-td-navy">{bare}</span>
-                          <span className="text-[9px] text-red-600 font-semibold tabular-nums">
-                            {Math.round(obj.combined_score * 100)}%
-                          </span>
-                          <ExternalLink size={10} className="text-red-400" />
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-            {/* ── Risk distribution bar ────────────────────────────── */}
+            {/* ── §2.15.b: Executive Summary Dashboard ─────────────── */}
             {(globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) > 0 && (
-              <section className="bg-white rounded-lg border border-gray-200 p-4">
-                <h2 className="text-sm font-semibold text-td-navy mb-3">Risk distribution</h2>
-                {(() => {
-                  const total =
-                    (globalDist.HIGH + globalDist.MEDIUM + globalDist.LOW) || 1;
-                  return (
-                    <div className="space-y-2">
-                      {(
-                        [
-                          ["HIGH",   globalDist.HIGH,   "bg-red-400"]       ,
-                          ["MEDIUM", globalDist.MEDIUM, "bg-td-orange"]      ,
-                          ["LOW",    globalDist.LOW,    "bg-td-downstream"]  ,
-                        ] as [string, number, string][]
-                      ).map(([level, count, color]) => (
-                        <div key={level} className="flex items-center gap-3">
-                          <span className="w-14 text-xs font-medium text-right text-td-gray-dark">
-                            {level}
-                          </span>
-                          <div className="flex-1 bg-gray-100 rounded-full h-3">
-                            <div
-                              className={`${color} h-3 rounded-full transition-all`}
-                              style={{ width: `${(count / total) * 100}%` }}
-                            />
-                          </div>
-                          <span className="w-24 text-xs text-td-gray-dark tabular-nums">
-                            {count.toLocaleString()} ({Math.round((count / total) * 100)}%)
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </section>
+              <ExecutiveSummaryDashboard
+                summary={summary}
+                riskOverview={riskOverview}
+                globalDist={globalDist}
+              />
             )}
 
             {/* ── Level 1: schema grid ─────────────────────────────── */}

@@ -1529,7 +1529,7 @@ function LineagePage() {
                 Click any row on the left or right to make that object the focus.
                 The middle card shows catalog metadata (object type, database, graph
                 in/out-degree) plus a <strong>&ldquo;Changed in this diff&rdquo; badge</strong> if
-                the selected object was part of your last Impact Analysis run.
+                the selected object was part of your last Object Change Analysis run.
               </>
             }
           >

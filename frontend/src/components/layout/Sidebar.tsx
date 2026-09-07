@@ -35,7 +35,7 @@ const NAV_ITEMS = [
   { href: "/landscape", label: "Landscape", icon: LayoutGrid },
   { href: "/snapshots", label: "Snapshots", icon: Camera },
   { href: "/changes", label: "Changes", icon: GitCompareArrows },
-  { href: "/impact", label: "Impact Analysis", icon: Target },
+  { href: "/impact", label: "Object Change Analysis", icon: Target },
   { href: "/simulation", label: "What-If", icon: FlaskConical },
   { href: "/lineage", label: "Lineage", icon: TrendingUp },
   { href: "/graph", label: "Graph", icon: Network },

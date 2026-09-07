@@ -1,6 +1,7 @@
 Object name  : D_SERVICE_FEATURE
 Schema       : CY185005
 Test type    : unchanged
+Priority     : P3
 
 Note: Provided by Rahul Kulkarni as a "known unchanged table" (email 2026-06-10).
       CreateTimestamp 2021-07-28 20:30:01, LastAlterTimestamp 2021-07-28 20:30:01.

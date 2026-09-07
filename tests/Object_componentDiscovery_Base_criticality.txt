@@ -1,5 +1,6 @@
 Object name  : componentDiscovery_Base
 Test type    : criticality
+Priority     : P2
 
 Note: TEDW.COMPONENTDISCOVERY_BASE confirmed with criticality_level=LOW in snapshot 4.
       Even without PDCR usage data, the graph_score is populated from lineage centrality.

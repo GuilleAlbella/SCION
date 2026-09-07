@@ -4,7 +4,7 @@ Forward-looking plan for SCION releases. Companion to `CHANGELOG.md`
 (which records what already shipped) and `docs/internal_roadmap.md`
 (the detailed engineering view with decision log and owner cheat-sheet).
 
-Current version: **v2.09.12 BETA** (see `frontend/src/lib/constants.ts`).
+Current version: **v2.09.14 BETA** (see `frontend/src/lib/constants.ts`).
 
 ---
 
@@ -25,7 +25,7 @@ UX with guided sections. Shipped as v1.11.00 BETA.
 
 ### Phase 2 — Scale & Hardening ✅ (mostly done, one item pending)
 
-All major items completed by v2.09.12:
+All major items completed by v2.09.14:
 
 | Item | Done | Version |
 |------|------|---------|

@@ -1,6 +1,7 @@
 Object name  : cvent_transaction
 Schema       : DEV_STG_ELOQUA_TBL
 Test type    : unchanged
+Priority     : P3
 
 Note: Provided by Rahul Kulkarni as a "known unchanged table" (email 2026-06-10).
       CreateTimestamp 2018-05-31 03:25:16, LastAlterTimestamp 2018-05-31 03:25:16.

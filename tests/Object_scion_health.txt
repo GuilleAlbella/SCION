@@ -1,5 +1,6 @@
 Object name  : scion_instance
 Test type    : snapshot_health
+Priority     : P1
 Min downstream : 100
 
 Note: Validates that the SCION instance is healthy and the active snapshot contains

@@ -192,7 +192,7 @@ function ExpandableRow({
               <Link
                 href={`/impact/${item.change_id}`}
                 className="flex items-center gap-1 bg-white border border-gray-200 text-td-navy px-2.5 py-1 rounded-full text-[11px] font-medium hover:bg-td-navy hover:text-white hover:border-td-navy transition-colors"
-                title="Detailed impact analysis for this specific change"
+                title="Object change analysis for this specific change"
               >
                 <Target size={11} />
                 Impact detail
@@ -1165,7 +1165,7 @@ function ChangesPage() {
             intro={
               <>
                 The diff pair <strong>#{activePair?.from} → #{activePair?.to}</strong>{" "}
-                is selected and shared across the app. Click over to <strong>Impact Analysis</strong>{" "}
+                is selected and shared across the app. Click over to <strong>Object Change Analysis</strong>{" "}
                 for the full propagation report, or use the <strong>AI Analysis</strong> button (bottom-right)
                 to get an AI explanation of all {baseSummary.total} changes at once. To scope the AI to a single change, use the selector below.
               </>

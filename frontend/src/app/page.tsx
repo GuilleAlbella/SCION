@@ -43,7 +43,7 @@ const ENGINE_META = [
 const QUICK_ACTIONS = [
   { href: "/snapshots", label: "Capture Snapshot", desc: "Take a new metadata snapshot", icon: Camera, color: "#2563EB" },
   { href: "/changes", label: "Analyze Changes", desc: "Compare snapshots & detect changes", icon: GitCompareArrows, color: "#F37440" },
-  { href: "/impact", label: "Impact Analysis", desc: "Impact spread & risk assessment", icon: Target, color: "#DC2626" },
+  { href: "/impact", label: "Object Change Analysis", desc: "Upstream & downstream impact of each structural change", icon: Target, color: "#DC2626" },
   { href: "/intelligence", label: "Governance", desc: "Health scorecard & domain risk", icon: ShieldCheck, color: "#16A34A" },
 ];
 

@@ -1,7 +1,11 @@
-Object name  : subset_compute_sum_v
+Object name  : DBP_MS_SITE_ON_OFF_USG_HIST_GCP_ALL
+Schema       : UAT_ACC_TED_CON_VW
 Test type    : usage
+Priority     : P2
 
-Note: Provided by Ashish Suryawanshi as part of the lineage test set (email 2026-06-10).
-      This view is part of the Transcend billing/usage pipeline and is expected to have
-      PDCR query activity. Validates that SCION correctly surfaces usage data for
-      objects that appear in the DataDNA DBQL extract (Medium 20260607).
+Note: High-usage view for GCP billing data in the Transcend pipeline.
+      ~45k queries, 2 distinct users as of the June 2026 extract. Validates
+      that PDCR usage is available for GCP-region billing views alongside AWS tables.
+
+      Previous object (subset_compute_sum_v / SB255115) had no PDCR usage in this
+      environment. Updated 2026-09-07 to an object confirmed via /export/usage.

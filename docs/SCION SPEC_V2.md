@@ -1,10 +1,12 @@
 # SCION — Technical Specification
 
-> **Version:** 2.09.15-spec-r13
-> **Last Updated:** 2026-09-07
-> **Status:** Complete — all 14 sections + 2 appendices + §10.11–12 Phase 2 test cases. Reflects v2.09.15 BETA:
-> PostgreSQL 16 in production (v2.00), Staging + Integration + Access layers
-> (v2.03–v2.09), all three live pipelines (Parser v1.04, Dict v1.12, PDCR v1.21.6).
+> **Version:** 1.21.6-spec-r11-sdd-ddd-cleanup
+> **Last Updated:** 2026-05-29 (SDD/DDD review cleanup)
+> **Status:** Complete — all 14 sections + 2 appendices, with the
+> Reunion 10 outcomes and Pipeline 3 usage ingest integrated (FR-13 graceful out-of-scope
+> handling, §10.10 end-user scenario testing, §11.5 cross-team
+> test-plan commitment, §13.4 handover-doc requirements, NG13
+> agentic AI explicitly out of scope)
 > **Author:** Guillermo Albella, with AI-assisted drafting
 
 ---
@@ -81,24 +83,19 @@ Everything ships as **two public-facing containers + one private installer** tha
 
 > **Critical reading for newcomers.** SCION is intentionally a narrow product. The boundary below is what keeps it from becoming "the next over-scoped data platform". When in doubt, **default to "out of scope"**.
 
-| ✅ Does TODAY (v2.09.14) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
+| ✅ Does TODAY (v1.21.6) | 🔵 Will do MAÑANA (ROADMAP) | ❌ NEVER does |
 |---|---|---|
-| Ingest 6-file dictionary extract from the Metadata Extractor (Pipeline 2, live v1.12) | §2.15.d Progressive Disclosure UI — business-language views by dept/app | Parse SQL, scripts, BTEQ, or KSH — that's **the Code Parser (DataDNA)** |
-| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, live v1.21.6) | §2.10 usage/intelligence filter by team/dept + TAISA user/app context | Connect to a live Teradata over JDBC/ODBC |
-| Snapshot + diff + structural hash (incremental with baseline tracking v2.08) | SSO / RBAC when first multi-user deploy lands (backlog) | Capture lineage in real time from running queries |
-| Server-side paginated change feed (Changes page) | DataDNA QueryID correlation — pending Code Parser shipping the QueryID join key | Edit the warehouse — SCION never sends DDL/DML/GRANT to the database |
-| Blast-radius computation + impact summaries (pre-aggregated at ingest time) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Store row-level customer data — only metadata |
-| Column-level lineage (BFS navigate, breadcrumb, ←/→ buttons) (v2.05) | Entity trend charts — backend ready, frontend pending | Replace the steward — assists, never decides |
-| TAISA Q&A grounded on real metadata, bounded context | In-app update button — trigger `update.sh` from sidebar version pill | Provide a query optimizer or recommend index changes |
-| Usage signals + usage-weighted criticality scoring (60% usage + 40% graph) | TAISA batch-reasoning cap (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
-| Snapshot-pair simulation ("what if I make this change?") | Per-object usage idempotency on `usage_event` (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
-| Staging Layer (validation pipeline, import_status tracking) (v2.03) | | Stream from Kafka, listen on webhooks, or push notifications externally |
-| Integration Model / entity layer (cross-snapshot object IDs) (v2.03) | | |
-| Reference Data (org hierarchy + business apps, `/reference` page) (v2.07) | | |
-| AI-powered PII classification per column (TAISA batch) (v2.06) | | |
-| Landscape page — business-friendly entry point (v2.03) | | |
-| Containerised deploy (one-liner installer Linux + Windows), PostgreSQL 16 in production | | |
-| TAISA pre-configured in private image, no per-user setup | | |
+| Ingest 6-file dictionary extract from Rahul's exporter | In-app "Update now" button (v1.22) | Parse SQL, scripts, BTEQ, or KSH — that's **DataDNA** |
+| Ingest PDCR usage extracts (`pdcr_log_*`, `pdcr_object_usage_*`) alongside the dict batch (Pipeline 3, v1.21.6) | Multi-region awareness (`DATA_REGION`, v1.23) | Connect to a live Teradata over JDBC/ODBC |
+| Snapshot + diff + structural hash | Parser lineage feed integration when Rahul ships it (v1.24) | Capture lineage in real time from running queries |
+| Server-side paginated change feed (Changes page) | Postgres migration when multi-tenant arrives (v1.25) | Edit the warehouse — no DDL emitted, no DML, no GRANT |
+| Blast-radius computation + impact summaries | SSO / RBAC when first multi-user deploy lands (backlog) | Store row-level customer data — only metadata |
+| Click-to-expand graph exploration (`/graph/focus`) | Audit log UI surfacing `usage_event` + `reasoning_event` (backlog) | Replace the steward — assists, never decides |
+| TAISA Q&A grounded on real metadata, bounded context | DataDNA correlation against `dbql_query.sql_text` (backlog, depends on Rahul's parser shipping the QueryID join key) | Provide a query optimizer or recommend index changes |
+| Usage signals + usage-weighted criticality scoring (real PDCR data, Pipeline 3) | | |
+| Snapshot-pair simulation ("what if I make this change?") | Export streaming / CSV pagination (backlog) | Be a data-catalog replacement (no business glossary, no certifications) |
+| Containerised deploy (one-liner installer Linux + Windows) | Naming audit final sweep (backlog) | Auto-update without user consent — Watchtower was removed in v1.21.4 |
+| TAISA pre-configured in private image, no per-user setup | TAISA batch-reasoning cap (backlog) | Stream from Kafka, listen on webhooks, or push notifications externally |
 
 ### 1.5 Boundary with the Parser (DataDNA)
 
@@ -107,7 +104,7 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
 ```
    ┌────────────────────────┐                       ┌────────────────────────┐
    │       DATADNA          │ ─── lineage JSON ───▶ │         SCION          │
-   │    (Code Parser)       │     via parser-import │     (this system)      │
+   │     (Rahul's Parser)   │     via parser-import │     (this system)      │
    ├────────────────────────┤                       ├────────────────────────┤
    │ Parses Teradata SQL    │                       │ Snapshots dictionary   │
    │ Builds AST via ANTLR4  │                       │ Diffs versions         │
@@ -138,10 +135,10 @@ SCION and DataDNA are **complementary, not overlapping**. The two products toget
 
 The two meet at two points:
 
-1. **Lineage flows Code Parser → SCION** via `/parser-import` — the Code Parser emits parsed-SQL lineage JSON; SCION persists it as graph edges.
-2. **QueryID correlation (planned)** — SCION's `dbql_query` table (Pipeline 3) stores DBQL query text keyed by QueryID. When the Code Parser ships a version that accepts a QueryID join key, the ETL team can feed SCION's query text into the Code Parser to enrich lineage with the actual SQL Teradata ran. Note: the Code Parser has **no persistent storage of its own** — it processes inputs and emits outputs; any correlation requires an external orchestration step, not a direct DB-to-DB join.
+1. **Lineage flows DataDNA → SCION** via `/parser-import` — DataDNA emits parsed-SQL lineage JSON; SCION persists it as graph edges.
+2. **Query correlation flows SCION → DataDNA** via shared QueryID — SCION's `dbql_query.sql_text` (Pipeline 3) holds the verbatim statements; DataDNA joins by QueryID to enrich its own lineage with the actual SQL Teradata ran.
 
-PDCR's per-object counters land in SCION's UsageEvent table without ever being parsed — that's the FR-1.3 boundary: SCION counts accesses, the Code Parser interprets statements.
+PDCR's per-object counters land in SCION's UsageEvent table without ever being parsed — that's the FR-1.3 boundary: SCION counts accesses, DataDNA interprets statements.
 
 ---
 
@@ -176,7 +173,7 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 | **NG1** | SCION will **never parse SQL, scripts, BTEQ, or KSH** | That's DataDNA. Two products on the same team with overlapping scope is a maintenance nightmare. Receive lineage as JSON, don't compute it. |
 | **NG2** | SCION will **never connect to a live Teradata** (JDBC/ODBC/REST) | Customer security teams object to a tool that needs live read access. Offline-only is a deliberate architectural choice that unblocks every deal. |
 | **NG3** | SCION will **never capture lineage in real time** from running queries | Real-time observability is a different product class. Batch-on-demand keeps the implementation simple and the resource footprint bounded. |
-| **NG4** | SCION will **never send DDL/DML/GRANT to the warehouse** | SCION is observation, not control. It never executes any statement against a live Teradata. The **Generate DDL** feature in the Changes page reconstructs DDL text from the stored dictionary snapshot — it produces a downloadable text artefact for the user's change-management workflow, but does not and cannot execute that DDL anywhere. |
+| **NG4** | SCION will **never modify the warehouse** | No DDL emitted, no DML, no GRANT. SCION is observation, not control. If the user wants to act on a finding, they leave SCION and use their normal change-management flow. |
 | **NG5** | SCION will **never store row-level customer data** | The DB only contains structural metadata (snapshot of dictionary views) plus optionally usage aggregates. No data values are ever persisted. |
 | **NG6** | SCION is **not a data catalog** | No business glossary, no certifications, no stewardship workflows. The customer has Collibra / Alation / Atlan for that. SCION fills the **structural intelligence** gap that catalogs handle poorly. |
 | **NG7** | SCION is **not a query optimizer** | Index recommendations, statistics suggestions, and physical-design advice are out of scope. The customer has Teradata Workload Analyzer and human DBAs for that. |
@@ -217,9 +214,9 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 │                                              │                               │
 │                                              ▼                               │
 │                                    ┌────────────────────┐                    │
-│                                    │  PostgreSQL 16     │                    │
-│                                    │  (production)      │                    │
 │                                    │  /data volume      │                    │
+│                                    │  scion.db (SQLite) │                    │
+│                                    │  WAL mode          │                    │
 │                                    └────────────────────┘                    │
 │                                              │                               │
 │                                              ▼                               │
@@ -236,7 +233,7 @@ PDCR's per-object counters land in SCION's UsageEvent table without ever being p
 **Key properties:**
 
 - **Single-VM**, single-tenant. No clustering, no replicas, no orchestration. One customer = one VM = one stack.
-- **Storage:** **PostgreSQL 16 in production** since v2.00.00 (2026-07-20). SQLite is used for local dev/demo only (`DATABASE_URL` defaults to SQLite in dev; Docker Compose in production uses `docker-compose.lab.yml` pointing to the Postgres container).
+- **SQLite with WAL** in a Docker named volume. Fits up to a Transcend-class warehouse comfortably; Postgres is on the v1.25 roadmap for multi-tenant.
 - **Three application containers** (backend, frontend, nginx) + the volume. Watchtower was removed in v1.21.4.
 - **TAISA** is the only external dependency — and it's optional. If TAISA is unreachable the reasoning features go quiet but everything else keeps working.
 
@@ -311,9 +308,9 @@ Cross-context calls SHOULD go through the public engines listed in §8.2, not by
 | **Backend language** | Python | 3.12 | Best ecosystem for ORM + LLM + scripting; we already use it for `db_init.py`, tests, etc. |
 | **API framework** | FastAPI | 0.115.6 | Type-driven, async-ready, OpenAPI for free. Bumped from 0.115.0 in v1.21.4 to pull starlette ≥0.41 (CVE-2024-47874). |
 | **ASGI server** | uvicorn | 0.30.6 | Standard for FastAPI; standalone, no external process supervisor needed inside the container. |
-| **ORM** | SQLAlchemy | 2.0.35 | New-style API, type-annotated, dialect-portable. Lab already running on Postgres; `alembic/env.py` reads `DATABASE_URL` env var at runtime. |
+| **ORM** | SQLAlchemy | 2.0.35 | New-style API, type-annotated, dialect-portable (sets up the Postgres migration in v1.25 with minimal churn). |
 | **Migrations** | Alembic | 1.13.3 | Canonical for SQLAlchemy; idempotent `db_init.py init` wraps it for one-command lifecycle. |
-| **Database** | PostgreSQL 16 (production) / SQLite (dev/demo) | 16 / 3.40+ | PostgreSQL 16 in production since v2.00.00. SQLite used for local dev and demo seed. Driver: `psycopg[binary]` v3. |
+| **Database** | SQLite + WAL | 3.40+ | Zero-config, embedded, file-backed. WAL gives readers a consistent snapshot during the heavy writer in `dict_persister`. Postgres roadmap = v1.25. |
 | **LLM client** | TAISA (custom client) | n/a | Wraps the LLM provider behind a stable interface so the underlying model can be swapped without touching `taisa_client.py` callers. |
 | **LLM model** | `llama-4-scout-17b-16e-instruct` | 2026-q1 | 131k-token context, fast, cheap, good at structured Q&A over metadata. Configured in `backend/app/config/taisa_llm.yaml` (baked into the private backend image). |
 | **Frontend framework** | Next.js | 16.2.3 | App Router, RSC-ready, native standalone output for tight Docker image. |
@@ -357,7 +354,7 @@ fastapi==0.115.6        # CVE-2024-47874 fix
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
 alembic==1.13.3
-psycopg[binary]==3.2.13 # PostgreSQL 16 driver (production)
+psycopg[binary]==3.2.13 # ready for v1.25 Postgres migration
 httpx==0.27.2
 pydantic==2.9.2
 pydantic-settings==2.5.2
@@ -1002,7 +999,7 @@ the backend container via compose).
 
 ### 7.1 ORM Table Inventory
 
-There are **30 ORM tables** + the standard `alembic_version` metadata table.
+There are **20 ORM tables** + the standard `alembic_version` metadata table.
 Group by purpose:
 
 #### Snapshot core (8 tables)
@@ -1081,20 +1078,26 @@ flips because they're computed on the filtered set, not the slice.
 ### 7.3 Storage Layout
 
 ```
-PostgreSQL 16 is the production storage backend (since v2.00.00, 2026-07-20).
-SQLite is retained for local dev and demo seed only.
+SQLite + WAL is the v1.x storage backend.
 
   - DATABASE_URL defaults to sqlite:///{PROJECT_ROOT}/kalido_lite.db
-    in dev; the Docker Compose stack for production points to the
-    PostgreSQL 16 container via DATABASE_URL env var.
-  - Migration tooling: `backend/tools/migrate_sqlite_to_postgres.py`
-    (dry-run + batch support) for one-shot data migration.
+    in dev, sqlite:////data/scion.db inside the Docker container.
+  - WAL mode (PRAGMA journal_mode=WAL) is enabled on every connection
+    via SQLAlchemy event. The decision is documented inline in
+    backend/app/db/engine.py and was driven by the dict_persister
+    contention pattern (one big writer + many short readers).
   - Indexes are added via Alembic migrations only. Composite indexes
     on (snapshot_id, ...) cover the hot read paths (per-snapshot
     listings, change_event filters by snapshot pair).
-  - SQLite dev note: IN-clauses that fan out from a list are still
-    chunked at 900 rows (SQLite host-parameter limit) so the code
-    works in both backends. See _chunked() in app/graph/impact_summary.py.
+  - The SQLite host-parameter limit (999 in older builds, 32 766 in
+    3.32+) is the reason every IN-clause that fans out from a list
+    is chunked at 900. See _chunked() in app/graph/impact_summary.py.
+
+Postgres is roadmapped for v1.25 when the first multi-tenant
+deployment lands. The portability hygiene step in v1.22 (replace
+INSERT OR IGNORE / strftime / julianday with ANSI equivalents) is
+what makes the move tractable. SQLAlchemy + Alembic do the bulk of
+the work; the application code shouldn't need to change.
 ```
 
 ---
@@ -1534,80 +1537,6 @@ Rahul's team. SCION asserts the impact / lineage shape; DataDNA
 asserts the parsed SQL shape; the fixture binds the two contracts.
 ```
 
-### 10.11 Phase 2 Functional Test Cases
-
-> Added 2026-09-07 following Reunion 37 (Rahul Kulkarni, Imran Afzal, Arslan Ali).
-> These cases extend the automated test pack (`tests/run_tests.py`) for features
-> shipped in Phase 2: Landscape, Reference Data, Entity Layer, and PostgreSQL backend.
-> Priority column: **P1** = must pass before any release; **P2** = high value, run every sprint;
-> **P3** = regression coverage; **P4** = edge case / optional.
-
-#### 10.11.1 Landscape Page (UC-15)
-
-| Test ID | Priority | Scenario | Steps | Expected result |
-|---|---|---|---|---|
-| LAND-001 | P1 | Landscape summary loads for latest snapshot | 1. Import a dict extract. 2. Open `/landscape`. 3. Run `Object_landscape_summary.txt`. | `total_objects ≥ 1`, `total_schemas ≥ 1` in API response; schema tiles appear in UI |
-| LAND-002 | P1 | Schema tile click opens object list | 1. On Landscape page, click any schema tile. 2. Verify object table appears. | Object list loads; columns show object name, type, criticality |
-| LAND-003 | P2 | Risk overview shows high/medium/low counts | 1. Call `GET /api/v1/landscape/risk-overview?snapshot_id=N`. | Returns `{ high, medium, low }` counts; all non-negative; sum == total_objects |
-| LAND-004 | P2 | Schema filter by name | 1. On Landscape page, type a schema name in the search box. | Only matching schemas appear; tile count updates |
-| LAND-005 | P3 | Landscape handles snapshot with 0 objects | 1. Import an empty extract. 2. Call landscape/summary. | Returns `total_objects: 0`; UI shows "No objects" state, not an error |
-
-#### 10.11.2 Reference Data (UC-16)
-
-| Test ID | Priority | Scenario | Steps | Expected result |
-|---|---|---|---|---|
-| REF-001 | P1 | Teams loaded after CSV upload | 1. Go to Reference page. 2. Upload teams CSV. 3. Run `Object_reference_teams.txt`. | `/api/v1/reference/teams` returns ≥ 1 team; Reference page shows team list |
-| REF-002 | P1 | Applications loaded after CSV upload | 1. Upload apps CSV on Reference page. 2. Run `Object_reference_applications.txt`. | `/api/v1/reference/applications` returns ≥ 1 app |
-| REF-003 | P2 | Usage-by-team breakdown is populated | 1. After REF-001 + usage import. 2. Call `GET /api/v1/reference/usage-by-team`. | Returns a list of teams with non-zero `query_count` for at least one team |
-| REF-004 | P2 | Usage-by-app breakdown is populated | 1. After REF-002 + usage import. 2. Call `GET /api/v1/reference/usage-by-app`. | Returns list of apps with `query_count` where data exists |
-| REF-005 | P3 | Duplicate team upload is idempotent | 1. Upload the same teams CSV twice. | Second upload does not create duplicates; team count unchanged |
-
-#### 10.11.3 Entity Layer (Integration Model)
-
-| Test ID | Priority | Scenario | Steps | Expected result |
-|---|---|---|---|---|
-| ENT-001 | P2 | Entity resolves for a known object across snapshots | 1. Import two snapshots of the same extract. 2. Call `GET /api/v1/entity/resolve?object_name=<name>&snapshot_id=N`. | Returns an `entity_id`; same entity_id for the same logical object in both snapshots |
-| ENT-002 | P2 | Entity history shows cross-snapshot changes | 1. After two snapshots with a structural change. 2. Call `GET /api/v1/entity/{entity_id}/history`. | Returns list of snapshots; entries include the change type that occurred |
-| ENT-003 | P3 | Entity list is paginated | 1. Call `GET /api/v1/entity/?limit=10&offset=0`. | Returns exactly 10 items (if ≥10 exist); `total` field reflects full count |
-
-#### 10.11.4 PostgreSQL Backend Validation
-
-| Test ID | Priority | Scenario | Steps | Expected result |
-|---|---|---|---|---|
-| PG-001 | P1 | SCION health reports PostgreSQL ready | 1. Run `Object_scion_health.txt` against production. | Health endpoint returns `database.status: ok`; no SQLite references in logs |
-| PG-002 | P1 | Import completes without PK sequence error | 1. Delete all snapshots from the UI. 2. Import a new extract. | New snapshot gets `snapshot_id = 1` (sequence reset); no 500 error |
-| PG-003 | P2 | Concurrent read during import | 1. Start a large import. 2. While running, open Landscape page. | Landscape renders previous snapshot data; no 500/locked-DB error |
-| PG-004 | P2 | Large diff (>10k changes) returns in <5s | 1. Import two Transcend snapshots with known large diff. 2. Run `Object_diff_count_transcend.txt`. | Diff endpoint responds in <5s; returns ≥10 changes |
-
-#### 10.11.5 Test Runner Demo Script
-
-The following command sequence is the **standard demo** for the Phase 2 review meeting:
-
-```bash
-# 1. Health + snapshot smoke (P1 — run first to confirm environment is up)
-python tests/run_tests.py --base-url http://ps-ubuntu-0043
-
-# 2. Target the latest two snapshots explicitly
-python tests/run_tests.py --base-url http://ps-ubuntu-0043 --snapshot 8 --snapshot-from 7
-
-# 3. Full run with output saved to a named file
-python tests/run_tests.py --base-url http://ps-ubuntu-0043 --output tests/results/phase2_demo
-```
-
-Results are saved to `tests/results/<timestamp>.json` and `.csv`.
-The CSV includes a **Priority** column for sorting by P1 → P4.
-
----
-
-### 10.12 Test Run Priorities Reference
-
-| Priority | Label | When to run | Examples |
-|---|---|---|---|
-| **P1** | Critical | Every deploy, before sign-off | health, diff_count, landscape_summary, PG-001, PG-002 |
-| **P2** | High | Every sprint / weekly | lineage, impact, breaking, usage, criticality, entity |
-| **P3** | Medium | Pre-release regression | changed, added, dropped, unchanged, exists |
-| **P4** | Low | Ad-hoc / edge case investigation | absent, scale edge cases |
-
 ---
 
 ## 11. Reference Benchmarking
@@ -1944,7 +1873,7 @@ and are pre-GA blockers for any customer-facing deploy.
 | Term | Definition |
 |---|---|
 | **SCION** | **S**tructural **C**hange **I**ntelligence & **O**bservability **N**ode. This product. |
-| **DataDNA** | Also referred to as the **Code Parser**. The SQL parsing product that sits upstream of SCION. Parses Teradata SQL/BTEQ/KSH files, extracts Tier-1/2/3 lineage, and emits a JSON feed that SCION ingests. Has no persistent storage of its own — it processes inputs and emits outputs (see §1.5). |
+| **DataDNA** | Rahul's SQL parser. Sits upstream of SCION (see §1.5). |
 | **Snapshot** | Immutable record of warehouse structure at a point in time. Owns `structural_hash` and the related per-schema/table/column rows. |
 | **ChangeEvent** | One typed difference between two snapshots (ADDED / DROPPED / ALTERED / RENAMED) with severity and `is_breaking`. |
 | **Blast radius** | Set of downstream objects affected by a ChangeEvent. Computed by walking `graph_edge` from the changed object. |

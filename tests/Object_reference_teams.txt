@@ -1,0 +1,17 @@
+Object name  : teams
+Test type    : reference
+Priority     : P2
+Min value    : 1
+
+Note: Phase 2 test — verifies that org-hierarchy reference data (teams) has been
+      loaded into SCION via the Reference page CSV upload.
+
+      Steps:
+        1. Open SCION -> Reference page.
+        2. Upload the org-hierarchy CSV (teams columns: name, department, owner_email).
+        3. Run: python tests/run_tests.py --base-url http://<host>
+        4. Expect PASS: /api/v1/reference/teams returns >= 1 team record.
+        5. In the UI: verify the Reference page shows the uploaded team list.
+        6. Navigate to Usage page and confirm the "Filter by team" dropdown is populated.
+
+      UC coverage: UC-16 (Reference Data — org hierarchy for usage segmentation).
